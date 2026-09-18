@@ -403,24 +403,21 @@
             scale: ex.video.scale,
             offset: ex.video.offset,
           },
-          model: names.mdl ? {
-            src: './assets/content/' + names.mdl,
-            heightMeters: ex.model.heightMeters,
-            yawOffset: ex.model.yawOffset,
-            scale: ex.model.scale,
-            spin: ex.model.spin,
-            playClip: ex.model.playClip,
-          } : {
-            src: null,
-            heightMeters: ex.model ? ex.model.heightMeters : 1,
-            yawOffset: ex.model ? ex.model.yawOffset : 0,
-            scale: ex.model ? ex.model.scale : 1,
-            spin: ex.model ? ex.model.spin : false,
-            playClip: ex.model ? ex.model.playClip : true,
-          },
+          // The sizing and look settings ship even without a model file, so
+          // they still shape the placeholder and survive adding a .glb later.
+          model: modelJson(ex, names.mdl),
         };
       }),
     };
+  }
+
+  function modelJson(ex, fileName) {
+    var model = ex.model || ARContent.modelDefaults();
+    var out = { src: fileName ? './assets/content/' + fileName : null };
+    ARContent.MODEL_FIELDS.forEach(function (key) {
+      out[key] = model[key] !== undefined ? model[key] : ARContent.modelDefaults()[key];
+    });
+    return out;
   }
 
   var DEPLOY_NOTES = [
@@ -565,7 +562,7 @@
               ['fit', 'loop', 'restartOnFound', 'scale', 'offset', 'width', 'height'].forEach(function (k) {
                 if (ex.video[k] !== undefined) record.video[k] = ex.video[k];
               });
-              ['heightMeters', 'yawOffset', 'scale', 'spin', 'playClip'].forEach(function (k) {
+              ARContent.MODEL_FIELDS.forEach(function (k) {
                 if (ex.model && ex.model[k] !== undefined) record.model[k] = ex.model[k];
               });
 

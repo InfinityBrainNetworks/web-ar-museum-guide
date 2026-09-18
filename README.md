@@ -150,9 +150,28 @@ which a single-file bundle cannot carry.
 
 The figure is auto-centred and **stands on its own base, not its origin** —
 whatever units it was exported in and wherever its pivot sits, it lands on the
-floor at the exhibit's *Figure height*. It turns to face you when placed
-(`floor.faceViewer`); *Figure turn* corrects an export that faces sideways.
-glTF animation clips play automatically.
+floor at the exhibit's *Figure height*. *Size multiplier* scales that without
+restating the measurement, which is the quick way to dial a model in on the
+device. It turns to face you when placed (`floor.faceViewer`); *Figure turn*
+corrects an export that faces sideways. glTF animation clips play automatically.
+
+### Shading: leave it on "baked" for scans
+
+A photogrammetry scan or a model with baked ambient occlusion already carries
+its lighting **in the texture**. Light it again with a scene light and you get
+two lightings stacked — and because that light is fixed in world space while you
+walk around the figure, whole sides drop into darkness that is not in the asset
+at all. It looks correct from one angle and wrong from the next.
+
+So *Shading* defaults to **baked**: the materials are swapped for unlit ones and
+the texture renders exactly as authored, from every angle. Switch to **lit** for
+a model that genuinely has no lighting baked in and wants the scene to light it.
+The originals are kept in memory, so the debug menu can flip between the two on
+the device without reloading anything.
+
+*Contact shadow* is the soft blob under the figure, 0 to 1. **Set it to 0 or
+around 0.1 for a model that already has its own grounding shadow in the
+texture**, or you get a second shadow stacked under the first.
 
 ## Finding the floor
 
@@ -281,6 +300,9 @@ native build to fight with. The official
 | "No exhibits could be loaded" | No `assets/content/content.json` is deployed. Export a bundle from the portal. |
 | Portal is empty after it worked | Browser site data was cleared. Import your last exported zip. |
 | An artwork will not track | Too few feature points. Compile and read the count on its card. |
+| Figure goes dark down one side as you walk around | Its lighting is baked into the texture and the scene light is shading it again. Set *Shading* to **baked**. |
+| Two shadows under the figure | The model carries its own. Set *Contact shadow* to 0. |
+| Figure is the wrong size | *Figure height* is the real-world height; *Size multiplier* is the quick nudge. |
 | "Must be served over https" | Camera is blocked on plain http. Use the Pages URL. |
 | Camera never starts on iOS | Opened inside Instagram/Facebook/etc. Those in-app browsers block `getUserMedia` — open in Safari. |
 | Permission was denied once | iOS: Settings → Safari → Camera. Android: tap the padlock in the address bar → Permissions. |

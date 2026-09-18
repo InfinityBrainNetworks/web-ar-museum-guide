@@ -197,8 +197,23 @@
         <input type="number" step="0.05" min="0.1" max="5" data-set="model.heightMeters">
       </div>
       <div class="field">
+        <label>Size multiplier</label>
+        <input type="number" step="0.05" min="0.1" max="10" data-set="model.scale">
+      </div>
+      <div class="field">
         <label>Figure turn (°)</label>
         <input type="number" step="15" min="-180" max="360" data-set="model.yawOffset">
+      </div>
+      <div class="field">
+        <label title="Scans and models with ambient occlusion already in the texture should stay baked: the scene light would shade them a second time and darken whole sides as you walk around.">Shading</label>
+        <select data-set="model.lighting">
+          <option value="baked">baked — texture as authored (scans, baked AO)</option>
+          <option value="lit">lit — shade it with the scene light</option>
+        </select>
+      </div>
+      <div class="field">
+        <label title="0 turns it off — right when the model already carries its own grounding shadow.">Contact shadow</label>
+        <input type="number" step="0.05" min="0" max="1" data-set="model.shadowOpacity">
       </div>
       <div class="field">
         <label>Slow turntable spin</label>

@@ -69,6 +69,10 @@
     floorStable: false,    // ...and it has held still long enough to place on
     cameraHeight: cfg.floor.cameraHeightMeters,
     modelScale: 1,
+    // Live per-exhibit look, seeded by adoptExhibit() and tunable from the
+    // debug menu so it can be dialled in on the device.
+    lighting: 'baked',
+    shadowOpacity: 0.5,
     faceYaw: 0,            // radians, set at placement so the figure faces you
     modelYaw: 0,           // degrees, the debug panel's turn on top of that
 
@@ -391,6 +395,8 @@
     S.videoOffset = { x: ex.video.offset.x, y: ex.video.offset.y, z: ex.video.offset.z };
     S.modelScale = ex.model.scale;
     S.modelYaw = 0;
+    S.lighting = ex.model.lighting === 'lit' ? 'lit' : 'baked';
+    S.shadowOpacity = typeof ex.model.shadowOpacity === 'number' ? ex.model.shadowOpacity : 0.5;
 
     loadExhibitVideo(ex.targetIndex);
     applyVideoFit();
@@ -1239,6 +1245,7 @@
       holder.setAttribute('gltf-model', 'url(' + model.src + ')');
       holder.addEventListener('model-loaded', function () {
         normalizeModel(holder);
+        applyModelLighting(holder);
         if (model.playClip) holder.setAttribute('clip-player', '');
         updateFloorShadow();
         log.ok('3D model loaded for "' + (EX() ? EX().name : '?') + '": ' + shortSrc(model.src));
@@ -1266,7 +1273,10 @@
     if (pivot && pivot.parentNode) pivot.parentNode.removeChild(pivot);
     el.modelSlot.setAttribute('visible', false);
     el.floorShadow.setAttribute('visible', false);
-    S.modelScale = modelCfg().scale;
+    var model = modelCfg();
+    S.modelScale = model.scale;
+    S.lighting = model.lighting === 'lit' ? 'lit' : 'baked';
+    S.shadowOpacity = typeof model.shadowOpacity === 'number' ? model.shadowOpacity : 0.5;
     S.modelYaw = 0;
     S.faceYaw = 0;
     S.figureFootprint = 0;
@@ -1343,6 +1353,76 @@
              (modelCfg().heightMeters * S.modelScale).toFixed(2) + 'm tall on the floor)');
   }
 
+  /**
+   * Shading mode for a loaded glTF.
+   *
+   * A scan or a baked model already carries its lighting and ambient occlusion
+   * in the texture. A-Frame's default directional light then shades it a SECOND
+   * time, and because that light is fixed in world space while you walk around
+   * the figure, whole sides drop into darkness that is not in the source asset
+   * at all.
+   *
+   * 'baked' swaps each material for an unlit one, so the texture renders exactly
+   * as authored from every angle. The originals are kept on the mesh so 'lit'
+   * can put them back without reloading the model.
+   */
+  function applyModelLighting(holder) {
+    var root = holder && holder.getObject3D('mesh');
+    if (!root) return;
+
+    var wantBaked = S.lighting !== 'lit';
+    var changed = 0;
+
+    root.traverse(function (node) {
+      if (!node.isMesh || !node.material) return;
+
+      if (wantBaked) {
+        if (node.userData.__litMaterial) return;          // already unlit
+        node.userData.__litMaterial = node.material;
+        node.material = mapMaterial(node.material, toUnlitMaterial);
+        changed++;
+      } else {
+        if (!node.userData.__litMaterial) return;
+        mapMaterial(node.material, function (m) { m.dispose(); return m; });
+        node.material = node.userData.__litMaterial;
+        delete node.userData.__litMaterial;
+        changed++;
+      }
+    });
+
+    if (changed) {
+      log.info('figure shading: ' + (wantBaked
+        ? 'baked — ' + changed + ' material(s) switched to unlit, so the texture ' +
+          'renders as authored and does not darken as you walk around'
+        : 'lit — ' + changed + ' material(s) restored to the glTF originals'));
+    }
+  }
+
+  /** glTF meshes may carry one material or an array of them. */
+  function mapMaterial(material, fn) {
+    return Array.isArray(material) ? material.map(fn) : fn(material);
+  }
+
+  function toUnlitMaterial(source) {
+    var basic = new THREE.MeshBasicMaterial({
+      map: source.map || null,
+      color: source.color ? source.color.clone() : new THREE.Color(0xffffff),
+      transparent: source.transparent,
+      opacity: source.opacity,
+      alphaTest: source.alphaTest,
+      alphaMap: source.alphaMap || null,
+      side: source.side,
+      vertexColors: source.vertexColors,
+      depthWrite: source.depthWrite,
+      // The texture is the finished look; tone mapping would grade it again.
+      toneMapped: false,
+    });
+    // A model that puts everything in an emissive map would otherwise go black.
+    if (!basic.map && source.emissiveMap) basic.map = source.emissiveMap;
+    basic.name = source.name;
+    return basic;
+  }
+
   /** The figure's height in whatever units the running engine uses. */
   function figureHeightUnits() {
     var upm = S.engine ? S.engine.unitsPerMetre : 1;
@@ -1404,6 +1484,7 @@
       }
     } else if (holder.getObject3D('mesh')) {
       normalizeModel(holder);
+      applyModelLighting(holder);
     }
 
     applyFigureYaw();
@@ -1414,12 +1495,14 @@
   function buildFloorShadow() {
     if (!cfg.floor.shadow || el.floorShadow.getObject3D('mesh')) return;
 
+    // Drawn at full strength and scaled down by material.opacity, so the
+    // exhibit's shadowOpacity IS the peak opacity you see.
     var c = document.createElement('canvas');
     c.width = c.height = 128;
     var ctx = c.getContext('2d');
     var grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-    grad.addColorStop(0, 'rgba(0,0,0,0.50)');
-    grad.addColorStop(0.5, 'rgba(0,0,0,0.22)');
+    grad.addColorStop(0, 'rgba(0,0,0,1)');
+    grad.addColorStop(0.5, 'rgba(0,0,0,0.44)');
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 128, 128);
@@ -1429,6 +1512,7 @@
       new THREE.MeshBasicMaterial({
         map: new THREE.CanvasTexture(c),
         transparent: true, depthWrite: false, toneMapped: false,
+        opacity: S.shadowOpacity,
       })
     );
     mesh.rotation.x = -Math.PI / 2;   // lie flat on the floor
@@ -1436,9 +1520,18 @@
   }
 
   function updateFloorShadow() {
-    var on = cfg.floor.shadow && S.mode === MODE.PLACED;
+    var opacity = clamp(S.shadowOpacity, 0, 1);
+    // A model with its own grounding shadow baked into the texture wants this
+    // at 0, or it gets a second shadow stacked under the first.
+    var on = cfg.floor.shadow && opacity > 0 && S.mode === MODE.PLACED;
     el.floorShadow.setAttribute('visible', on);
     if (!on) return;
+
+    var mesh = el.floorShadow.getObject3D('mesh');
+    if (mesh && mesh.material) {
+      mesh.material.opacity = opacity;
+      mesh.material.needsUpdate = true;
+    }
 
     var upm = S.engine ? S.engine.unitsPerMetre : 1;
     var spread = Math.max(0.1 * upm, (S.figureFootprint || 0.5 * upm) * 2.1);
@@ -1596,6 +1689,18 @@
     fitBtn.textContent = S.fit;
     modeBtn.textContent = S.mode;
 
+    // Baked vs lit, switchable on the device so the difference is visible while
+    // standing in front of the figure.
+    var lightBtn = el.logTools.querySelector('[data-tool="lighting"]');
+    if (lightBtn) {
+      lightBtn.textContent = S.lighting;
+      lightBtn.addEventListener('click', function () {
+        S.lighting = S.lighting === 'baked' ? 'lit' : 'baked';
+        lightBtn.textContent = S.lighting;
+        refreshFigure();
+      });
+    }
+
     fitBtn.addEventListener('click', function () {
       var modes = ['stretch', 'cover', 'contain'];
       S.fit = modes[(modes.indexOf(S.fit) + 1) % modes.length];
@@ -1627,10 +1732,16 @@
                    'm above the floor');
         } else if (what === 'model') {
           if (axis === 's') S.modelScale = Math.max(0.1, S.modelScale + dir * cfg.ui.scaleStep);
+          // Rounded, because repeated 0.05 steps otherwise land on 1e-16 rather
+          // than 0 and the shadow never quite switches off.
+          else if (axis === 'sh') {
+            S.shadowOpacity = clamp(Math.round((S.shadowOpacity + dir * 0.05) * 100) / 100, 0, 1);
+          }
           else S.modelYaw = (S.modelYaw + dir * 15) % 360;
           refreshFigure();
           log.info('figure: ' + (modelCfg().heightMeters * S.modelScale).toFixed(2) +
-                   'm tall, turned ' + Math.round(S.modelYaw) + '°');
+                   'm tall (×' + S.modelScale.toFixed(2) + '), turned ' +
+                   Math.round(S.modelYaw) + '°, shadow ' + S.shadowOpacity.toFixed(2));
         }
       });
     });
@@ -1649,8 +1760,12 @@
       'Settings in admin.html:\n' +
       '  Video fit: ' + S.fit + ', scale ' + r(S.videoScale) +
       ', nudge x ' + r(S.videoOffset.x) + ' y ' + r(S.videoOffset.y) + '\n' +
-      '  Figure height: ' + r(modelCfg().heightMeters * S.modelScale) + 'm' +
+      '  Figure height: ' + r(modelCfg().heightMeters) + 'm' +
+      ', size ×' + r(S.modelScale) +
+      ' (= ' + r(modelCfg().heightMeters * S.modelScale) + 'm tall)' +
       ', turn ' + r(modelCfg().yawOffset + S.modelYaw) + '°\n' +
+      '  Shading: ' + S.lighting +
+      ', contact shadow ' + r(S.shadowOpacity) + '\n' +
       '  Phone height (js/config.js floor.cameraHeightMeters): ' + r(S.cameraHeight) + '\n' +
       '  content: ' + (bundle ? bundle.source : '?') + ', ' + exhibits.length +
       ' exhibit(s), active ' + S.activeIndex + '\n' +

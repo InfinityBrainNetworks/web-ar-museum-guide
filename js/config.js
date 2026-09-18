@@ -70,6 +70,20 @@ window.AR_CONFIG = {
     // Slow turntable spin, and play the glTF's own animation clip if it has one.
     spin: false,
     playClip: true,
+
+    // How the figure is shaded. Per exhibit in the portal.
+    //   'baked' - render the texture exactly as authored, unlit. Correct for
+    //             photogrammetry and anything with ambient occlusion already in
+    //             the texture: the scene's directional light would otherwise
+    //             shade it a SECOND time, and since that light is fixed in the
+    //             world while you walk around, whole sides fall dark.
+    //   'lit'   - keep the glTF's PBR materials and light them with the scene.
+    lighting: 'baked',
+
+    // Peak opacity of the soft contact shadow under the figure, 0 to 1.
+    // 0 turns it off — worth doing when the model already carries its own
+    // grounding shadow in the texture. Per exhibit in the portal.
+    shadowOpacity: 0.5,
   },
 
   /**
@@ -124,7 +138,8 @@ window.AR_CONFIG = {
 
     // The figure turns to face you when placed.
     faceViewer: true,
-    // Soft contact shadow, so it reads as standing on the floor.
+    // Master switch for the soft contact shadow. Per-exhibit strength lives in
+    // model.shadowOpacity; this turns it off everywhere at once.
     shadow: true,
   },
 

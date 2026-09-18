@@ -6,3 +6,6 @@ Thumbs.db
 
 # original drop folder - these files now live in assets/ (kept on disk, not committed)
 image&video/
+
+# screen recordings dropped in for debugging - kept on disk, not committed
+Updates/

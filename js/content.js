@@ -121,11 +121,22 @@
     return {
       heightMeters: typeof f.objectHeightMeters === 'number' ? f.objectHeightMeters : 1,
       yawOffset: m.yawOffset || 0,
+      // A plain multiplier on heightMeters, so a model can be nudged bigger or
+      // smaller without restating the real-world measurement.
       scale: typeof m.scale === 'number' ? m.scale : 1,
       spin: !!m.spin,
       playClip: m.playClip !== false,
+      // 'baked' renders the texture exactly as authored (right for scans and
+      // anything with baked AO); 'lit' shades it with the scene lights.
+      lighting: m.lighting === 'lit' ? 'lit' : 'baked',
+      // Peak opacity of the soft contact shadow under the figure. 0 turns it off.
+      shadowOpacity: typeof m.shadowOpacity === 'number' ? m.shadowOpacity : 0.5,
     };
   }
+
+  /** Everything an exhibit may override on top of the model defaults. */
+  var MODEL_FIELDS = ['heightMeters', 'yawOffset', 'scale', 'spin', 'playClip',
+                      'lighting', 'shadowOpacity'];
 
   function assign(target, source) {
     for (var k in source) if (Object.prototype.hasOwnProperty.call(source, k)) target[k] = source[k];
@@ -175,14 +186,14 @@
         src: model.src || null,
         file: model.file || null,
       });
-      ['heightMeters', 'yawOffset', 'scale', 'spin', 'playClip'].forEach(function (k) {
+      MODEL_FIELDS.forEach(function (k) {
         if (model[k] !== undefined) out.model[k] = model[k];
       });
     } else if (model) {
       // A model record with no file still carries its sizing, which the
       // built-in placeholder figure should honour.
       out.model = assign(assign({}, modelDefaults()), { src: null, file: null });
-      ['heightMeters', 'yawOffset', 'scale', 'spin', 'playClip'].forEach(function (k) {
+      MODEL_FIELDS.forEach(function (k) {
         if (model[k] !== undefined) out.model[k] = model[k];
       });
     }
@@ -318,6 +329,7 @@
   window.ARStore = ARStore;
   window.ARContent = {
     load: load,
+    MODEL_FIELDS: MODEL_FIELDS,
     normalize: normalize,
     blankExhibit: blankExhibit,
     videoDefaults: videoDefaults,
