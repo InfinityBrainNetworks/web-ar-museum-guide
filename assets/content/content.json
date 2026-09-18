@@ -1,34 +1,40 @@
 {
   "version": 1,
-  "generated": "2026-09-18T00:00:00.000Z",
-  "mindSrc": "./assets/targets/targets.mind",
+  "generated": "2026-09-18T13:16:45.772Z",
+  "mindSrc": "./assets/content/targets.mind",
   "exhibits": [
     {
-      "id": "exhibit-1",
+      "id": "exhibit-mu6ueigv-8jvv",
       "name": "Exhibit 1",
       "targetIndex": 0,
       "image": {
-        "src": "./assets/targets/target.png",
-        "width": 552,
-        "height": 566
+        "src": "./assets/content/exhibit-1-target.jpg",
+        "width": 1024,
+        "height": 794
       },
       "video": {
-        "src": "./assets/video/video.mp4",
-        "width": 704,
-        "height": 704,
+        "src": "./assets/content/exhibit-1-video.mp4",
+        "width": 1602,
+        "height": 980,
         "fit": "stretch",
         "loop": true,
         "restartOnFound": false,
         "scale": 1,
-        "offset": { "x": 0, "y": 0, "z": 0.001 }
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0.001
+        }
       },
       "model": {
-        "src": null,
+        "src": "./assets/content/exhibit-1-model.glb",
         "heightMeters": 1,
         "yawOffset": 0,
-        "scale": 1,
+        "scale": 1.65,
         "spin": false,
-        "playClip": true
+        "playClip": true,
+        "lighting": "baked",
+        "shadowOpacity": 0.5
       }
     }
   ]
