@@ -97,6 +97,21 @@ below the camera.
 Entering this session needs exclusive use of the camera, so MindAR is stopped
 first and rebuilt when you go back to the painting.
 
+**Clip planes matter here more than anywhere else.** MindAR sets `near = 10` and
+`far = 1e5` on the camera, which is correct in its own units (552 per metre, so
+near is 1.8cm). WebXR is in metres, and three.js pushes whatever it finds on the
+camera straight into the session:
+
+```js
+session.updateRenderState({ depthNear: camera.near, depthFar: camera.far })
+```
+
+Entering a session without resetting those puts the near plane at **10 metres**.
+Passthrough and the DOM overlay keep drawing, so the page looks completely
+alive — and every bit of 3D is clipped away. The app now swaps in 0.05/200m for
+the session and puts MindAR's values back before image tracking resumes. The log
+records both swaps and reads back the session's accepted `depthNear`.
+
 ### gyro — everything else, iOS above all
 
 **iOS Safari has no WebXR at any version**, so on iPhone there is nothing to
@@ -183,6 +198,7 @@ MindAR's `node-canvas` dependency for a pure-JS decoder, so there's no native bu
 | Figure lands nearer or further than the reticle | Gyro path only: `cameraHeightMeters` does not match how you hold the phone. Tools → Phone height. |
 | Figure drifts when you walk | Expected on the gyro path — rotation only. Android gets 6DoF through WebXR. |
 | Scene 2 shows a black screen | The camera did not come back after WebXR. The log says so; set `floor.useWebXR: false` to skip WebXR entirely. |
+| Reticle and figure invisible, everything else fine | Clip planes. The log line `XR render state: depthNear=…` should read ~0.05m; if it is 10m, send the log. |
 | Nothing happens on iOS when entering 3D | Motion access denied. Settings → Safari → Motion & Orientation Access. |
 
 ## Notes

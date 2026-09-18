@@ -477,6 +477,57 @@
    * phone. Everything above this line treats them identically.
    */
 
+  /**
+   * Hand the camera's clip planes over to the engine that is about to use them.
+   *
+   * This is the sharpest edge in the whole file. MindAR sets near=10 / far=1e5
+   * on the A-Frame camera, which is right in ITS units (552 per metre, so near
+   * is 1.8cm). WebXR is in metres, and three.js pushes whatever it finds on the
+   * camera straight into the session:
+   *
+   *     session.updateRenderState({ depthNear: camera.near, depthFar: camera.far })
+   *
+   * So entering an immersive session without touching these puts the near plane
+   * at 10 METRES. The passthrough and the DOM overlay still draw, so everything
+   * looks alive — but every bit of 3D content is clipped away, reticle included.
+   */
+  // Room scale in metres. Deliberately not A-Frame's 0.005/10000 default: a
+  // 2,000,000:1 depth range invites z-fighting, and 5cm to 200m covers any
+  // gallery you can walk through.
+  var XR_NEAR = 0.05, XR_FAR = 200;
+
+  function setCameraClip(near, far, why) {
+    var cam = el.scene.camera;
+    if (!cam) { log.warn('no camera yet — clip planes not set'); return; }
+
+    var before = cam.near + '/' + cam.far;
+    if (savedClip === null) savedClip = { near: cam.near, far: cam.far };
+
+    // Only the three.js camera, never the A-Frame `camera` component. MindAR
+    // writes near/far onto the object3D directly, so putting different numbers
+    // in the component would leave the two disagreeing — and the component
+    // wins the next time anything touches it, clipping scene 1 at 1.8m.
+    cam.near = near;
+    cam.far = far;
+    cam.updateProjectionMatrix();
+
+    log.info('camera clip planes ' + before + ' -> ' + near + '/' + far + ' (' + why + ')');
+  }
+
+  var savedClip = null;
+
+  /** Put MindAR's own clip planes back before scene 1 restarts. */
+  function restoreCameraClip() {
+    var cam = el.scene.camera;
+    if (!cam || !savedClip) return;
+    cam.near = savedClip.near;
+    cam.far = savedClip.far;
+    cam.updateProjectionMatrix();
+    log.info('camera clip planes restored to ' + savedClip.near + '/' + savedClip.far +
+             ' for image tracking');
+    savedClip = null;
+  }
+
   /** Real plane detection. Chrome on Android; absent from every iOS browser. */
   function xrEngine() {
     var source = null;
@@ -498,6 +549,9 @@
           catch (e) { log.warn('floor scene: MindAR stop() threw: ' + e); }
         }
 
+        // Before enterAR, so the very first XR frame already has metres.
+        setCameraClip(XR_NEAR, XR_FAR, 'WebXR works in metres');
+
         return new Promise(function (resolve, reject) {
           var failed = setTimeout(function () {
             reject(new Error('the immersive-ar session did not start within 12s'));
@@ -507,6 +561,12 @@
             clearTimeout(failed);
             session = el.scene.renderer.xr.getSession();
             if (!session) { reject(new Error('no XRSession after enter-vr')); return; }
+
+            // Again now the session exists: three.js only pushes a render state
+            // when the values CHANGE, so this is what guarantees the correction
+            // lands even if something reset the camera on the way in.
+            setCameraClip(XR_NEAR, XR_FAR, 'WebXR works in metres');
+            reportRenderState(session);
             session.addEventListener('end', function () {
               log.info('floor scene: the immersive-ar session ended');
             });
@@ -564,6 +624,7 @@
 
       /** MindAR was torn down for this engine, so scene 1 has to be rebuilt. */
       resumeScanning: function () {
+        restoreCameraClip();
         log.info('floor scene: restarting MindAR from scratch (WebXR took the camera)');
         show(el.loadingScreen);
         el.loadingText.textContent = 'Returning to the painting…';
@@ -577,6 +638,21 @@
         }
       },
     };
+  }
+
+  /** Read back what the session actually accepted, for the log. */
+  function reportRenderState(session) {
+    setTimeout(function () {
+      var rs = session && session.renderState;
+      if (!rs) { log.warn('no XR renderState to report'); return; }
+      var cam = el.scene.camera;
+      log.info('XR render state: depthNear=' + rs.depthNear + 'm depthFar=' + rs.depthFar +
+               'm (camera near/far = ' + (cam ? cam.near + '/' + cam.far : '?') + ')');
+      if (rs.depthNear > 1) {
+        log.error('XR near plane is ' + rs.depthNear + 'm — anything closer than that is ' +
+                  'invisible. This is the MindAR near=10 leak; report it with this log.');
+      }
+    }, 1200);
   }
 
   /**
@@ -694,6 +770,7 @@
       return Promise.resolve();
     }
 
+    restoreCameraClip();   // a failed WebXR attempt may have left metres behind
     log.warn('floor scene: the camera was released for WebXR — restarting MindAR to get it back');
     return new Promise(function (resolve, reject) {
       var settled = false;
