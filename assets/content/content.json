@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "generated": "2026-09-18T00:00:00.000Z",
+  "mindSrc": "./assets/targets/targets.mind",
+  "exhibits": [
+    {
+      "id": "exhibit-1",
+      "name": "Exhibit 1",
+      "targetIndex": 0,
+      "image": {
+        "src": "./assets/targets/target.png",
+        "width": 552,
+        "height": 566
+      },
+      "video": {
+        "src": "./assets/video/video.mp4",
+        "width": 704,
+        "height": 704,
+        "fit": "stretch",
+        "loop": true,
+        "restartOnFound": false,
+        "scale": 1,
+        "offset": { "x": 0, "y": 0, "z": 0.001 }
+      },
+      "model": {
+        "src": null,
+        "heightMeters": 1,
+        "yawOffset": 0,
+        "scale": 1,
+        "spin": false,
+        "playClip": true
+      }
+    }
+  ]
+}

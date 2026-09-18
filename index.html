@@ -14,6 +14,9 @@
      so failures inside A-Frame / MindAR are captured too. -->
 <script src="./js/logger.js"></script>
 <script src="./js/config.js"></script>
+<!-- Resolves which exhibits this page shows: the admin portal's draft when
+     opened as ?preview=1, otherwise the deployed bundle, otherwise config.js. -->
+<script src="./js/content.js"></script>
 
 <script src="https://cdn.jsdelivr.net/npm/aframe@1.5.0/dist/aframe-master.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -23,14 +26,15 @@
 
 <!-- ============ AR SCENE ============ -->
 <!-- Two independent scenes share this one canvas:
-       #anchor     - scene 1, image tracking, driven by MindAR
+       #anchor-N   - scene 1, image tracking, driven by MindAR. One per exhibit,
+                     built at runtime by js/app.js once the content is known.
        #floorScene - scene 2/3, floor mapping, driven by WebXR hit-test or the
                      gyroscope fallback. Never both at once.
      webxr's dom-overlay keeps #overlay on screen during an immersive session;
      without it the whole UI would vanish the moment WebXR starts. -->
 <a-scene
   id="scene"
-  mindar-image="imageTargetSrc: ./assets/targets/targets.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no"
+  mindar-image="imageTargetSrc: ./assets/content/targets.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no"
   webxr="optionalFeatures: hit-test,dom-overlay; overlayElement: #overlay"
   color-space="sRGB"
   embedded
@@ -46,11 +50,12 @@
 
   <a-camera position="0 0 0" look-controls="enabled: false" wasd-controls="enabled: false"></a-camera>
 
-  <!-- Scene 1: the painting. -->
-  <a-entity id="anchor" mindar-image-target="targetIndex: 0">
-    <!-- Sized at runtime to match the target image exactly (see js/app.js). -->
-    <a-plane id="videoPlane" visible="false" position="0 0 0" width="1" height="1"></a-plane>
-  </a-entity>
+  <!-- Scene 1: the paintings.
+       One #anchor-N per exhibit is appended here by buildExhibitEntities() in
+       js/app.js, each with its own video plane sized to that target. They
+       cannot be written here because how many there are is only known once the
+       content bundle has loaded, and MindAR needs them registered before it
+       starts. -->
 
   <!-- Scenes 2 and 3: the floor. Completely independent of the painting — no
        image target, no video. Identity in WebXR (the session tracks the camera);
@@ -76,8 +81,8 @@
   <div class="intro-card">
     <p class="eyebrow">Web AR</p>
     <h1>Museum Guide</h1>
-    <img id="introThumb" class="intro-thumb" alt="Image target to scan">
-    <p class="intro-text">Point your camera at the painting above. The video plays right on top of it, then you can place a 3D figure on the floor.</p>
+    <div id="introThumbs" class="intro-thumbs"></div>
+    <p class="intro-text">Point your camera at the artwork above. The video plays right on top of it, then you can place a 3D figure on the floor.</p>
     <button id="startBtn" class="btn btn-primary btn-lg" type="button">Start AR</button>
     <p class="intro-hint" id="introHint">Camera access is required. Nothing is uploaded — everything runs on your device.</p>
   </div>

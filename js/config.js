@@ -1,16 +1,26 @@
 /**
- * Everything tunable in one place.
+ * Settings that are NOT per exhibit, plus the defaults a new exhibit starts from.
+ *
+ * What each exhibit shows — its target image, video and 3D model — lives in
+ * assets/content/content.json, written by the admin portal (admin.html). This
+ * file no longer decides that. What it still owns:
+ *
+ *   floor, tracking, ui   global behaviour, the same for every exhibit
+ *   target, video, model  the DEFAULTS the portal fills a new exhibit with, and
+ *                         the fallback content for a checkout that has never had
+ *                         a bundle exported
  *
  * The AR scene works in "target units": 1 unit = the width of the target image.
- * So a plane 1 wide and (imageHeight / imageWidth) tall covers the painting exactly.
+ * So a plane 1 wide and (imageHeight / imageWidth) tall covers the artwork exactly.
  */
 window.AR_CONFIG = {
 
+  // FALLBACK ONLY. Used when assets/content/content.json is missing, so a fresh
+  // checkout still runs. The portal writes real values into the bundle, and
+  // js/app.js sets MindAR's imageTargetSrc from that at start-up.
   target: {
-    // Compiled with: cd tools && npm install && npm run compile
-    // MindAR reads this path from the <a-scene mindar-image="imageTargetSrc: ...">
-    // attribute in index.html, so change it in both places. The app warns in the
-    // log if the two ever drift apart.
+    // Rebuilt by admin.html in the browser. The offline equivalent is
+    // `cd tools && npm install && npm run compile`.
     mindSrc: './assets/targets/targets.mind',
     // Source image, shown as a thumbnail on the start screen.
     imageSrc: './assets/targets/target.png',
@@ -18,12 +28,14 @@ window.AR_CONFIG = {
     height: 566,
   },
 
+  // Per-exhibit in the portal. These are the values a NEW exhibit starts with,
+  // and the fallback exhibit's own settings.
   video: {
     src: './assets/video/video.mp4',
     width: 704,
     height: 704,
 
-    // How the video is mapped onto the painting:
+    // How the video is mapped onto the artwork:
     //   'stretch' - fills the painting exactly, ignoring the video's own aspect ratio
     //   'cover'   - fills the painting exactly, crops the video's overflowing edges
     //   'contain' - shows the whole video inside the painting, may leave a gap
@@ -33,24 +45,26 @@ window.AR_CONFIG = {
     // Restart from 0:00 every time the target is re-found (false = resume).
     restartOnFound: false,
     // Fine alignment, in target units. Use the debug panel's nudge buttons to
-    // find values on-device, then paste them here.
+    // find values on-device, press "Log current values", then type them into
+    // that exhibit's Settings in admin.html.
     scale: 1.0,
     offset: { x: 0, y: 0, z: 0.001 },
   },
 
+  // Per-exhibit in the portal: each exhibit has its own model and its own
+  // height, turn and spin. These are the defaults a new one starts with.
   model: {
-    // Drop a .glb/.gltf in assets/models/ and point here, e.g.
-    //   src: './assets/models/artifact.glb'
-    // While null, the "Place AR figure" button drops in a placeholder so the
-    // whole flow is testable.
+    // Add a .glb to an exhibit in admin.html instead of setting this. While
+    // an exhibit has no model, the "Place AR figure" button drops in a
+    // placeholder so the whole flow is still testable.
     src: null,
 
     // Extra turn applied after the figure has been stood up and faced at you,
     // in degrees. Use it if the model was exported facing sideways or backwards.
     yawOffset: 0,
 
-    // Multiplier on floor.objectHeightMeters, so the debug panel can resize the
-    // figure on-device without touching the real-world measurement.
+    // Multiplier on the exhibit's own figure height, so the debug panel can
+    // resize it on-device without touching the real-world measurement.
     scale: 1.0,
 
     // Slow turntable spin, and play the glTF's own animation clip if it has one.
@@ -91,8 +105,9 @@ window.AR_CONFIG = {
     // WebXR measures it instead of assuming it.
     cameraHeightMeters: 1.4,
 
-    // The figure's real height. Whatever units the .glb was exported in and
-    // wherever its pivot sits, it lands on the floor at this height.
+    // Default figure height for a new exhibit, in metres. Each exhibit then
+    // carries its own, set in admin.html. Whatever units the .glb was exported
+    // in and wherever its pivot sits, it lands on the floor at that height.
     objectHeightMeters: 1.0,
 
     // How steady the floor has to be before "Place AR figure" appears: the

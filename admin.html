@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0d12">
+<meta name="robots" content="noindex">
+<meta name="description" content="Authoring portal for the Web AR museum guide — add target images, videos and 3D models, compile the tracker, export a deployable bundle.">
+<title>AR Content Portal</title>
+
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎛️</text></svg>">
+<link rel="stylesheet" href="./css/admin.css">
+
+<script src="./js/config.js"></script>
+<script src="./js/content.js"></script>
+<script src="./js/zip.js"></script>
+
+<!-- MindAR's own image-target compiler, the same code behind its online tool,
+     so compilation happens right here in the browser: no server, no toolchain,
+     nothing uploaded. Its web workers are inlined as data: URIs, so this one
+     file is genuinely self-contained.
+
+     The framework-free build, deliberately: the -aframe one registers A-Frame
+     components as it loads and throws here, where there is no A-Frame. It is an
+     ES module, so it lands after this page's other scripts — nothing touches
+     the compiler before the first click, and admin.js checks for it anyway. -->
+<script type="module">
+  import('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js')
+    .then(function (module) {
+      window.MINDAR = window.MINDAR || {};
+      window.MINDAR.IMAGE = window.MINDAR.IMAGE || {};
+      window.MINDAR.IMAGE.Compiler = module.Compiler;
+    })
+    .catch(function (error) {
+      window.__mindarError = String(error);
+      console.error('MindAR compiler failed to load:', error);
+    });
+</script>
+</head>
+
+<body>
+
+<header class="top">
+  <div class="top-left">
+    <span class="logo">🎛️</span>
+    <div>
+      <h1>AR Content Portal</h1>
+      <p class="sub" id="subLine">Loading…</p>
+    </div>
+  </div>
+  <div class="top-right">
+    <button id="addBtn" class="btn btn-primary" type="button">+ Add exhibit</button>
+    <button id="compileBtn" class="btn" type="button">⚙ Compile targets</button>
+    <button id="previewBtn" class="btn" type="button">▶ Preview</button>
+    <button id="exportBtn" class="btn" type="button">⬇ Export bundle</button>
+    <button id="menuBtn" class="btn btn-ghost" type="button" aria-label="More">⋯</button>
+  </div>
+</header>
+
+<div id="menu" class="menu hidden">
+  <button id="importBtn" class="menu-item" type="button">⬆ Import a bundle…</button>
+  <button id="adoptBtn" class="menu-item" type="button">📥 Load what is currently deployed</button>
+  <button id="helpBtn" class="menu-item" type="button">❔ How this works</button>
+  <button id="wipeBtn" class="menu-item danger" type="button">🗑 Delete everything</button>
+</div>
+
+<!-- The compile state is the one thing that silently breaks a deployment, so it
+     gets a permanent banner rather than a toast that scrolls away. -->
+<div id="compileBanner" class="banner hidden">
+  <span id="compileIcon">⚠️</span>
+  <p id="compileText"></p>
+  <button id="compileNow" class="btn btn-sm" type="button">Compile now</button>
+</div>
+
+<main>
+  <section id="empty" class="empty hidden">
+    <div class="empty-card">
+      <h2>No exhibits yet</h2>
+      <p>An <strong>exhibit</strong> is one set: the image visitors point their phone at, the video that plays mapped onto it, and the 3D model they can then stand on the floor.</p>
+      <div class="empty-actions">
+        <button class="btn btn-primary" type="button" data-act="add">+ Add your first exhibit</button>
+        <button class="btn" type="button" data-act="adopt">📥 Load what is currently deployed</button>
+        <button class="btn" type="button" data-act="import">⬆ Import a bundle…</button>
+      </div>
+    </div>
+  </section>
+
+  <ol id="list" class="list"></ol>
+</main>
+
+<!-- Progress for the two operations that take real time: compiling and zipping. -->
+<div id="busy" class="busy hidden">
+  <div class="busy-card">
+    <h3 id="busyTitle">Working…</h3>
+    <div class="bar"><div id="busyBar" class="bar-fill"></div></div>
+    <p id="busyText" class="busy-text"></p>
+    <p class="busy-note">Keep this tab in the foreground — browsers throttle background tabs and this will crawl.</p>
+  </div>
+</div>
+
+<div id="sheet" class="sheet hidden">
+  <div class="sheet-card">
+    <header class="sheet-head">
+      <h3 id="sheetTitle">How this works</h3>
+      <button id="sheetClose" class="btn btn-sm btn-ghost" type="button">✕</button>
+    </header>
+    <div id="sheetBody" class="sheet-body"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<!-- One hidden input per kind, reused by whichever card asked. -->
+<input id="pickImage" class="offscreen" type="file" accept="image/png,image/jpeg,image/webp">
+<input id="pickVideo" class="offscreen" type="file" accept="video/mp4,video/webm,video/quicktime">
+<input id="pickModel" class="offscreen" type="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json">
+<input id="pickBundle" class="offscreen" type="file" accept=".zip,application/zip">
+
+<template id="cardTemplate">
+  <li class="card">
+    <header class="card-head">
+      <span class="index"></span>
+      <input class="name" type="text" placeholder="Exhibit name" maxlength="80">
+      <div class="card-tools">
+        <button class="btn btn-sm btn-ghost" data-act="up" type="button" title="Move up">↑</button>
+        <button class="btn btn-sm btn-ghost" data-act="down" type="button" title="Move down">↓</button>
+        <button class="btn btn-sm btn-ghost" data-act="dup" type="button" title="Duplicate">⧉</button>
+        <button class="btn btn-sm btn-ghost danger" data-act="del" type="button" title="Delete">🗑</button>
+      </div>
+    </header>
+
+    <div class="slots">
+      <div class="slot" data-kind="img">
+        <div class="slot-head"><strong>1 · Target image</strong><span class="req">required</span></div>
+        <button class="drop" data-act="pick" type="button">
+          <img class="thumb hidden" alt="">
+          <span class="drop-hint">Drop a PNG or JPG here, or click to choose</span>
+        </button>
+        <p class="meta"></p>
+        <p class="quality"></p>
+      </div>
+
+      <div class="slot" data-kind="vid">
+        <div class="slot-head"><strong>2 · Video</strong><span class="req">required</span></div>
+        <button class="drop" data-act="pick" type="button">
+          <video class="thumb hidden" muted playsinline preload="metadata"></video>
+          <span class="drop-hint">Drop an MP4 here, or click to choose</span>
+        </button>
+        <p class="meta"></p>
+      </div>
+
+      <div class="slot" data-kind="mdl">
+        <div class="slot-head"><strong>3 · 3D model</strong><span class="opt">optional</span></div>
+        <button class="drop" data-act="pick" type="button">
+          <span class="glb hidden">🧊</span>
+          <span class="drop-hint">Drop a .glb here, or click to choose</span>
+        </button>
+        <p class="meta"></p>
+      </div>
+    </div>
+
+    <button class="settings-toggle" data-act="settings" type="button">Settings ▾</button>
+
+    <div class="settings hidden">
+      <div class="field">
+        <label>Video fit</label>
+        <select data-set="video.fit">
+          <option value="stretch">stretch — fill the image exactly</option>
+          <option value="cover">cover — fill and crop the overflow</option>
+          <option value="contain">contain — show it all, may leave a gap</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Video scale</label>
+        <input type="number" step="0.01" min="0.1" max="3" data-set="video.scale">
+      </div>
+      <div class="field">
+        <label>Video nudge X / Y</label>
+        <span class="pair">
+          <input type="number" step="0.01" data-set="video.offset.x">
+          <input type="number" step="0.01" data-set="video.offset.y">
+        </span>
+      </div>
+      <div class="field">
+        <label>Loop the video</label>
+        <input type="checkbox" data-set="video.loop">
+      </div>
+      <div class="field">
+        <label>Restart on re-scan</label>
+        <input type="checkbox" data-set="video.restartOnFound">
+      </div>
+
+      <hr>
+
+      <div class="field">
+        <label>Figure height (m)</label>
+        <input type="number" step="0.05" min="0.1" max="5" data-set="model.heightMeters">
+      </div>
+      <div class="field">
+        <label>Figure turn (°)</label>
+        <input type="number" step="15" min="-180" max="360" data-set="model.yawOffset">
+      </div>
+      <div class="field">
+        <label>Slow turntable spin</label>
+        <input type="checkbox" data-set="model.spin">
+      </div>
+      <div class="field">
+        <label>Play the model's animation</label>
+        <input type="checkbox" data-set="model.playClip">
+      </div>
+    </div>
+  </li>
+</template>
+
+<script src="./js/admin.js"></script>
+</body>
+</html>

@@ -17,6 +17,12 @@
  * The only link between them is the one-way door out of scene 1. Nothing in
  * scene 2 or 3 depends on the painting, so walking away from it changes nothing.
  *
+ * The page shows one or more EXHIBITS, each a set of three: a target image, the
+ * video mapped onto it, and the 3D model that follows it onto the floor. They
+ * come from js/content.js, which reads a bundle written by the admin portal
+ * (admin.html). Exhibit order is target order: exhibits[i] is target i inside
+ * the .mind file, and MindAR reports finds by that index.
+ *
  * Units differ per scene — every engine reports its own unitsPerMetre:
  *   scene 1        - 1 unit = the target image's width (MindAR scales the anchor)
  *   scene 2/3 XR   - 1 unit = 1 metre (WebXR's own convention)
@@ -45,32 +51,78 @@
     videoConfirmed: false,
     xrSupported: false,
 
-    fit: cfg.video.fit,
-    videoScale: cfg.video.scale,
-    videoOffset: { x: cfg.video.offset.x, y: cfg.video.offset.y, z: cfg.video.offset.z },
+    // Which exhibit is on screen, or was last seen. Scene 2 keeps using it
+    // after the painting leaves the frame, which is the whole point of the door.
+    activeIndex: -1,
+    // Which exhibit's file the shared <video> element currently holds.
+    loadedVideo: -1,
+
+    // Seeded from the active exhibit each time one is found; the debug panel's
+    // nudges then live here until another exhibit is scanned.
+    fit: 'stretch',
+    videoScale: 1,
+    videoOffset: { x: 0, y: 0, z: 0.001 },
 
     // floor scene
     engine: null,          // the active floor engine, or null
     floorFound: false,     // a candidate surface is being tracked right now
     floorStable: false,    // ...and it has held still long enough to place on
     cameraHeight: cfg.floor.cameraHeightMeters,
-    modelScale: cfg.model.scale,
+    modelScale: 1,
     faceYaw: 0,            // radians, set at placement so the figure faces you
     modelYaw: 0,           // degrees, the debug panel's turn on top of that
 
     tStart: 0,
   };
 
-  var PLANE_H = cfg.target.height / cfg.target.width; // painting height in target units
+  /**
+   * MindAR's camera clips below 10 units and past 1e5, so the gyro floor engine
+   * cannot work in metres. A perspective camera has no absolute scale — only
+   * ratios matter — so this is simply a number comfortably inside that frustum.
+   * It is deliberately independent of any exhibit's size.
+   */
+  var GYRO_UNITS_PER_METRE = 552;
+
+  // ---------------------------------------------------------------- exhibits
+  /** Order is target order: exhibits[i] is target i inside the .mind file. */
+  var exhibits = [];
+  var bundle = null;
   var videoTexture = null;
+
+  /** The exhibit on screen, or the last one seen. */
+  function EX() { return exhibits[S.activeIndex] || exhibits[0] || null; }
+
+  /** Its model settings, or the config defaults before any content has loaded. */
+  function modelCfg() {
+    var ex = EX();
+    return (ex && ex.model) || window.ARContent.modelDefaults();
+  }
+
+  /**
+   * A painting's height in target units.
+   *
+   * MindAR scales an anchor by its target's width, so the width is 1 by
+   * definition and only the aspect ratio has to be carried here.
+   */
+  function planeH(exhibit) {
+    var ex = exhibit || EX();
+    if (!ex || !ex.image.width) return 1;
+    return ex.image.height / ex.image.width;
+  }
+
+  /** Keep a URL readable in the log without dumping a whole blob: address. */
+  function shortSrc(src) {
+    if (!src) return 'none';
+    return /^blob:/.test(src) ? 'blob (admin draft)' : src;
+  }
 
   // ---------------------------------------------------------------- dom
   var $ = function (id) { return document.getElementById(id); };
   var el = {};
 
   function cacheDom() {
-    ['scene', 'anchor', 'videoPlane', 'floorScene', 'reticle', 'modelSlot', 'floorShadow',
-     'arVideo', 'introScreen', 'introThumb', 'introHint', 'startBtn', 'loadingScreen',
+    ['scene', 'floorScene', 'reticle', 'modelSlot', 'floorShadow',
+     'arVideo', 'introScreen', 'introThumbs', 'introHint', 'startBtn', 'loadingScreen',
      'loadingText', 'scanScreen', 'floorScreen', 'floorText', 'statusChip', 'statusText',
      'actionBar', 'arBtn', 'placeBtn', 'placeBtnLabel', 'moveBtn', 'removeBtn', 'backBtn',
      'errorBanner', 'errorText', 'errorRetry', 'logToggle', 'logBadge', 'logPanel',
@@ -215,32 +267,46 @@
   }
 
   // ---------------------------------------------------------------- video plane
-  /** Build the video texture and hang it on the plane. */
-  function setupVideoPlane() {
-    var mesh = el.videoPlane.getObject3D('mesh');
-    if (!mesh) { log.error('video plane mesh missing — cannot attach video texture'); return; }
-
+  /** Build the video texture and hang it on every exhibit's plane. */
+  function setupVideoPlanes() {
     // A MindAR restart fires arReady a second time; the texture is still good.
-    if (videoTexture) { applyVideoFit(); return; }
-
-    videoTexture = new THREE.VideoTexture(el.arVideo);
-    videoTexture.minFilter = THREE.LinearFilter;
-    videoTexture.magFilter = THREE.LinearFilter;
-    videoTexture.generateMipmaps = false;
-    if ('colorSpace' in videoTexture && THREE.SRGBColorSpace) {
-      videoTexture.colorSpace = THREE.SRGBColorSpace;      // three >= r152
-    } else if (THREE.sRGBEncoding !== undefined) {
-      videoTexture.encoding = THREE.sRGBEncoding;
+    if (!videoTexture) {
+      videoTexture = new THREE.VideoTexture(el.arVideo);
+      videoTexture.minFilter = THREE.LinearFilter;
+      videoTexture.magFilter = THREE.LinearFilter;
+      videoTexture.generateMipmaps = false;
+      if ('colorSpace' in videoTexture && THREE.SRGBColorSpace) {
+        videoTexture.colorSpace = THREE.SRGBColorSpace;      // three >= r152
+      } else if (THREE.sRGBEncoding !== undefined) {
+        videoTexture.encoding = THREE.sRGBEncoding;
+      }
     }
 
-    mesh.material = new THREE.MeshBasicMaterial({
-      map: videoTexture,
-      toneMapped: false,
-      side: THREE.DoubleSide,
+    // Every plane draws the same <video>, because MindAR tracks one target at a
+    // time. They still need a material each: a material is the mesh's draw
+    // state, not just a texture reference.
+    var attached = 0;
+    exhibits.forEach(function (ex) {
+      var mesh = ex.planeEl && ex.planeEl.getObject3D('mesh');
+      if (!mesh) return;
+      if (!mesh.material || mesh.material.map !== videoTexture) {
+        mesh.material = new THREE.MeshBasicMaterial({
+          map: videoTexture,
+          toneMapped: false,
+          side: THREE.DoubleSide,
+        });
+        mesh.material.needsUpdate = true;
+      }
+      attached++;
     });
-    mesh.material.needsUpdate = true;
+
+    if (!attached) {
+      log.error('no exhibit planes are ready — cannot attach the video texture');
+      return;
+    }
     applyVideoFit();
-    log.ok('video texture attached to the plane');
+    log.ok('video texture attached to ' + attached + ' exhibit plane' +
+           (attached === 1 ? '' : 's'));
   }
 
   /**
@@ -251,18 +317,24 @@
    * exactly, at any distance or angle.
    */
   function applyVideoFit() {
+    var ex = EX();
+    if (!ex || !ex.planeEl) return;
+
     var v = el.arVideo;
+    // The element's own numbers once it has metadata; the bundle's until then.
     var videoAspect = (v.videoWidth && v.videoHeight)
       ? v.videoWidth / v.videoHeight
-      : cfg.video.width / cfg.video.height;
-    var imageAspect = 1 / PLANE_H;
+      : ((ex.video.width && ex.video.height) ? ex.video.width / ex.video.height : 1);
 
-    var w = 1, h = PLANE_H;      // plane size, target units
+    var ph = planeH(ex);
+    var imageAspect = 1 / ph;
+
+    var w = 1, h = ph;                    // plane size, target units
     var rx = 1, ry = 1, ox = 0, oy = 0;   // texture repeat/offset
 
     if (S.fit === 'contain') {
       if (videoAspect > imageAspect) { w = 1; h = 1 / videoAspect; }
-      else { h = PLANE_H; w = PLANE_H * videoAspect; }
+      else { h = ph; w = ph * videoAspect; }
     } else if (S.fit === 'cover') {
       if (videoAspect > imageAspect) { rx = imageAspect / videoAspect; ox = (1 - rx) / 2; }
       else { ry = videoAspect / imageAspect; oy = (1 - ry) / 2; }
@@ -271,12 +343,14 @@
     w *= S.videoScale;
     h *= S.videoScale;
 
-    el.videoPlane.setAttribute('width', w.toFixed(5));
-    el.videoPlane.setAttribute('height', h.toFixed(5));
-    el.videoPlane.setAttribute('position', {
+    ex.planeEl.setAttribute('width', w.toFixed(5));
+    ex.planeEl.setAttribute('height', h.toFixed(5));
+    ex.planeEl.setAttribute('position', {
       x: S.videoOffset.x, y: S.videoOffset.y, z: S.videoOffset.z,
     });
 
+    // repeat/offset live on the texture, which every plane shares — safe only
+    // because MindAR tracks one target at a time, so one plane is ever visible.
     if (videoTexture) {
       videoTexture.repeat.set(rx, ry);
       videoTexture.offset.set(ox, oy);
@@ -284,8 +358,45 @@
     }
 
     log.debug('video fit=' + S.fit + ' plane=' + w.toFixed(3) + 'x' + h.toFixed(3) +
-              ' (painting is 1.000 x ' + PLANE_H.toFixed(3) + ')' +
+              ' ("' + ex.name + '" is 1.000 x ' + ph.toFixed(3) + ')' +
               ' crop=' + rx.toFixed(3) + 'x' + ry.toFixed(3));
+  }
+
+  /**
+   * Point the shared <video> at an exhibit's file.
+   *
+   * iOS grants playback permission to an ELEMENT, not to a URL, so the one
+   * element unlocked by the Start tap is reused for every exhibit. Swapping src
+   * keeps that permission; a second element would not have it.
+   */
+  function loadExhibitVideo(index) {
+    var ex = exhibits[index];
+    if (!ex || !ex.video.src) return false;
+    if (S.loadedVideo === index) return true;
+
+    var v = el.arVideo;
+    S.loadedVideo = index;
+    v.loop = ex.video.loop !== false;
+    v.src = ex.video.src;
+    v.load();
+    log.info('video source —> "' + ex.name + '" (' + shortSrc(ex.video.src) + ')');
+    return true;
+  }
+
+  /** Re-seed the live tunables from an exhibit and load its video. */
+  function adoptExhibit(ex) {
+    if (!ex) return;
+    S.fit = ex.video.fit;
+    S.videoScale = ex.video.scale;
+    S.videoOffset = { x: ex.video.offset.x, y: ex.video.offset.y, z: ex.video.offset.z };
+    S.modelScale = ex.model.scale;
+    S.modelYaw = 0;
+
+    loadExhibitVideo(ex.targetIndex);
+    applyVideoFit();
+
+    var fitBtn = el.logTools && el.logTools.querySelector('[data-tool="fit"]');
+    if (fitBtn) fitBtn.textContent = S.fit;
   }
 
   // ---------------------------------------------------------------- video playback
@@ -305,7 +416,8 @@
 
   function playVideo() {
     var v = el.arVideo;
-    if (cfg.video.restartOnFound) v.currentTime = 0;
+    var ex = EX();
+    if (ex && ex.video.restartOnFound) v.currentTime = 0;
     var p = v.play();
     if (p && p.catch) {
       p.catch(function (err) {
@@ -313,7 +425,7 @@
         showError('The video could not start. Tap Retry.', true);
       });
     }
-    if (!S.videoConfirmed) confirmPlayback();
+    confirmPlayback(S.activeIndex);
   }
 
   /**
@@ -323,23 +435,27 @@
    * delivering nothing, which would show the button over a frozen frame. This
    * waits until currentTime has actually advanced.
    */
-  function confirmPlayback() {
+  function confirmPlayback(index) {
     var v = el.arVideo;
     var startTime = v.currentTime;
     var deadline = performance.now() + 6000;
+    var name = exhibits[index] ? exhibits[index].name : 'the video';
 
     (function check() {
-      if (S.videoConfirmed) return;
+      // Another exhibit took the element over; this watch is stale.
+      if (S.loadedVideo !== index) return;
 
       if (v.readyState >= 2 && !v.paused && v.currentTime > startTime + 0.05) {
+        var first = !S.videoConfirmed;
         S.videoConfirmed = true;
-        log.ok('video playback confirmed at t=' + v.currentTime.toFixed(2) +
-               's — unlocking "View in 3D"');
-        applyModeUI();
+        log.ok('playback confirmed for "' + name + '" at t=' + v.currentTime.toFixed(2) + 's' +
+               (first ? ' — unlocking "View in 3D"' : ''));
+        // Once unlocked the door stays open, so only the first one moves the UI.
+        if (first) applyModeUI();
         return;
       }
       if (performance.now() > deadline) {
-        log.error('video did not start within 6s — paused=' + v.paused +
+        log.error('"' + name + '" did not start within 6s — paused=' + v.paused +
                   ' readyState=' + v.readyState + ' networkState=' + v.networkState +
                   ' currentTime=' + v.currentTime.toFixed(2) +
                   ' error=' + (v.error ? v.error.code : 'none'));
@@ -377,7 +493,13 @@
     if (anyButton) requestAnimationFrame(function () { el.actionBar.classList.add('up'); });
     else el.actionBar.classList.remove('up');
 
-    el.videoPlane.setAttribute('visible', m === MODE.SCAN && S.targetFound);
+    // Only the exhibit being tracked shows its video.
+    exhibits.forEach(function (ex, i) {
+      if (ex.planeEl) {
+        ex.planeEl.setAttribute('visible',
+          m === MODE.SCAN && S.targetFound && i === S.activeIndex);
+      }
+    });
     el.floorScene.setAttribute('visible', m === MODE.FLOOR || m === MODE.PLACED);
     el.reticle.setAttribute('visible', m === MODE.FLOOR && S.floorFound);
     el.modelSlot.setAttribute('visible', m === MODE.PLACED);
@@ -399,7 +521,9 @@
     // Scene 1 is over: stop the video and the image tracking before anything
     // else, so there is no chance of them fighting the floor scene for the camera.
     el.arVideo.pause();
-    el.videoPlane.setAttribute('visible', false);
+    exhibits.forEach(function (ex) {
+      if (ex.planeEl) ex.planeEl.setAttribute('visible', false);
+    });
     S.targetFound = false;
 
     setMode(MODE.FLOOR);
@@ -723,8 +847,7 @@
 
     return {
       name: 'gyro',
-      // MindAR's camera clips below 10 units, so metres are unusable here.
-      unitsPerMetre: cfg.target.width,
+      unitsPerMetre: GYRO_UNITS_PER_METRE,
       worldTracked: false,
       hint: 'Point your phone down at the floor and hold still',
 
@@ -1082,7 +1205,7 @@
   /** Facing the viewer, plus any turn from config or the debug panel. */
   function applyFigureYaw() {
     el.modelSlot.object3D.rotation.set(
-      0, S.faceYaw + degToRad(cfg.model.yawOffset + S.modelYaw), 0);
+      0, S.faceYaw + degToRad(modelCfg().yawOffset + S.modelYaw), 0);
   }
 
   /** Turn the figure so its front faces wherever the camera is standing. */
@@ -1100,38 +1223,39 @@
   function buildFigure() {
     if ($('modelPivot')) return;
 
+    var model = modelCfg();
     var pivot = document.createElement('a-entity');
     pivot.id = 'modelPivot';
-    if (cfg.model.spin) {
+    if (model.spin) {
       pivot.setAttribute('animation', {
         property: 'rotation', from: '0 0 0', to: '0 360 0',
         loop: true, dur: 14000, easing: 'linear',
       });
     }
 
-    if (cfg.model.src) {
+    if (model.src) {
       var holder = document.createElement('a-entity');
       holder.id = 'modelHolder';
-      holder.setAttribute('gltf-model', 'url(' + cfg.model.src + ')');
+      holder.setAttribute('gltf-model', 'url(' + model.src + ')');
       holder.addEventListener('model-loaded', function () {
         normalizeModel(holder);
-        if (cfg.model.playClip) holder.setAttribute('clip-player', '');
+        if (model.playClip) holder.setAttribute('clip-player', '');
         updateFloorShadow();
-        log.ok('3D model loaded: ' + cfg.model.src);
+        log.ok('3D model loaded for "' + (EX() ? EX().name : '?') + '": ' + shortSrc(model.src));
       });
       holder.addEventListener('model-error', function () {
-        log.error('3D model failed to load: ' + cfg.model.src);
+        log.error('3D model failed to load: ' + shortSrc(model.src));
         showError('The 3D model could not be loaded — showing a placeholder instead.', true);
         if (holder.parentNode) holder.parentNode.removeChild(holder);
         pivot.appendChild(buildPlaceholder());
         updateFloorShadow();
       });
       pivot.appendChild(holder);
-      log.info('loading 3D model: ' + cfg.model.src);
+      log.info('loading 3D model: ' + shortSrc(model.src));
     } else {
       pivot.appendChild(buildPlaceholder());
-      log.info('no model configured — placed the built-in placeholder ' +
-               '(set model.src in js/config.js to use a .glb)');
+      log.info('"' + (EX() ? EX().name : '?') + '" has no 3D model — placed the ' +
+               'built-in placeholder (add a .glb to this exhibit in admin.html)');
     }
 
     el.modelSlot.appendChild(pivot);
@@ -1142,7 +1266,7 @@
     if (pivot && pivot.parentNode) pivot.parentNode.removeChild(pivot);
     el.modelSlot.setAttribute('visible', false);
     el.floorShadow.setAttribute('visible', false);
-    S.modelScale = cfg.model.scale;
+    S.modelScale = modelCfg().scale;
     S.modelYaw = 0;
     S.faceYaw = 0;
     S.figureFootprint = 0;
@@ -1216,13 +1340,13 @@
     log.info('model normalized: source size ' +
              size.x.toFixed(2) + ' x ' + size.y.toFixed(2) + ' x ' + size.z.toFixed(2) +
              ' -> scale ' + s.toFixed(4) + ' (' +
-             (cfg.floor.objectHeightMeters * S.modelScale).toFixed(2) + 'm tall on the floor)');
+             (modelCfg().heightMeters * S.modelScale).toFixed(2) + 'm tall on the floor)');
   }
 
   /** The figure's height in whatever units the running engine uses. */
   function figureHeightUnits() {
     var upm = S.engine ? S.engine.unitsPerMetre : 1;
-    return cfg.floor.objectHeightMeters * S.modelScale * upm;
+    return modelCfg().heightMeters * S.modelScale * upm;
   }
 
   /** Stand-in object so the whole flow works before a real .glb exists. */
@@ -1381,10 +1505,10 @@
     if (t.missTolerance !== -1) system.missTolerance = t.missTolerance;
     if (t.warmupTolerance !== -1) system.warmupTolerance = t.warmupTolerance;
 
-    if (system.imageTargetSrc !== cfg.target.mindSrc) {
-      log.warn('config.target.mindSrc (' + cfg.target.mindSrc + ') does not match the ' +
-               'imageTargetSrc in index.html (' + system.imageTargetSrc + '); index.html wins');
-    }
+    // The scene attribute is only a placeholder. The real tracker comes from the
+    // content bundle, and can be a blob: URL when previewing the portal's draft.
+    // start() reads this property directly, so setting it here is enough.
+    if (bundle && bundle.mindSrc) system.imageTargetSrc = bundle.mindSrc;
 
     var shown = function (v) { return v === null || v === undefined ? 'library default' : v; };
     log.event('starting AR — mind: ' + system.imageTargetSrc +
@@ -1427,23 +1551,42 @@
     S.started = false;
   }
 
-  function onTargetFound() {
+  function onTargetFound(index) {
     if (S.mode !== MODE.SCAN) return;     // scene 2/3 does not care about the painting
+
+    var ex = exhibits[index];
+    if (!ex) {
+      log.warn('MindAR found target ' + index + ', which no exhibit claims — the ' +
+               'deployed targets.mind and content.json have drifted apart. ' +
+               'Re-export from admin.html.');
+      return;
+    }
+
+    if (S.activeIndex !== index) {
+      log.event('exhibit —> "' + ex.name + '" (target ' + index + ')');
+      S.activeIndex = index;
+      adoptExhibit(ex);
+    }
+
     S.targetFound = true;
-    setStatus('Target locked', 'ok');
+    setStatus(exhibits.length > 1 ? ex.name : 'Target locked', 'ok');
     applyModeUI();
     playVideo();
-    log.event('targetFound (+' + ((performance.now() - S.tStart) / 1000).toFixed(2) + 's)');
+    log.event('targetFound: "' + ex.name + '" (+' +
+              ((performance.now() - S.tStart) / 1000).toFixed(2) + 's)');
   }
 
-  function onTargetLost() {
+  function onTargetLost(index) {
     if (S.mode !== MODE.SCAN) return;
+    if (index !== S.activeIndex) return;  // a target we were not showing anyway
+
     S.targetFound = false;
     el.arVideo.pause();
     setStatus('Searching…', 'warn');
     applyModeUI();
-    log.event('targetLost' + (S.videoConfirmed
-      ? ' ("View in 3D" stays available — scene 2 does not need the painting)' : ''));
+    log.event('targetLost: "' + (exhibits[index] ? exhibits[index].name : index) + '"' +
+              (S.videoConfirmed
+                ? ' ("View in 3D" stays available — scene 2 does not need the painting)' : ''));
   }
 
   // ---------------------------------------------------------------- debug tools
@@ -1486,7 +1629,7 @@
           if (axis === 's') S.modelScale = Math.max(0.1, S.modelScale + dir * cfg.ui.scaleStep);
           else S.modelYaw = (S.modelYaw + dir * 15) % 360;
           refreshFigure();
-          log.info('figure: ' + (cfg.floor.objectHeightMeters * S.modelScale).toFixed(2) +
+          log.info('figure: ' + (modelCfg().heightMeters * S.modelScale).toFixed(2) +
                    'm tall, turned ' + Math.round(S.modelYaw) + '°');
         }
       });
@@ -1499,14 +1642,18 @@
     var v = el.arVideo;
     var engine = S.engine;
 
+    var ex = EX();
+
     log.info(
-      'current values — paste into js/config.js:\n' +
-      '  video: { fit: "' + S.fit + '", scale: ' + r(S.videoScale) +
-      ', offset: { x: ' + r(S.videoOffset.x) + ', y: ' + r(S.videoOffset.y) +
-      ', z: ' + r(S.videoOffset.z) + ' } }\n' +
-      '  floor: { cameraHeightMeters: ' + r(S.cameraHeight) +
-      ', objectHeightMeters: ' + r(cfg.floor.objectHeightMeters * S.modelScale) + ' }\n' +
-      '  model: { yawOffset: ' + r(cfg.model.yawOffset + S.modelYaw) + ' }\n' +
+      'current values for "' + (ex ? ex.name : '?') + '" — type these into its ' +
+      'Settings in admin.html:\n' +
+      '  Video fit: ' + S.fit + ', scale ' + r(S.videoScale) +
+      ', nudge x ' + r(S.videoOffset.x) + ' y ' + r(S.videoOffset.y) + '\n' +
+      '  Figure height: ' + r(modelCfg().heightMeters * S.modelScale) + 'm' +
+      ', turn ' + r(modelCfg().yawOffset + S.modelYaw) + '°\n' +
+      '  Phone height (js/config.js floor.cameraHeightMeters): ' + r(S.cameraHeight) + '\n' +
+      '  content: ' + (bundle ? bundle.source : '?') + ', ' + exhibits.length +
+      ' exhibit(s), active ' + S.activeIndex + '\n' +
       '  scene: ' + S.mode +
       ' engine=' + (engine ? engine.name : 'none') +
       ' xrSupported=' + S.xrSupported +
@@ -1522,19 +1669,18 @@
   // ---------------------------------------------------------------- wiring
   function wireVideoElement() {
     var v = el.arVideo;
-    v.src = cfg.video.src;
-    v.loop = cfg.video.loop;
     v.muted = true; // required for autoplay on both platforms
     v.setAttribute('playsinline', '');
-    v.load();
+    // The src is set per exhibit by loadExhibitVideo(); adoptExhibit() has
+    // already pointed this at the first one.
 
     ['loadedmetadata', 'loadeddata', 'canplay', 'playing', 'pause', 'waiting',
      'stalled', 'ended', 'error', 'suspend'].forEach(function (name) {
       v.addEventListener(name, function () {
         if (name === 'error') {
           var e = v.error || {};
-          log.error('video element error: code=' + e.code + ' ' + (e.message || '') +
-                    ' src=' + (v.currentSrc || cfg.video.src));
+          log.error('video element error for "' + (EX() ? EX().name : '?') + '": code=' +
+                    e.code + ' ' + (e.message || '') + ' src=' + shortSrc(v.currentSrc));
           showError('The video file could not be loaded. Check the log for details.', true);
           return;
         }
@@ -1576,23 +1722,23 @@
                  ' fps=' + (settings.frameRate || '?') +
                  ' label="' + (track ? track.label : '?') + '"');
       }
-      setupVideoPlane();
+      setupVideoPlanes();
     });
 
     scene.addEventListener('arError', function (e) {
       onArError((e.detail && e.detail.error) || 'unknown');
     });
 
-    el.anchor.addEventListener('targetFound', onTargetFound);
-    el.anchor.addEventListener('targetLost', onTargetLost);
-    log.ok('scene wired');
+    exhibits.forEach(function (ex, i) {
+      ex.anchorEl.addEventListener('targetFound', function () { onTargetFound(i); });
+      ex.anchorEl.addEventListener('targetLost', function () { onTargetLost(i); });
+    });
+    log.ok('scene wired for ' + exhibits.length + ' exhibit' +
+           (exhibits.length === 1 ? '' : 's'));
   }
 
   function wireUI() {
-    el.introThumb.src = cfg.target.imageSrc;
-    el.introThumb.addEventListener('error', function () {
-      log.warn('target thumbnail missing: ' + cfg.target.imageSrc);
-    });
+    renderIntroThumbs();
 
     el.startBtn.addEventListener('click', startAR);
     el.errorRetry.addEventListener('click', function () {
@@ -1629,12 +1775,98 @@
   }
 
   // ---------------------------------------------------------------- init
+  /** The start screen shows what to point the phone at — every exhibit. */
+  function renderIntroThumbs() {
+    var host = el.introThumbs;
+    if (!host) return;
+
+    host.textContent = '';
+    host.classList.toggle('many', exhibits.length > 1);
+
+    exhibits.forEach(function (ex) {
+      var figure = document.createElement('figure');
+      figure.className = 'intro-thumb';
+
+      var img = document.createElement('img');
+      img.alt = ex.name;
+      img.addEventListener('error', function () {
+        figure.classList.add('missing');
+        log.warn('target thumbnail missing for "' + ex.name + '": ' + shortSrc(ex.image.src));
+      });
+      img.src = ex.image.src || '';
+      figure.appendChild(img);
+
+      if (exhibits.length > 1) {
+        var caption = document.createElement('figcaption');
+        caption.textContent = ex.name;
+        figure.appendChild(caption);
+      }
+      host.appendChild(figure);
+    });
+  }
+
+  /**
+   * One anchor per exhibit, built before MindAR starts.
+   *
+   * mindar-image-target registers itself with the system on init, and the
+   * system only hands target dimensions to anchors it already knows about when
+   * start() runs. These are built once and survive the stop/start cycle the
+   * gyro fallback puts MindAR through.
+   */
+  function buildExhibitEntities() {
+    exhibits.forEach(function (ex, i) {
+      var anchor = document.createElement('a-entity');
+      anchor.id = 'anchor-' + i;
+      anchor.setAttribute('mindar-image-target', 'targetIndex: ' + i);
+
+      var plane = document.createElement('a-plane');
+      plane.id = 'videoPlane-' + i;
+      plane.setAttribute('visible', false);
+      plane.setAttribute('position', '0 0 0');
+      plane.setAttribute('width', 1);
+      plane.setAttribute('height', planeH(ex));
+      anchor.appendChild(plane);
+
+      el.scene.appendChild(anchor);
+      ex.anchorEl = anchor;
+      ex.planeEl = plane;
+    });
+  }
+
+  function describeSource(loaded) {
+    if (loaded.source === 'preview') return 'the admin portal draft in this browser';
+    if (loaded.source === 'bundle') {
+      return 'assets/content/content.json' +
+        (loaded.generated ? ', exported ' + loaded.generated : '');
+    }
+    return 'js/config.js — no content bundle is deployed yet';
+  }
+
+  function logContent(loaded) {
+    loaded.notes.forEach(function (note) { log.warn('content: ' + note); });
+    if (loaded.previewFailed) {
+      showError('The admin portal draft could not be loaded — showing the deployed ' +
+                'exhibits instead. Open the log for why.', false);
+    }
+
+    log.ok('content: ' + exhibits.length + ' exhibit' + (exhibits.length === 1 ? '' : 's') +
+           ' from ' + describeSource(loaded));
+    log.info('tracker: ' + shortSrc(loaded.mindSrc));
+
+    exhibits.forEach(function (ex, i) {
+      log.info('  target ' + i + ' "' + ex.name + '": image ' +
+               ex.image.width + 'x' + ex.image.height +
+               ' (plane 1 x ' + planeH(ex).toFixed(4) + '), video ' +
+               (ex.video.width || '?') + 'x' + (ex.video.height || '?') +
+               ' fit=' + ex.video.fit + ', model ' +
+               (ex.model.src ? shortSrc(ex.model.src) : 'placeholder') +
+               ' at ' + ex.model.heightMeters + 'm');
+    });
+  }
+
   function init() {
     cacheDom();
     wireLogPanel();
-    log.info('config: target ' + cfg.target.width + 'x' + cfg.target.height +
-             ' (plane 1 x ' + PLANE_H.toFixed(4) + '), video ' +
-             cfg.video.width + 'x' + cfg.video.height + ', fit=' + S.fit);
 
     if (!preflight()) return;
 
@@ -1645,14 +1877,38 @@
     // component that already exists when the entity initialises.
     el.floorScene.setAttribute('floor-driver', '');
 
-    wireVideoElement();
-    wireUI();
-    applyModeUI();
+    // Nothing can be built until we know what the exhibits are, so the Start
+    // button stays shut until the content has resolved.
+    el.startBtn.disabled = true;
+    var whenSceneReady = function (fn) {
+      if (el.scene.hasLoaded) fn();
+      else el.scene.addEventListener('loaded', fn);
+    };
 
-    if (el.scene.hasLoaded) wireScene();
-    else el.scene.addEventListener('loaded', wireScene);
+    window.ARContent.load().then(function (loaded) {
+      bundle = loaded;
+      exhibits = loaded.exhibits;
+      logContent(loaded);
 
-    log.ok('app ready — waiting for the Start button');
+      whenSceneReady(function () {
+        buildExhibitEntities();
+        S.activeIndex = 0;
+        adoptExhibit(exhibits[0]);
+        renderIntroThumbs();
+
+        wireVideoElement();
+        wireUI();
+        applyModeUI();
+        wireScene();
+
+        el.startBtn.disabled = false;
+        log.ok('app ready — waiting for the Start button');
+      });
+    }).catch(function (err) {
+      log.error('content failed to load: ' + (err && err.message ? err.message : err));
+      showError('No exhibits could be loaded. Open admin.html, add one, compile the ' +
+                'targets, export the bundle and deploy it.', false);
+    });
   }
 
   if (document.readyState === 'loading') {

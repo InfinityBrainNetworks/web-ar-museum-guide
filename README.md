@@ -14,28 +14,97 @@ They are deliberately independent. Nothing in scenes 2 and 3 needs the painting,
 so you can walk away from it, and **View in 3D** stays on screen once earned
 rather than vanishing the moment the artwork leaves the frame.
 
+The page can carry **any number of exhibits**. An exhibit is one set — a target
+image, the video mapped onto it, and the 3D model that follows it onto the floor
+— and you add them through the admin portal rather than by editing code.
+
 Built on [A-Frame](https://aframe.io) 1.5.0 + [MindAR](https://hiukim.github.io/mind-ar-js-doc/) 1.2.5.
 Works on Android (Chrome) and iOS (Safari 11.3+).
 
 **Live:** https://infinitybrainnetworks.github.io/web-ar-museum-guide/
+**Portal:** add `/admin.html` to that URL
 
-Open it on the phone, tap **Start AR**, allow the camera, and point at the
-painting (`assets/targets/target.png` — print it, or show it on another screen).
+Open it on the phone, tap **Start AR**, allow the camera, and point at one of the
+artworks shown on the start screen.
+
+## Adding exhibits — the admin portal
+
+Open **`admin.html`** on a desktop browser. It runs entirely in that browser:
+nothing is uploaded, there is no server and no account.
+
+1. **+ Add exhibit**, then drop in a target image, a video, and optionally a `.glb`.
+2. **⚙ Compile targets** — builds `targets.mind` from every target image, on your
+   machine, using MindAR's own compiler. Each card then reports its feature
+   point count, which is the honest answer to "will this track well".
+3. **▶ Preview** — opens the AR page against the draft, in this browser.
+4. **⬇ Export bundle** — downloads a zip. Unzip it at the root of the repo
+   (it only writes into `assets/content/`) and push:
+
+   ```bash
+   git add assets/content
+   git commit -m "Update AR exhibits"
+   git push
+   ```
+
+Vercel and Pages both rebuild on push, so the exhibits are live a minute later.
+
+### The one rule
+
+**Exhibit order is target order.** Exhibit 1 is target 0 inside `targets.mind`,
+and MindAR reports a find by that index. Adding, removing, reordering or
+replacing an image therefore invalidates the compiled tracker — and a stale
+tracker fails in the nastiest possible way: every exhibit still tracks, just
+against the wrong video.
+
+The portal watches for this. A banner at the top tells you when the tracker is
+out of date, and **Export is blocked until you recompile**, so the broken
+combination cannot reach the repo.
+
+### Things worth knowing
+
+- **Preview is this browser only.** Browser storage never leaves the device it
+  is on, so Preview cannot reach your phone. To test on a phone, export, push,
+  and open the live URL there.
+- **Your exported zips are the backup.** The portal keeps files in this
+  browser's storage; clearing site data deletes them. **Import a bundle** reads
+  a zip straight back in, so keep them.
+- **Load what is currently deployed** (⋯ menu) pulls the live exhibits into the
+  portal so you can edit them.
+- **Good target images** are busy, high-contrast and non-repeating. A flat
+  colour, a smooth gradient or a regular pattern gives the tracker nothing to
+  lock onto. Under ~400 feature points and it will struggle.
+- Target images are capped at 1024 px on the long edge when compiled. MindAR's
+  anchor scale is the target's own width, so everything downstream is a ratio
+  and nothing is distorted by this.
+- Right-click a filled image, video or model slot to clear it.
 
 ## What's in the box
 
 | Path | What it is |
 |---|---|
-| `index.html` | Page shell: AR scene + overlay UI |
-| `js/config.js` | **All the tunables** — target size, video fit, model placement, tracking |
+| `index.html` | The AR page: scene + overlay UI |
+| `admin.html` | The authoring portal |
+| `js/content.js` | Resolves which exhibits to show, and the shared IndexedDB store |
 | `js/app.js` | The three-scene machine, video mapping, both floor engines, debug tools |
+| `js/admin.js` | The portal: editing, compiling, export, import |
+| `js/zip.js` | Dependency-free ZIP reader/writer for the bundles |
+| `js/config.js` | Global settings, plus the defaults a new exhibit starts from |
 | `js/logger.js` | On-screen log window (loads first so it captures everything) |
-| `css/style.css` | Overlay UI |
-| `assets/targets/target.png` | The image being tracked (552 × 566) |
-| `assets/targets/targets.mind` | Compiled tracking data for that image |
-| `assets/video/video.mp4` | The video played on the painting (704 × 704, H.264, silent) |
-| `assets/models/` | Drop your `.glb` here |
-| `tools/` | Offline compiler that rebuilds `targets.mind` |
+| `css/style.css`, `css/admin.css` | Overlay UI, portal UI |
+| `assets/content/content.json` | **What the AR page reads** — every exhibit, in target order |
+| `assets/content/targets.mind` | Compiled tracking data, written by the portal |
+| `assets/targets/`, `assets/video/` | The original single exhibit, still referenced by `content.json` |
+| `tools/` | Offline compiler, the command-line equivalent of the portal's Compile |
+
+### Where content comes from
+
+`js/content.js` tries three sources in order, and says in the log which one won:
+
+| Source | When |
+|---|---|
+| **preview** | `index.html?preview=1` — the portal's draft, from IndexedDB |
+| **bundle** | `assets/content/content.json` — what visitors get |
+| **legacy** | `js/config.js` — a checkout that has never had a bundle exported |
 
 ## Running it
 
@@ -57,28 +126,33 @@ plane is therefore `1 × (imageHeight / imageWidth)` = `1 × 1.0254`, sitting at
 anchor origin — which is exactly the painting, at whatever size and angle it appears
 in the camera.
 
-The video is 704 × 704 and the painting is 552 × 566, so `video.fit` in `js/config.js`
-decides what happens to that ~2.5% difference:
+When the video's aspect ratio does not match the artwork's, the exhibit's
+**Video fit** setting decides what happens to the difference:
 
 - `stretch` *(default)* — fill the painting exactly, ignore the video's aspect ratio
 - `cover` — fill the painting exactly, crop the video's overflowing edges
 - `contain` — show the whole video, may leave a small gap
 
-Fine alignment lives in `video.scale` and `video.offset` (in target units, so `0.02`
-is 2% of the painting's width).
+Fine alignment lives in each exhibit's *Video scale* and *Video nudge* (in target
+units, so `0.02` is 2% of the artwork's width). To find the numbers on a phone,
+use the debug panel's nudge buttons, press **Log current values**, then type them
+into that exhibit's Settings in the portal.
 
 ## Adding the 3D figure
 
-1. Put the `.glb` / `.gltf` in `assets/models/`.
-2. Point `model.src` at it in `js/config.js`.
+Drop a `.glb` onto an exhibit's third slot in the portal. **Each exhibit has its
+own model**, and its own height and turn — the figure that appears on the floor
+is the one belonging to the artwork you last scanned. An exhibit without a model
+places a built-in placeholder, so the whole flow is testable before you have one.
 
-Until you do, the button places a built-in placeholder so the whole flow is testable.
+Export `.glb`, not `.gltf`: a `.gltf` references its textures as separate files,
+which a single-file bundle cannot carry.
 
 The figure is auto-centred and **stands on its own base, not its origin** —
 whatever units it was exported in and wherever its pivot sits, it lands on the
-floor at `floor.objectHeightMeters` tall. It turns to face you when placed
-(`floor.faceViewer`); `model.yawOffset` corrects an export that faces sideways.
-glTF animation clips play automatically (`model.playClip`).
+floor at the exhibit's *Figure height*. It turns to face you when placed
+(`floor.faceViewer`); *Figure turn* corrects an export that faces sideways.
+glTF animation clips play automatically.
 
 ## Finding the floor
 
@@ -176,28 +250,37 @@ Tap 🐞 (top right) at any time. The button gets a red badge when errors occur.
 It captures `console.*`, uncaught errors, promise rejections, failed resource
 loads, every `<video>` event, and the AR lifecycle with timings.
 
-## Swapping the target image
+## Compiling targets from the command line
+
+The portal is the normal route. This is the same job from a script, for CI or a
+batch of targets:
 
 ```bash
 cd tools
 npm install          # one-off
-node compile-target.mjs ../assets/targets/new-target.png -o ../assets/targets/targets.mind
+node compile-target.mjs ../a.png ../b.png -o ../assets/content/targets.mind
 ```
 
-Then update `target.imageSrc`, `target.width` and `target.height` in `js/config.js`,
-and `imageTargetSrc` in `index.html` if you renamed the `.mind` file.
+**The image order on that command line is the exhibit order in `content.json`.**
+Get them out of step and every exhibit tracks against the wrong video, which is
+exactly the mistake the portal exists to prevent — so if you compile by hand,
+edit `content.json` in the same commit.
 
-The compiler prints a feature-point count — under ~400 means the image is too flat
-or repetitive to track reliably. The current target scores 2723.
+The compiler prints a feature-point count per target; under ~400 means the image
+is too flat or repetitive to track reliably.
 
-(The official [online compiler](https://hiukim.github.io/mind-ar-js-doc/tools/compile)
-works too. The local one exists so targets can be rebuilt from a script; it swaps
-MindAR's `node-canvas` dependency for a pure-JS decoder, so there's no native build.)
+(It swaps MindAR's `node-canvas` dependency for a pure-JS decoder, so there is no
+native build to fight with. The official
+[online compiler](https://hiukim.github.io/mind-ar-js-doc/tools/compile) works too.)
 
 ## Troubleshooting
 
 | Symptom | Cause |
 |---|---|
+| Right artwork, **wrong video** | The tracker and `content.json` are out of step. Re-export from the portal. |
+| "No exhibits could be loaded" | No `assets/content/content.json` is deployed. Export a bundle from the portal. |
+| Portal is empty after it worked | Browser site data was cleared. Import your last exported zip. |
+| An artwork will not track | Too few feature points. Compile and read the count on its card. |
 | "Must be served over https" | Camera is blocked on plain http. Use the Pages URL. |
 | Camera never starts on iOS | Opened inside Instagram/Facebook/etc. Those in-app browsers block `getUserMedia` — open in Safari. |
 | Permission was denied once | iOS: Settings → Safari → Camera. Android: tap the padlock in the address bar → Permissions. |
