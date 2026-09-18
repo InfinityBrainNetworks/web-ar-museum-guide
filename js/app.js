@@ -515,6 +515,55 @@
   }
 
   var savedClip = null;
+  var clipFights = 0;
+
+  /**
+   * Hold the metre clip planes against anything that puts MindAR's back.
+   *
+   * MindAR's _resize() writes near=10 / far=1e5 onto the camera, and its window
+   * resize listener OUTLIVES stop() — MindAR calls removeEventListener nowhere,
+   * and registers the handler as `this._resize.bind(this)`, an anonymous bound
+   * function that cannot be removed after the fact. Entering an immersive
+   * session resizes the canvas, so that listener fires and undoes the swap.
+   *
+   * three.js reads camera.near every XR frame in updateCamera(), and A-Frame
+   * runs tick() before renderer.render(), so correcting it here lands in the
+   * same frame it would be used.
+   */
+  function enforceXrClip() {
+    var cam = el.scene.camera;
+    if (!cam || (cam.near === XR_NEAR && cam.far === XR_FAR)) return;
+
+    cam.near = XR_NEAR;
+    cam.far = XR_FAR;
+    cam.updateProjectionMatrix();
+    clipFights++;
+    if (clipFights === 1 || clipFights % 300 === 0) {
+      log.warn('camera clip planes were reset to the MindAR values (' + clipFights +
+               'x so far) and re-forced to ' + XR_NEAR + '/' + XR_FAR + ' — the MindAR ' +
+               'resize listener survives stop(), and entering XR fires a resize');
+    }
+  }
+
+  /**
+   * Wrap MindAR's _resize BEFORE it binds its listener, so the bound copy picks
+   * up the wrapper. Patching afterwards would not work: bind() captures the
+   * function value, not the property.
+   */
+  function patchMindarResize(system) {
+    if (!system || system.__resizePatched) return;
+    var original = system._resize;
+    if (typeof original !== 'function') return;
+
+    system._resize = function () {
+      try { original.apply(this, arguments); }
+      catch (e) { log.debug('MindAR _resize threw (harmless once stopped): ' + e); }
+      if (S.engine && S.engine.worldTracked) enforceXrClip();
+    };
+    system.__resizePatched = true;
+    log.debug('MindAR _resize wrapped — its resize listener outlives stop() and would ' +
+              'restore near=10 during a WebXR session');
+  }
 
   /** Put MindAR's own clip planes back before scene 1 restarts. */
   function restoreCameraClip() {
@@ -642,17 +691,23 @@
 
   /** Read back what the session actually accepted, for the log. */
   function reportRenderState(session) {
-    setTimeout(function () {
-      var rs = session && session.renderState;
-      if (!rs) { log.warn('no XR renderState to report'); return; }
-      var cam = el.scene.camera;
-      log.info('XR render state: depthNear=' + rs.depthNear + 'm depthFar=' + rs.depthFar +
-               'm (camera near/far = ' + (cam ? cam.near + '/' + cam.far : '?') + ')');
-      if (rs.depthNear > 1) {
-        log.error('XR near plane is ' + rs.depthNear + 'm — anything closer than that is ' +
-                  'invisible. This is the MindAR near=10 leak; report it with this log.');
-      }
-    }, 1200);
+    [1500, 5000].forEach(function (delay) {
+      setTimeout(function () {
+        var rs = session && session.renderState;
+        if (!rs) { log.warn('no XR renderState to report'); return; }
+        var cam = el.scene.camera;
+        var line = 'XR render state @' + (delay / 1000) + 's: depthNear=' + rs.depthNear +
+                   'm depthFar=' + rs.depthFar + 'm (camera ' +
+                   (cam ? cam.near + '/' + cam.far : '?') +
+                   ', clip corrections: ' + clipFights + ')';
+        if (rs.depthNear > 1) {
+          log.error(line + ' — anything nearer than ' + rs.depthNear +
+                    'm is invisible. Send this log.');
+        } else {
+          log.ok(line);
+        }
+      }, delay);
+    });
   }
 
   /**
@@ -844,6 +899,7 @@
         // by hand, or everything would be glued to the phone.
         if (engine.worldTracked) {
           this.o.matrixAutoUpdate = true;
+          enforceXrClip();
         } else {
           this.o.matrixAutoUpdate = false;
           if (gyro.active && gyro.hasRef) {
@@ -1313,6 +1369,9 @@
 
     var system = el.scene.systems['mindar-image-system'];
     if (!system) { showError('MindAR system is missing. Reload the page.', true); return; }
+
+    // Must happen before start(): _startAR binds its resize listener in there.
+    patchMindarResize(system);
 
     // The mindar-image component reads its schema once, in init, so tuning from
     // config.js is applied to the system here instead — start() reads it.

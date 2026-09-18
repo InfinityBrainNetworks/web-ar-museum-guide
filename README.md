@@ -108,9 +108,19 @@ session.updateRenderState({ depthNear: camera.near, depthFar: camera.far })
 
 Entering a session without resetting those puts the near plane at **10 metres**.
 Passthrough and the DOM overlay keep drawing, so the page looks completely
-alive — and every bit of 3D is clipped away. The app now swaps in 0.05/200m for
-the session and puts MindAR's values back before image tracking resumes. The log
-records both swaps and reads back the session's accepted `depthNear`.
+alive — and every bit of 3D is clipped away.
+
+Swapping in 0.05/200m once is not enough, because **MindAR's window resize
+listener outlives `stop()`** — the library calls `removeEventListener` nowhere,
+and registers the handler as `this._resize.bind(this)`, an anonymous bound
+function that cannot be removed afterwards. Entering the session resizes the
+canvas, that listener fires, and `_resize()` puts `near = 10` right back.
+
+So there are two defences: `_resize` is wrapped before MindAR binds it, and the
+planes are re-asserted every frame while an XR engine is running, which heals
+the reset whatever causes it. MindAR's values are restored before image tracking
+resumes. The log records the swaps, counts any corrections, and reads back the
+session's accepted `depthNear` twice.
 
 ### gyro — everything else, iOS above all
 
@@ -198,7 +208,7 @@ MindAR's `node-canvas` dependency for a pure-JS decoder, so there's no native bu
 | Figure lands nearer or further than the reticle | Gyro path only: `cameraHeightMeters` does not match how you hold the phone. Tools → Phone height. |
 | Figure drifts when you walk | Expected on the gyro path — rotation only. Android gets 6DoF through WebXR. |
 | Scene 2 shows a black screen | The camera did not come back after WebXR. The log says so; set `floor.useWebXR: false` to skip WebXR entirely. |
-| Reticle and figure invisible, everything else fine | Clip planes. The log line `XR render state: depthNear=…` should read ~0.05m; if it is 10m, send the log. |
+| Reticle and figure invisible, everything else fine | Clip planes. `XR render state @5s: depthNear=…` should read ~0.05m; if it says 10m, send the log. |
 | Nothing happens on iOS when entering 3D | Motion access denied. Settings → Safari → Motion & Orientation Access. |
 
 ## Notes
