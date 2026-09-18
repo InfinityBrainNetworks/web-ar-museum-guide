@@ -7,6 +7,11 @@ playback is confirmed a button appears that drops a related 3D object into the s
 Built on [A-Frame](https://aframe.io) 1.5.0 + [MindAR](https://hiukim.github.io/mind-ar-js-doc/) 1.2.5.
 Works on Android (Chrome) and iOS (Safari 11.3+).
 
+**Live:** https://infinitybrainnetworks.github.io/web-ar-museum-guide/
+
+Open it on the phone, tap **Start AR**, allow the camera, and point at the
+painting (`assets/targets/target.png` — print it, or show it on another screen).
+
 ## What's in the box
 
 | Path | What it is |
@@ -26,8 +31,8 @@ Works on Android (Chrome) and iOS (Safari 11.3+).
 
 The camera API needs **https** (or `localhost`). Plain `http://192.168.x.x` will not work.
 
-**On a phone — GitHub Pages:** push to `main` and enable Pages (Settings → Pages →
-Deploy from branch → `main` / root). Open the Pages URL on the phone.
+**On a phone:** open the live URL above. Pages is already configured to deploy
+from `main`, so pushing to `main` redeploys it.
 
 **On a desktop with a webcam:**
 
