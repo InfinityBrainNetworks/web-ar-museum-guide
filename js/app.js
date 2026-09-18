@@ -40,6 +40,33 @@
 
   log.setMax(cfg.ui.maxLogEntries);
 
+  // ---------------------------------------------------------------- camera
+  /**
+   * MindAR requests its own camera resolution and does not expose it as an
+   * A-Frame schema property, so the only place to influence it is here: wrap
+   * getUserMedia before mindar-image-system calls it in start().
+   */
+  (function patchCameraConstraints() {
+    var wanted = {
+      width:  { ideal: 1280, max: 1920 },
+      height: { ideal: 720,  max: 1080 },
+      frameRate: { ideal: 30, max: 30 }
+    };
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    var original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+
+    navigator.mediaDevices.getUserMedia = function (constraints) {
+      if (constraints && constraints.video === true) {
+        constraints.video = wanted;
+      } else if (constraints && typeof constraints.video === 'object' &&
+                 constraints.video.facingMode !== undefined) {
+        constraints.video = Object.assign({}, constraints.video, wanted);
+      }
+      return original(constraints);
+    };
+  })();
+
   var MODE = { BOOT: 'boot', SCAN: 'scan', FLOOR: 'floor', PLACED: 'placed' };
 
   // ---------------------------------------------------------------- state
