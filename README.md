@@ -1,9 +1,18 @@
 # Web AR Museum Guide
 
-Image-tracking AR that runs in the phone browser — no app install, no QR marker.
-Point the camera at the painting, a video plays mapped exactly onto it, and once
-playback is confirmed a button appears that stands a related 3D object on the
-gallery floor in front of it.
+Web AR that runs in the phone browser — no app install, no QR marker.
+
+Three separate scenes, in order:
+
+1. **Painting** — the camera finds the artwork and a video plays mapped exactly
+   onto it. Once playback is confirmed, **View in 3D** appears.
+2. **Floor** — image tracking and the video stop. Point the phone at the floor;
+   when a surface holds still, **Place AR figure on the floor** appears.
+3. **Placed** — the figure stands where you put it.
+
+They are deliberately independent. Nothing in scenes 2 and 3 needs the painting,
+so you can walk away from it, and **View in 3D** stays on screen once earned
+rather than vanishing the moment the artwork leaves the frame.
 
 Built on [A-Frame](https://aframe.io) 1.5.0 + [MindAR](https://hiukim.github.io/mind-ar-js-doc/) 1.2.5.
 Works on Android (Chrome) and iOS (Safari 11.3+).
@@ -19,7 +28,7 @@ painting (`assets/targets/target.png` — print it, or show it on another screen
 |---|---|
 | `index.html` | Page shell: AR scene + overlay UI |
 | `js/config.js` | **All the tunables** — target size, video fit, model placement, tracking |
-| `js/app.js` | AR lifecycle, video mapping, 3D placement, debug tools |
+| `js/app.js` | The three-scene machine, video mapping, both floor engines, debug tools |
 | `js/logger.js` | On-screen log window (loads first so it captures everything) |
 | `css/style.css` | Overlay UI |
 | `assets/targets/target.png` | The image being tracked (552 × 566) |
@@ -58,68 +67,73 @@ decides what happens to that ~2.5% difference:
 Fine alignment lives in `video.scale` and `video.offset` (in target units, so `0.02`
 is 2% of the painting's width).
 
-## Adding the 3D object
+## Adding the 3D figure
 
 1. Put the `.glb` / `.gltf` in `assets/models/`.
 2. Point `model.src` at it in `js/config.js`.
 
 Until you do, the button places a built-in placeholder so the whole flow is testable.
 
-The model is auto-centred and auto-scaled, and stands on its own base rather than
-its origin — whatever units it was exported in and wherever its pivot sits, it
-lands on the floor at `floor.objectHeightMeters` tall. glTF animation clips play
-automatically (`model.playClip`).
+The figure is auto-centred and **stands on its own base, not its origin** —
+whatever units it was exported in and wherever its pivot sits, it lands on the
+floor at `floor.objectHeightMeters` tall. It turns to face you when placed
+(`floor.faceViewer`); `model.yawOffset` corrects an export that faces sideways.
+glTF animation clips play automatically (`model.playClip`).
 
 ## Finding the floor
 
-The object stands on the gallery floor, in front of the painting.
+Scene 2 picks one of two engines automatically and says which in the log.
 
-Nothing here *senses* the floor, and that is deliberate: WebXR hit-test — the only
-real plane detection on the web — exists in Chrome on Android and nowhere on iOS,
-so a version that probed the room would work on half the phones this has to run
-on. The floor is derived from the painting instead.
+### webxr — Chrome on Android
 
-A painting hangs flat and level on a vertical wall, so the tracked target's own
-axes are the room's: `+X` along the wall, `+Y` straight up, `+Z` out into the
-room. The floor is the plane
+Real plane detection through WebXR hit-test. The floor is genuinely sensed, and
+because the session tracks the camera in 6DoF the figure is anchored to the room:
+walk around it and it stays put. Units are metres, measured, not assumed.
 
-```
-y = -(centerHeightMeters / paintingWidthMeters)
-```
+Candidate surfaces are filtered so a table does not get mistaken for the floor —
+the hit must be near-horizontal (`up.y > 0.85`) and at least `minDropMeters`
+below the camera.
 
-in target units. Because it rides the same tracked pose the video does, it stays
-welded to the real floor at every angle and distance — no drift, no re-detection,
-and it is already correct the moment the target locks.
+Entering this session needs exclusive use of the camera, so MindAR is stopped
+first and rebuilt when you go back to the painting.
 
-It is only as accurate as two measurements, taken once per painting:
+### gyro — everything else, iOS above all
+
+**iOS Safari has no WebXR at any version**, so on iPhone there is nothing to
+sense a plane with. Instead the gyroscope gives the exact direction of gravity,
+and the floor is taken to be the horizontal plane `cameraHeightMeters` below the
+phone. "Stable" then means a real, checkable thing: the phone is pointed at that
+plane and has held still.
+
+The consequences are worth being clear about:
+
+- The distance to the floor is **assumed**, so if the phone is held much higher
+  or lower than `cameraHeightMeters` the figure lands nearer or further than the
+  reticle suggested. Tools → **Phone height** fixes that on-device.
+- It tracks rotation only. Turning and looking around is accurate; **walking**
+  while the figure is placed will drift it, because nothing is measuring where
+  you moved to.
+
+This path keeps the camera picture by pausing MindAR's processing rather than
+stopping it, so the feed never blinks. If WebXR is tried first and fails, the
+camera is rebuilt automatically before the fallback starts.
+
+### Both engines
+
+The same stability gate guards the Place button: the target point must stay
+inside a `stableToleranceMeters` ball for `stableSeconds`. Drift out of it and
+the button locks again, so you cannot place onto a surface that was never really
+there.
 
 ```js
 floor: {
-  paintingWidthMeters: 1.0,    // the painting's real width
-  centerHeightMeters: 1.45,    // height of its CENTRE above the floor
-  distanceMeters: 1.2,         // how far out from the wall the object stands
-  objectHeightMeters: 1.0,     // the object's real height
+  useWebXR: true,            // false forces the gyro path everywhere
+  cameraHeightMeters: 1.4,   // gyro only — how high the phone is held
+  objectHeightMeters: 1.0,   // the figure's real height
+  stableSeconds: 1.2,
+  stableToleranceMeters: 0.12,
 }
 ```
-
-Measure them with a tape, or dial them in on-site with the debug panel's **Floor**
-row and paste back what **Log current values** prints.
-
-**Tap the floor to move the object.** The tap is cast against that same plane, so
-it lands where you point. Taps that fall above the line where floor meets wall are
-ignored rather than snapped to the skirting.
-
-**Looking down.** Tilting the phone to see the floor takes the painting out of
-frame, and tracking drops with it. The object lives on `#floorRig`, which mirrors
-the anchor's pose instead of parenting to it, so when tracking goes the gyroscope
-carries the pose for `holdSeconds` and the object stays where it was put. The
-status chip reads *Holding position* while that lasts. It is rotation only —
-standing still and tilting is accurate; walking around while the painting is out
-of frame will drift. On iOS the motion permission prompt appears on **Start AR**;
-if it is denied the object hides when tracking drops instead of holding.
-
-Set `floor.enabled: false` to go back to hanging the object against the painting
-itself, using `model.fitSize`, `model.position` and `model.orientation`.
 
 ## The debug log
 
@@ -128,12 +142,11 @@ Tap 🐞 (top right) at any time. The button gets a red badge when errors occur.
 - **Copy** — the whole log plus a device header (UA, WebGL renderer, camera
   resolution, secure-context status, codec support) → paste it into chat.
 - **Save** — same thing as a `.txt` file, for when clipboard access is blocked.
-- **Tools** — live alignment controls: cycle the video fit mode, flip the model
-  orientation, turn floor mode on and off, raise/lower the floor plane, push the
-  object in and out from the wall, and nudge the video and model with arrow
-  buttons. **Log current values** then prints the numbers ready to paste into
-  `js/config.js` — this is how you dial in alignment and the two floor
-  measurements on the actual device instead of guessing.
+- **Tools** — live controls: cycle the video fit mode, jump between the three
+  scenes without waiting for the real triggers, nudge the video, and set the
+  assumed phone height, figure size and figure turn. **Log current values** then
+  prints the numbers ready to paste into `js/config.js` — this is how you dial
+  things in on the actual device instead of guessing.
 
 It captures `console.*`, uncaught errors, promise rejections, failed resource
 loads, every `<video>` event, and the AR lifecycle with timings.
@@ -166,9 +179,11 @@ MindAR's `node-canvas` dependency for a pure-JS decoder, so there's no native bu
 | Target never locks | Poor light, glare on glass, or the painting is too small in frame. Fill about half the screen with it. |
 | Video plays but is misaligned | Use Tools → nudge, then paste the printed values into `js/config.js`. |
 | Video never starts | Send the log — it records `readyState`, `networkState` and the media error code. |
-| Object floats above or sinks into the floor | `centerHeightMeters` or `paintingWidthMeters` is off. Tools → Floor → Height, then paste the printed values. |
-| Object is the wrong size | `objectHeightMeters` is its real height in metres; `paintingWidthMeters` is what converts it. |
-| Object vanishes when you look down | Motion access was denied, or the hold ran out. iOS: Settings → Safari → Motion & Orientation Access. |
+| "Place AR figure" never appears | The floor is not being found. On the gyro path the phone must actually point down at it; on WebXR, poor light or a plain glossy floor gives ARCore nothing to lock onto. |
+| Figure lands nearer or further than the reticle | Gyro path only: `cameraHeightMeters` does not match how you hold the phone. Tools → Phone height. |
+| Figure drifts when you walk | Expected on the gyro path — rotation only. Android gets 6DoF through WebXR. |
+| Scene 2 shows a black screen | The camera did not come back after WebXR. The log says so; set `floor.useWebXR: false` to skip WebXR entirely. |
+| Nothing happens on iOS when entering 3D | Motion access denied. Settings → Safari → Motion & Orientation Access. |
 
 ## Notes
 

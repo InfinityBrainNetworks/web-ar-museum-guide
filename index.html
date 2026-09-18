@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0b0d12">
-<meta name="description" content="Web AR museum guide - scans a painting, plays a video over it and places a related 3D object.">
+<meta name="description" content="Web AR museum guide - scans a painting, plays a video over it, then places a related 3D object on the floor.">
 <title>Web AR Museum Guide</title>
 
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>">
@@ -22,13 +22,21 @@
 <body>
 
 <!-- ============ AR SCENE ============ -->
+<!-- Two independent scenes share this one canvas:
+       #anchor     - scene 1, image tracking, driven by MindAR
+       #floorScene - scene 2/3, floor mapping, driven by WebXR hit-test or the
+                     gyroscope fallback. Never both at once.
+     webxr's dom-overlay keeps #overlay on screen during an immersive session;
+     without it the whole UI would vanish the moment WebXR starts. -->
 <a-scene
   id="scene"
   mindar-image="imageTargetSrc: ./assets/targets/targets.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no"
+  webxr="optionalFeatures: hit-test,dom-overlay; overlayElement: #overlay"
   color-space="sRGB"
   embedded
   renderer="colorManagement: true; alpha: true"
   vr-mode-ui="enabled: false"
+  ar-mode-ui="enabled: false"
   device-orientation-permission-ui="enabled: false"
   loading-screen="enabled: false">
 
@@ -38,18 +46,20 @@
 
   <a-camera position="0 0 0" look-controls="enabled: false" wasd-controls="enabled: false"></a-camera>
 
+  <!-- Scene 1: the painting. -->
   <a-entity id="anchor" mindar-image-target="targetIndex: 0">
     <!-- Sized at runtime to match the target image exactly (see js/app.js). -->
     <a-plane id="videoPlane" visible="false" position="0 0 0" width="1" height="1"></a-plane>
   </a-entity>
 
-  <!-- Mirrors the anchor's pose every frame, but is NOT a child of it: that way
-       the object on the floor can keep its pose (carried by the gyroscope) when
-       looking down takes the painting out of frame and tracking drops. -->
-  <a-entity id="floorRig" visible="false">
-    <!-- 3D object gets attached here when the user taps "Place 3D object". -->
-    <a-entity id="modelSlot" visible="false"></a-entity>
-    <a-entity id="floorShadow" visible="false"></a-entity>
+  <!-- Scenes 2 and 3: the floor. Completely independent of the painting — no
+       image target, no video. Identity in WebXR (the session tracks the camera);
+       counter-rotated by the gyroscope in the fallback. -->
+  <a-entity id="floorScene" visible="false">
+    <a-entity id="reticle" visible="false"></a-entity>
+    <a-entity id="modelSlot" visible="false">
+      <a-entity id="floorShadow" visible="false"></a-entity>
+    </a-entity>
   </a-entity>
 </a-scene>
 
@@ -58,6 +68,8 @@
 <video id="arVideo" playsinline webkit-playsinline muted loop preload="auto" crossorigin="anonymous"></video>
 
 <!-- ============ OVERLAY UI ============ -->
+<!-- One wrapper, because WebXR's dom-overlay can only promote a single element. -->
+<div id="overlay">
 
 <!-- 1. Start screen (also the user gesture that unlocks camera + video on iOS) -->
 <section id="introScreen" class="screen">
@@ -65,7 +77,7 @@
     <p class="eyebrow">Web AR</p>
     <h1>Museum Guide</h1>
     <img id="introThumb" class="intro-thumb" alt="Image target to scan">
-    <p class="intro-text">Point your camera at the painting above. The video plays right on top of it, then you can place a 3D object.</p>
+    <p class="intro-text">Point your camera at the painting above. The video plays right on top of it, then you can place a 3D figure on the floor.</p>
     <button id="startBtn" class="btn btn-primary btn-lg" type="button">Start AR</button>
     <p class="intro-hint" id="introHint">Camera access is required. Nothing is uploaded — everything runs on your device.</p>
   </div>
@@ -77,7 +89,7 @@
   <p id="loadingText">Starting camera…</p>
 </section>
 
-<!-- 3. Scanning hint -->
+<!-- 3. Scene 1 hint: looking for the painting -->
 <section id="scanScreen" class="overlay hidden">
   <div class="scan-frame">
     <span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span>
@@ -86,24 +98,35 @@
   <p class="scan-text">Point at the painting</p>
 </section>
 
-<!-- 4. Status chip -->
+<!-- 4. Scene 2 hint: looking for the floor -->
+<section id="floorScreen" class="overlay overlay-bottom hidden">
+  <p class="scan-text" id="floorText">Point your phone down at the floor and move it slowly</p>
+</section>
+
+<!-- 5. Status chip -->
 <div id="statusChip" class="status-chip hidden"><span class="dot"></span><span id="statusText">Tracking</span></div>
 
-<!-- 5. Bottom action bar: appears only once the video is confirmed playing on target -->
-<p id="floorHint" class="floor-hint hidden">Tap the floor to move it</p>
+<!-- 6. Bottom action bar. Which buttons show is entirely a function of the
+        current scene — see applyModeUI() in js/app.js. -->
 <div id="actionBar" class="action-bar hidden">
-  <button id="placeBtn" class="btn btn-primary btn-wide" type="button">
-    <span class="btn-icon">🗿</span><span id="placeBtnLabel">Place 3D object</span>
+  <button id="backBtn" class="btn btn-ghost btn-sm hidden" type="button">↩ Painting</button>
+  <button id="arBtn" class="btn btn-primary btn-wide hidden" type="button">
+    <span class="btn-icon">🧊</span><span>View in 3D</span>
   </button>
+  <button id="placeBtn" class="btn btn-primary btn-wide hidden" type="button">
+    <span class="btn-icon">🗿</span><span id="placeBtnLabel">Place AR figure on the floor</span>
+  </button>
+  <button id="moveBtn" class="btn btn-ghost btn-sm hidden" type="button">Move</button>
+  <button id="removeBtn" class="btn btn-ghost btn-sm hidden" type="button">Remove</button>
 </div>
 
-<!-- 6. Error banner -->
+<!-- 7. Error banner -->
 <div id="errorBanner" class="error-banner hidden">
   <p id="errorText"></p>
   <button id="errorRetry" class="btn btn-ghost btn-sm" type="button">Retry</button>
 </div>
 
-<!-- 7. Debug / log window -->
+<!-- 8. Debug / log window -->
 <button id="logToggle" class="log-toggle" type="button" aria-label="Open debug log">
   <span>🐞</span><span id="logBadge" class="log-badge hidden">0</span>
 </button>
@@ -124,8 +147,8 @@
     <div class="tool-row">
       <label>Video fit</label>
       <button class="btn btn-sm btn-ghost" data-tool="fit">stretch</button>
-      <label>Orientation</label>
-      <button class="btn btn-sm btn-ghost" data-tool="orient">upright</button>
+      <label>Scene</label>
+      <button class="btn btn-sm btn-ghost" data-tool="mode">scan</button>
     </div>
     <div class="tool-row">
       <label>Video nudge</label>
@@ -137,25 +160,15 @@
       <button class="btn btn-sm btn-ghost" data-nudge="video:s:-1">－</button>
     </div>
     <div class="tool-row">
-      <label>Floor</label>
-      <button class="btn btn-sm btn-ghost" data-tool="floor">on</button>
-      <label>Height</label>
+      <label>Phone height</label>
       <button class="btn btn-sm btn-ghost" data-nudge="floor:h:1">↑</button>
       <button class="btn btn-sm btn-ghost" data-nudge="floor:h:-1">↓</button>
-      <label>Out</label>
-      <button class="btn btn-sm btn-ghost" data-nudge="floor:d:1">⊕</button>
-      <button class="btn btn-sm btn-ghost" data-nudge="floor:d:-1">⊖</button>
-    </div>
-    <div class="tool-row">
-      <label>Model nudge</label>
-      <button class="btn btn-sm btn-ghost" data-nudge="model:x:-1">←</button>
-      <button class="btn btn-sm btn-ghost" data-nudge="model:x:1">→</button>
-      <button class="btn btn-sm btn-ghost" data-nudge="model:y:1">↑</button>
-      <button class="btn btn-sm btn-ghost" data-nudge="model:y:-1">↓</button>
-      <button class="btn btn-sm btn-ghost" data-nudge="model:z:1">⊕</button>
-      <button class="btn btn-sm btn-ghost" data-nudge="model:z:-1">⊖</button>
+      <label>Figure size</label>
       <button class="btn btn-sm btn-ghost" data-nudge="model:s:1">＋</button>
       <button class="btn btn-sm btn-ghost" data-nudge="model:s:-1">－</button>
+      <label>Turn</label>
+      <button class="btn btn-sm btn-ghost" data-nudge="model:r:-1">↺</button>
+      <button class="btn btn-sm btn-ghost" data-nudge="model:r:1">↻</button>
     </div>
     <div class="tool-row">
       <button id="dumpState" class="btn btn-sm btn-ghost">Log current values</button>
@@ -166,6 +179,8 @@
   <ol id="logList" class="log-list"></ol>
   <p id="copyToast" class="copy-toast hidden">Copied to clipboard</p>
 </section>
+
+</div><!-- /#overlay -->
 
 <script src="./js/app.js"></script>
 </body>

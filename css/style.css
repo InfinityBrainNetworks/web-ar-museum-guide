@@ -51,6 +51,22 @@ body { position: fixed; inset: 0; } /* stops iOS rubber-banding the AR view */
 }
 
 a-scene, .a-canvas { width: 100% !important; height: 100% !important; }
+
+/* WebXR's dom-overlay can only promote ONE element, so the whole UI lives in
+   #overlay. It must not swallow taps meant for the AR canvas, so it is
+   transparent to pointers and the interactive parts opt back in. */
+#overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+#overlay > .screen,
+#overlay > .status-chip,
+#overlay > .action-bar,
+#overlay > .error-banner,
+#overlay > .log-toggle,
+#overlay > .log-panel { pointer-events: auto; }
 .a-enter-vr, .a-enter-ar, .a-orientation-modal { display: none !important; }
 
 .hidden { display: none !important; }
@@ -218,7 +234,10 @@ a-scene, .a-canvas { width: 100% !important; height: 100% !important; }
   bottom: 0;
   z-index: 30;
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: center;
+  gap: 10px;
   padding: 16px calc(18px + var(--safe-r)) calc(20px + var(--safe-b)) calc(18px + var(--safe-l));
   background: linear-gradient(to top, rgba(6, 8, 12, 0.85), transparent);
   transform: translateY(130%);
@@ -381,26 +400,11 @@ a-scene, .a-canvas { width: 100% !important; height: 100% !important; }
   .action-bar { padding-top: 8px; padding-bottom: calc(10px + var(--safe-b)); }
 }
 
-/* ---------------------------------------------------------------- floor hint */
-/* Sits just above the action bar; fades itself out once the user has had time
-   to read it, since the AR view underneath is the point. */
-.floor-hint {
-  position: fixed;
-  z-index: 29;
-  left: 50%;
-  bottom: calc(96px + var(--safe-b));
-  transform: translateX(-50%);
-  margin: 0;
-  padding: 7px 14px;
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-  border-radius: 999px;
-  color: var(--text);
-  background: rgba(0, 0, 0, 0.58);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  pointer-events: none;
-  transition: opacity 0.4s ease;
+/* ---------------------------------------------------------------- floor scan */
+/* Scene 2 draws its own reticle in 3D at the centre of the screen, so the
+   prompt has to keep out of its way. */
+.overlay-bottom {
+  justify-content: flex-end;
+  padding-bottom: calc(112px + var(--safe-b));
 }
-.floor-hint.fade { opacity: 0; }
+}
