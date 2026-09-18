@@ -380,3 +380,27 @@ a-scene, .a-canvas { width: 100% !important; height: 100% !important; }
   .log-panel { max-height: 86vh; }
   .action-bar { padding-top: 8px; padding-bottom: calc(10px + var(--safe-b)); }
 }
+
+/* ---------------------------------------------------------------- floor hint */
+/* Sits just above the action bar; fades itself out once the user has had time
+   to read it, since the AR view underneath is the point. */
+.floor-hint {
+  position: fixed;
+  z-index: 29;
+  left: 50%;
+  bottom: calc(96px + var(--safe-b));
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  border-radius: 999px;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+.floor-hint.fade { opacity: 0; }

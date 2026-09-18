@@ -41,8 +41,15 @@
   <a-entity id="anchor" mindar-image-target="targetIndex: 0">
     <!-- Sized at runtime to match the target image exactly (see js/app.js). -->
     <a-plane id="videoPlane" visible="false" position="0 0 0" width="1" height="1"></a-plane>
+  </a-entity>
+
+  <!-- Mirrors the anchor's pose every frame, but is NOT a child of it: that way
+       the object on the floor can keep its pose (carried by the gyroscope) when
+       looking down takes the painting out of frame and tracking drops. -->
+  <a-entity id="floorRig" visible="false">
     <!-- 3D object gets attached here when the user taps "Place 3D object". -->
     <a-entity id="modelSlot" visible="false"></a-entity>
+    <a-entity id="floorShadow" visible="false"></a-entity>
   </a-entity>
 </a-scene>
 
@@ -83,6 +90,7 @@
 <div id="statusChip" class="status-chip hidden"><span class="dot"></span><span id="statusText">Tracking</span></div>
 
 <!-- 5. Bottom action bar: appears only once the video is confirmed playing on target -->
+<p id="floorHint" class="floor-hint hidden">Tap the floor to move it</p>
 <div id="actionBar" class="action-bar hidden">
   <button id="placeBtn" class="btn btn-primary btn-wide" type="button">
     <span class="btn-icon">🗿</span><span id="placeBtnLabel">Place 3D object</span>
@@ -127,6 +135,16 @@
       <button class="btn btn-sm btn-ghost" data-nudge="video:y:-1">↓</button>
       <button class="btn btn-sm btn-ghost" data-nudge="video:s:1">＋</button>
       <button class="btn btn-sm btn-ghost" data-nudge="video:s:-1">－</button>
+    </div>
+    <div class="tool-row">
+      <label>Floor</label>
+      <button class="btn btn-sm btn-ghost" data-tool="floor">on</button>
+      <label>Height</label>
+      <button class="btn btn-sm btn-ghost" data-nudge="floor:h:1">↑</button>
+      <button class="btn btn-sm btn-ghost" data-nudge="floor:h:-1">↓</button>
+      <label>Out</label>
+      <button class="btn btn-sm btn-ghost" data-nudge="floor:d:1">⊕</button>
+      <button class="btn btn-sm btn-ghost" data-nudge="floor:d:-1">⊖</button>
     </div>
     <div class="tool-row">
       <label>Model nudge</label>

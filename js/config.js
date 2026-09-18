@@ -45,12 +45,16 @@ window.AR_CONFIG = {
     // whole flow is testable.
     src: null,
 
+    // Only used when floor.enabled is false — on the floor the object is always
+    // the right way up.
     // 'upright' - stands out of the image plane facing the viewer (painting on a wall)
     // 'flat'    - stands up off the image surface (target printed and lying on a table)
     orientation: 'upright',
 
     // Largest dimension of the model, in target units (1 = painting width).
+    // On the floor, floor.objectHeightMeters takes over instead.
     fitSize: 0.4,
+    // Ignored while floor.enabled is true.
     // null = auto-place floating in front of the painting's lower third.
     // Or give { x, y, z } in target units — e.g. { x: 0, y: -0.85, z: 0.05 }
     // hangs it below the painting instead. Use the debug panel's nudge buttons
@@ -61,6 +65,49 @@ window.AR_CONFIG = {
     // Slow turntable spin, and play the glTF's own animation clip if it has one.
     spin: true,
     playClip: true,
+  },
+
+  /**
+   * Floor placement.
+   *
+   * There is no floor *sensor* available here: WebXR hit-test is Android-Chrome
+   * only and iOS Safari has no WebXR at all, so anything that actually probes
+   * the room would work on one platform and not the other. Instead the floor is
+   * derived from the painting, which MindAR already tracks in full 6DoF: the
+   * painting hangs flat on a vertical wall, so its own "down" axis points at the
+   * floor and the floor is the horizontal plane `centerHeightMeters` below it.
+   *
+   * That makes it as accurate as these two measurements. Take them once per
+   * painting with a tape measure, or dial them in on-site with the debug panel's
+   * Floor row and paste back what "Log current values" prints.
+   */
+  floor: {
+    enabled: true,
+
+    // The painting's real width, and the height of its CENTRE above the floor.
+    // Everything else here is in metres and converted using these two.
+    paintingWidthMeters: 1.0,
+    centerHeightMeters: 1.45,   // galleries normally hang to a 145-155cm centre line
+
+    // Where the object stands: this far out from the wall, on the floor.
+    distanceMeters: 1.2,
+    // Real height of the object. 0 = fall back to model.fitSize instead.
+    objectHeightMeters: 1.0,
+
+    // Tap the floor in the camera view to move the object there.
+    tapToMove: true,
+    maxDistanceMeters: 6,       // clamp, so a tap at the horizon can't fling it away
+    maxSideMeters: 4,
+
+    // Looking down at the floor takes the painting out of frame, which loses
+    // tracking. The gyroscope carries the pose for this long so the object stays
+    // put instead of vanishing. Rotation only — walking around while the target
+    // is lost will drift. 0 disables the hold.
+    holdSeconds: 25,
+    useGyro: true,
+
+    // Soft contact shadow, so the object reads as standing on the floor.
+    shadow: true,
   },
 
   // MindAR tuning. -1 keeps the library default.

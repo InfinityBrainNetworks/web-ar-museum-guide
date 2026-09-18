@@ -31,6 +31,12 @@
     modelScale: cfg.model.scale,
     modelOffset: { x: 0, y: 0, z: 0 }, // on top of the auto/config position
     tStart: 0,
+
+    // Floor placement. Metres, because that is what you measure in the gallery.
+    floorMode: !!cfg.floor.enabled,
+    floorHeight: cfg.floor.centerHeightMeters,          // painting centre above floor
+    floorPos: { x: 0, z: cfg.floor.distanceMeters },    // object on the floor, from the wall
+    holding: false,
   };
 
   var PLANE_H = cfg.target.height / cfg.target.width; // painting height in target units
@@ -46,7 +52,7 @@
      'statusText', 'actionBar', 'placeBtn', 'placeBtnLabel', 'errorBanner', 'errorText',
      'errorRetry', 'logToggle', 'logBadge', 'logPanel', 'logList', 'logCount', 'logCopy',
      'logDownload', 'logClear', 'logClose', 'logTools', 'logToolsToggle', 'copyToast',
-     'dumpState', 'reloadBtn'
+     'dumpState', 'reloadBtn', 'floorRig', 'floorShadow', 'floorHint'
     ].forEach(function (id) { el[id] = $(id); });
   }
 
@@ -292,6 +298,298 @@
     requestAnimationFrame(function () { el.actionBar.classList.add('up'); });
   }
 
+  // ---------------------------------------------------------------- floor
+  /*
+   * Finding the floor.
+   *
+   * Nothing here can *sense* a floor: WebXR hit-test exists only in Chrome on
+   * Android, and iOS Safari has no WebXR at all, so a real probe would work on
+   * half the phones this has to run on. What both platforms do have is the
+   * painting, which MindAR already tracks in full 6DoF.
+   *
+   * A painting hangs flat and level on a vertical wall, so the target's own axes
+   * are the room's: local +X runs along the wall, local +Y is straight up, local
+   * +Z points out of the wall into the room. The floor is therefore the plane
+   *
+   *     y = -(centre height / painting width)
+   *
+   * in target units, and it stays welded to the real floor at every angle and
+   * distance, because it rides the same tracked pose the video does.
+   *
+   * The catch is that looking down at that floor swings the painting out of
+   * frame and tracking drops. #floorRig mirrors the anchor's pose rather than
+   * parenting to it, so when tracking goes the gyroscope can carry the pose and
+   * the object stays where it was put instead of blinking out.
+   */
+
+  /** Painting width is the bridge between metres and target units. */
+  function m2u(metres) { return metres / Math.max(0.05, cfg.floor.paintingWidthMeters); }
+  function u2m(units) { return units * Math.max(0.05, cfg.floor.paintingWidthMeters); }
+  function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+  /** The floor plane's height in target units — negative, it is below the painting. */
+  function floorLocalY() { return -m2u(S.floorHeight); }
+
+  /** Where the object stands, in target units. */
+  function floorSlotPosition() {
+    return { x: m2u(S.floorPos.x), y: floorLocalY(), z: m2u(S.floorPos.z) };
+  }
+
+  /** A pose is only usable if it is finite and not collapsed to zero. */
+  function isUsablePose(matrix) {
+    var e = matrix.elements;
+    for (var i = 0; i < 16; i++) if (!isFinite(e[i])) return false;
+    return Math.abs(matrix.determinant()) > 1e-9;
+  }
+
+  // ------------------------------------------------- gyroscope (3DoF carry)
+  var gyro = { active: false, q: null, requested: false };
+
+  function initGyro() {
+    if (!cfg.floor.useGyro || gyro.requested) return;
+    gyro.requested = true;
+    gyro.q = new THREE.Quaternion();
+
+    var D = window.DeviceOrientationEvent;
+    if (!D) {
+      log.warn('floor: this browser has no DeviceOrientationEvent — the object will ' +
+               'hide when the painting leaves the frame');
+      return;
+    }
+    var listen = function () {
+      window.addEventListener('deviceorientation', onDeviceOrientation, true);
+      log.info('floor: waiting for the first gyroscope reading');
+    };
+    // iOS 13+ gates motion behind a permission prompt that must come from a
+    // user gesture — this runs inside the Start button's click.
+    if (typeof D.requestPermission === 'function') {
+      D.requestPermission().then(function (res) {
+        log.info('floor: motion permission = ' + res);
+        if (res === 'granted') listen();
+        else log.warn('floor: motion denied — the object will hide when tracking drops');
+      }).catch(function (e) {
+        log.warn('floor: motion permission request failed: ' + e);
+      });
+    } else {
+      listen();
+    }
+  }
+
+  var gyroZ = null, gyroEuler = null, gyroFlip = null, gyroTwist = null;
+
+  /** alpha/beta/gamma -> a quaternion, the standard three.js device conversion. */
+  function onDeviceOrientation(e) {
+    if (e.alpha === null || e.alpha === undefined) return;
+    if (!gyroZ) {
+      gyroZ = new THREE.Vector3(0, 0, 1);
+      gyroEuler = new THREE.Euler();
+      gyroFlip = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
+      gyroTwist = new THREE.Quaternion();
+    }
+    var d2r = Math.PI / 180;
+    var orient = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+
+    gyroEuler.set(e.beta * d2r, e.alpha * d2r, -e.gamma * d2r, 'YXZ');
+    gyro.q.setFromEuler(gyroEuler);
+    gyro.q.multiply(gyroFlip);
+    gyro.q.multiply(gyroTwist.setFromAxisAngle(gyroZ, -orient * d2r));
+
+    if (!gyro.active) {
+      gyro.active = true;
+      log.ok('floor: gyroscope active — the object will hold its place for up to ' +
+             cfg.floor.holdSeconds + 's after tracking drops');
+    }
+  }
+
+  // ------------------------------------------------- the rig that mirrors the anchor
+  function registerRigMirror() {
+    if (AFRAME.components['anchor-mirror']) return;
+    AFRAME.registerComponent('anchor-mirror', {
+      init: function () {
+        this.o = this.el.object3D;
+        this.o.matrixAutoUpdate = false;
+        this.last = new THREE.Matrix4();
+        this.hasLast = false;
+        this.lostAt = 0;
+        this.qAtLoss = new THREE.Quaternion();
+        this.tmpQ = new THREE.Quaternion();
+        this.tmpM = new THREE.Matrix4();
+      },
+
+      tick: function () {
+        var src = el.anchor.object3D;
+
+        if (src.visible && isUsablePose(src.matrix)) {
+          this.o.matrix.copy(src.matrix);
+          this.last.copy(src.matrix);
+          this.hasLast = true;
+          this.lostAt = 0;
+          this.o.visible = true;
+          if (S.holding) { S.holding = false; }
+          return;
+        }
+
+        // Tracking is gone. Carry the last pose with the gyroscope, so looking
+        // down at the object does not delete it. Rotation only: standing still
+        // and tilting is accurate, walking around drifts.
+        var canHold = this.hasLast && gyro.active && S.modelPlaced &&
+                      S.floorMode && cfg.floor.holdSeconds > 0;
+        if (!canHold) {
+          this.o.visible = false;
+          if (S.holding) { S.holding = false; endHold(); }
+          return;
+        }
+
+        if (!this.lostAt) {
+          this.lostAt = performance.now();
+          this.qAtLoss.copy(gyro.q);
+          S.holding = true;
+          setStatus('Holding position', 'warn');
+          log.debug('floor: holding the object on the gyroscope');
+        }
+
+        if ((performance.now() - this.lostAt) / 1000 > cfg.floor.holdSeconds) {
+          this.o.visible = false;
+          if (S.holding) {
+            S.holding = false;
+            endHold();
+            log.debug('floor: hold expired after ' + cfg.floor.holdSeconds + 's');
+          }
+          return;
+        }
+
+        // Content fixed in the room is  delta * lastPose,  where
+        // delta = (device orientation now)^-1 * (device orientation at loss).
+        this.tmpQ.copy(gyro.q).invert().multiply(this.qAtLoss);
+        this.tmpM.makeRotationFromQuaternion(this.tmpQ);
+        this.o.matrix.multiplyMatrices(this.tmpM, this.last);
+        this.o.visible = true;
+      },
+    });
+  }
+
+  /** Hold is over and the painting still is not in frame — ask for it back. */
+  function endHold() {
+    if (S.targetFound) return;
+    show(el.scanScreen);
+    setStatus('Searching…', 'warn');
+  }
+
+  // ------------------------------------------------- contact shadow
+  function buildFloorShadow() {
+    if (!cfg.floor.shadow || el.floorShadow.getObject3D('mesh')) return;
+
+    var c = document.createElement('canvas');
+    c.width = c.height = 128;
+    var ctx = c.getContext('2d');
+    var grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grad.addColorStop(0, 'rgba(0,0,0,0.50)');
+    grad.addColorStop(0.5, 'rgba(0,0,0,0.22)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 128, 128);
+
+    var mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({
+        map: new THREE.CanvasTexture(c),
+        transparent: true, depthWrite: false, toneMapped: false,
+      })
+    );
+    mesh.rotation.x = -Math.PI / 2; // lie flat on the floor
+    el.floorShadow.setObject3D('mesh', mesh);
+  }
+
+  function updateFloorShadow() {
+    var on = S.floorMode && S.modelPlaced && cfg.floor.shadow;
+    el.floorShadow.setAttribute('visible', on);
+    if (!on) return;
+
+    var p = floorSlotPosition();
+    el.floorShadow.setAttribute('position', {
+      x: p.x + S.modelOffset.x,
+      y: p.y + 0.002,                 // hair above the plane, to avoid z-fighting
+      z: p.z + S.modelOffset.z,
+    });
+    var spread = Math.max(0.12, (S.modelFootprint || m2u(0.6)) * 2.1);
+    el.floorShadow.setAttribute('scale', spread + ' ' + spread + ' ' + spread);
+  }
+
+  // ------------------------------------------------- tap the floor to move it
+  var raycaster = null;
+
+  function wireFloorTap() {
+    if (!cfg.floor.tapToMove) return;
+    var canvas = el.scene.canvas;
+    if (!canvas) { log.warn('floor: no canvas yet, tap-to-move not wired'); return; }
+    canvas.addEventListener('pointerdown', onFloorTap);
+    log.info('floor: tap-to-move armed');
+  }
+
+  function onFloorTap(ev) {
+    if (!S.floorMode || !S.modelPlaced) return;
+
+    var rig = el.floorRig.object3D;
+    if (!rig.visible) return;
+
+    var cam = el.scene.camera;
+    var canvas = el.scene.canvas;
+    if (!cam || !canvas) return;
+
+    if (!raycaster) raycaster = new THREE.Raycaster();
+    var rect = canvas.getBoundingClientRect();
+    raycaster.setFromCamera(new THREE.Vector2(
+      ((ev.clientX - rect.left) / rect.width) * 2 - 1,
+      -((ev.clientY - rect.top) / rect.height) * 2 + 1
+    ), cam);
+
+    rig.updateMatrixWorld();
+    // The floor plane, lifted out of target space into the camera's space.
+    var plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -floorLocalY());
+    plane.applyMatrix4(rig.matrixWorld);
+
+    var hit = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
+    if (!hit) { log.debug('floor: that tap did not land on the floor'); return; }
+
+    rig.worldToLocal(hit);
+    var out = u2m(hit.z);   // metres out from the wall
+
+    // Above the line where the floor meets the wall, the ray still hits the
+    // floor *plane* — metres behind the wall, where there is no floor. Ignore
+    // those instead of clamping, which would fling the object to the skirting.
+    if (out < 0.25) {
+      log.debug('floor: tap landed ' + out.toFixed(2) + 'm out — that is at or behind ' +
+                'the wall, ignoring. Tap lower, on floor you can actually see.');
+      return;
+    }
+    if (out > cfg.floor.maxDistanceMeters) {
+      log.debug('floor: tap landed ' + out.toFixed(1) + 'm out, past the ' +
+                cfg.floor.maxDistanceMeters + 'm limit — clamped');
+    }
+
+    S.floorPos.x = clamp(u2m(hit.x), -cfg.floor.maxSideMeters, cfg.floor.maxSideMeters);
+    S.floorPos.z = Math.min(out, cfg.floor.maxDistanceMeters);
+    applyModelTransform();
+
+    hideFloorHint();
+    log.info('floor: object moved to ' + S.floorPos.x.toFixed(2) + 'm across, ' +
+             S.floorPos.z.toFixed(2) + 'm out from the wall');
+  }
+
+  function showFloorHint() {
+    if (!cfg.floor.tapToMove) return;
+    el.floorHint.classList.remove('fade');
+    show(el.floorHint);
+    clearTimeout(showFloorHint._t);
+    showFloorHint._t = setTimeout(hideFloorHint, 5000);
+  }
+
+  function hideFloorHint() {
+    clearTimeout(showFloorHint._t);
+    el.floorHint.classList.add('fade');
+    setTimeout(function () { hide(el.floorHint); }, 450);
+  }
+
   // ---------------------------------------------------------------- 3D object
   function autoModelPosition() {
     // Floating in front of the painting's lower third. Sitting it *below* the
@@ -306,21 +604,32 @@
     };
   }
 
+  /** Where the object goes: on the floor, or floating against the painting. */
+  function modelBasePosition() {
+    if (S.floorMode) return floorSlotPosition();
+    return cfg.model.position || autoModelPosition();
+  }
+
   function applyModelTransform() {
-    var base = cfg.model.position || autoModelPosition();
+    var base = modelBasePosition();
     el.modelSlot.setAttribute('position', {
       x: base.x + S.modelOffset.x,
       y: base.y + S.modelOffset.y,
       z: base.z + S.modelOffset.z,
     });
 
+    // On the floor the object is always the right way up, so orientation only
+    // applies to the wall/table modes:
     // 'upright': the painting hangs on a wall, so the image's +Y is world up.
     // 'flat':    the target lies on a table, so the model stands along +Z.
+    var flat = !S.floorMode && S.orientation === 'flat';
     el.modelSlot.setAttribute('rotation', {
-      x: (S.orientation === 'flat' ? 90 : 0) + cfg.model.extraRotation.x,
+      x: (flat ? 90 : 0) + cfg.model.extraRotation.x,
       y: cfg.model.extraRotation.y,
       z: cfg.model.extraRotation.z,
     });
+
+    updateFloorShadow();
   }
 
   function placeModel() {
@@ -359,13 +668,21 @@
     }
 
     el.modelSlot.appendChild(pivot);
+    S.modelPlaced = true;
     applyModelTransform();
     el.modelSlot.setAttribute('visible', true);
 
-    S.modelPlaced = true;
     el.placeBtnLabel.textContent = 'Remove 3D object';
     el.placeBtn.classList.add('placed');
-    log.event('3D object placed');
+
+    if (S.floorMode) {
+      showFloorHint();
+      log.event('3D object placed on the floor — ' + S.floorPos.z.toFixed(2) +
+                'm out from the wall, floor is ' + S.floorHeight.toFixed(2) +
+                'm below the painting centre (' + floorLocalY().toFixed(3) + ' target units)');
+    } else {
+      log.event('3D object placed against the painting');
+    }
   }
 
   function removeModel() {
@@ -375,6 +692,10 @@
     S.modelPlaced = false;
     S.modelOffset = { x: 0, y: 0, z: 0 };
     S.modelScale = cfg.model.scale;
+    S.modelFootprint = 0;
+    S.floorPos = { x: 0, z: cfg.floor.distanceMeters };
+    updateFloorShadow();
+    hideFloorHint();
     el.placeBtnLabel.textContent = 'Place 3D object';
     el.placeBtn.classList.remove('placed');
     log.event('3D object removed');
@@ -427,20 +748,51 @@
                'leaving it at its authored scale; set model.fitSize/scale by hand');
       return;
     }
-    var s = (cfg.model.fitSize / maxDim) * S.modelScale;
+    // On the floor a real height in metres is the natural thing to specify —
+    // a 1.8m statue should be 1.8m tall next to the wall it stands by.
+    var byHeight = S.floorMode && cfg.floor.objectHeightMeters > 0 && size.y > 0;
+    var s = byHeight
+      ? (m2u(cfg.floor.objectHeightMeters) / size.y) * S.modelScale
+      : (cfg.model.fitSize / maxDim) * S.modelScale;
+
     obj.scale.setScalar(s);
-    obj.position.set(-center.x * s, -center.y * s, -center.z * s);
+    // Standing on the floor means the model's BASE sits at the slot origin,
+    // not its centre — otherwise half of it sinks into the floor.
+    obj.position.set(
+      -center.x * s,
+      (S.floorMode ? -box.min.y : -center.y) * s,
+      -center.z * s
+    );
+
+    S.modelFootprint = Math.max(size.x, size.z) * s;
+    updateFloorShadow();
 
     log.info('model normalized: source size ' +
              size.x.toFixed(2) + ' x ' + size.y.toFixed(2) + ' x ' + size.z.toFixed(2) +
-             ' -> scale ' + s.toFixed(4) + ' (fitSize ' + cfg.model.fitSize + ' target units)');
+             ' -> scale ' + s.toFixed(4) + ' (' + (byHeight
+               ? cfg.floor.objectHeightMeters + 'm tall, standing on the floor'
+               : 'fitSize ' + cfg.model.fitSize + ' target units') + ')');
   }
 
   /** Stand-in object so the whole flow works before a real .glb exists. */
   function buildPlaceholder() {
     var g = document.createElement('a-entity');
     g.id = 'modelHolder';
-    var f = cfg.model.fitSize;
+    g.setAttribute('data-placeholder', '');
+
+    // On the floor, size it by the real height the object will have; otherwise
+    // by fitSize against the painting.
+    var f = (S.floorMode && cfg.floor.objectHeightMeters > 0)
+      ? m2u(cfg.floor.objectHeightMeters) * 0.92   // 0.92: the parts below total ~1.08f tall
+      : cfg.model.fitSize;
+    g.setAttribute('scale', S.modelScale + ' ' + S.modelScale + ' ' + S.modelScale);
+
+    // Built around its own centre, so lift it onto the floor plane.
+    var lift = document.createElement('a-entity');
+    if (S.floorMode) lift.setAttribute('position', '0 ' + (f * 0.46) + ' 0');
+
+    S.placeholderFootprint = f * 0.84;
+    S.modelFootprint = S.placeholderFootprint * S.modelScale;
 
     var base = document.createElement('a-cylinder');
     base.setAttribute('radius', f * 0.42);
@@ -464,10 +816,24 @@
     label.setAttribute('width', f * 3);
     label.setAttribute('position', '0 ' + (f * 0.62) + ' 0');
 
-    g.appendChild(base);
-    g.appendChild(gem);
-    g.appendChild(label);
+    lift.appendChild(base);
+    lift.appendChild(gem);
+    lift.appendChild(label);
+    g.appendChild(lift);
     return g;
+  }
+
+  /** Re-applies the scale nudge to whichever kind of object is currently placed. */
+  function applyModelScale() {
+    var holder = $('modelHolder');
+    if (!holder) return;
+    if (holder.hasAttribute('data-placeholder')) {
+      holder.setAttribute('scale', S.modelScale + ' ' + S.modelScale + ' ' + S.modelScale);
+      S.modelFootprint = (S.placeholderFootprint || 0) * S.modelScale;
+      updateFloorShadow();
+    } else if (holder.getObject3D('mesh')) {
+      normalizeModel(holder);
+    }
   }
 
   /**
@@ -511,6 +877,8 @@
     el.loadingText.textContent = 'Starting camera…';
 
     primeVideo();
+    // Must ride this same click: iOS only grants motion access from a gesture.
+    initGyro();
 
     var system = el.scene.systems['mindar-image-system'];
     if (!system) { showError('MindAR system is missing. Reload the page.', true); return; }
@@ -582,19 +950,39 @@
 
   function onTargetLost() {
     S.targetFound = false;
-    show(el.scanScreen);
-    setStatus('Searching…', 'warn');
     el.arVideo.pause();
     if (S.videoConfirmed) el.actionBar.classList.add('dim');
-    log.event('targetLost');
+
+    // While the gyroscope is carrying an object on the floor, the scan prompt
+    // would be wrong — the user is deliberately looking away from the painting.
+    var willHold = S.floorMode && S.modelPlaced && gyro.active && cfg.floor.holdSeconds > 0;
+    if (willHold) {
+      setStatus('Holding position', 'warn');
+    } else {
+      show(el.scanScreen);
+      setStatus('Searching…', 'warn');
+    }
+    log.event('targetLost' + (willHold ? ' (holding the floor object on the gyroscope)' : ''));
   }
 
   // ---------------------------------------------------------------- debug tools
   function wireDebugTools() {
     var fitBtn = el.logTools.querySelector('[data-tool="fit"]');
     var orientBtn = el.logTools.querySelector('[data-tool="orient"]');
+    var floorBtn = el.logTools.querySelector('[data-tool="floor"]');
     fitBtn.textContent = S.fit;
     orientBtn.textContent = S.orientation;
+    floorBtn.textContent = S.floorMode ? 'on' : 'off';
+
+    // Floor vs. against-the-painting. The object is built differently for each
+    // (standing on its base vs. centred), so re-place it rather than nudge it.
+    floorBtn.addEventListener('click', function () {
+      S.floorMode = !S.floorMode;
+      floorBtn.textContent = S.floorMode ? 'on' : 'off';
+      log.info('floor mode = ' + (S.floorMode ? 'on' : 'off'));
+      if (S.modelPlaced) { removeModel(); placeModel(); }
+      else applyModelTransform();
+    });
 
     fitBtn.addEventListener('click', function () {
       var modes = ['stretch', 'cover', 'contain'];
@@ -619,11 +1007,19 @@
           if (axis === 's') S.videoScale = Math.max(0.1, S.videoScale + dir * cfg.ui.scaleStep);
           else S.videoOffset[axis] += dir * cfg.ui.nudgeStep;
           applyVideoFit();
+        } else if (what === 'floor') {
+          // In metres — these are the two gallery measurements, dialled in on site.
+          // dir follows what you SEE: up moves the object up, which means a
+          // shorter drop from the painting centre to the floor.
+          if (axis === 'h') S.floorHeight = Math.max(0.1, S.floorHeight - dir * 0.05);
+          else S.floorPos.z = clamp(S.floorPos.z + dir * 0.1, 0.25, cfg.floor.maxDistanceMeters);
+          applyModelTransform();
+          log.info('floor: painting centre ' + S.floorHeight.toFixed(2) +
+                   'm above the floor, object ' + S.floorPos.z.toFixed(2) + 'm out');
         } else {
           if (axis === 's') {
             S.modelScale = Math.max(0.1, S.modelScale + dir * cfg.ui.scaleStep);
-            var holder = $('modelHolder');
-            if (holder && holder.getObject3D('mesh')) normalizeModel(holder);
+            applyModelScale();
           } else {
             S.modelOffset[axis] += dir * cfg.ui.nudgeStep;
           }
@@ -635,20 +1031,31 @@
 
   /** Print the current tuning so it can be pasted straight into js/config.js. */
   function dumpState() {
-    var base = cfg.model.position || autoModelPosition();
+    var base = modelBasePosition();
     var r = function (n) { return Math.round(n * 1000) / 1000; };
     var v = el.arVideo;
+
+    var placement = S.floorMode
+      ? '  floor: { enabled: true, paintingWidthMeters: ' + r(cfg.floor.paintingWidthMeters) +
+        ', centerHeightMeters: ' + r(S.floorHeight) +
+        ', distanceMeters: ' + r(S.floorPos.z) +
+        ', objectHeightMeters: ' + r(cfg.floor.objectHeightMeters) + ' }\n' +
+        '  model: { scale: ' + r(S.modelScale) + ' }   // position comes from floor\n'
+      : '  model: { orientation: "' + S.orientation + '", scale: ' + r(S.modelScale) +
+        ', position: { x: ' + r(base.x + S.modelOffset.x) +
+        ', y: ' + r(base.y + S.modelOffset.y) +
+        ', z: ' + r(base.z + S.modelOffset.z) + ' } }\n';
+
     log.info(
       'current values — paste into js/config.js:\n' +
       '  video: { fit: "' + S.fit + '", scale: ' + r(S.videoScale) +
       ', offset: { x: ' + r(S.videoOffset.x) + ', y: ' + r(S.videoOffset.y) +
       ', z: ' + r(S.videoOffset.z) + ' } }\n' +
-      '  model: { orientation: "' + S.orientation + '", scale: ' + r(S.modelScale) +
-      ', position: { x: ' + r(base.x + S.modelOffset.x) +
-      ', y: ' + r(base.y + S.modelOffset.y) +
-      ', z: ' + r(base.z + S.modelOffset.z) + ' } }\n' +
+      placement +
       '  state: arReady=' + S.arReady + ' targetFound=' + S.targetFound +
       ' videoConfirmed=' + S.videoConfirmed + ' modelPlaced=' + S.modelPlaced +
+      ' floorMode=' + S.floorMode + ' gyro=' + gyro.active + ' holding=' + S.holding +
+      ' sideways=' + r(S.floorPos.x) + 'm' +
       ' videoTime=' + v.currentTime.toFixed(2) + '/' +
       (isFinite(v.duration) ? v.duration.toFixed(2) : '?') + 's'
     );
@@ -707,6 +1114,8 @@
                  ' label="' + (track ? track.label : '?') + '"');
       }
       setupVideoPlane();
+      buildFloorShadow();
+      wireFloorTap();
     });
 
     scene.addEventListener('arError', function (e) {
@@ -757,8 +1166,20 @@
 
     THREE = window.AFRAME.THREE;
     registerClipPlayer();
+    registerRigMirror();
+    // Registered above rather than in index.html, because A-Frame only applies a
+    // component that already exists when the entity initialises.
+    el.floorRig.setAttribute('anchor-mirror', '');
     wireVideoElement();
     wireUI();
+
+    if (S.floorMode) {
+      log.info('floor: on — painting is ' + cfg.floor.paintingWidthMeters + 'm wide with its ' +
+               'centre ' + S.floorHeight + 'm up, so the floor is ' +
+               floorLocalY().toFixed(3) + ' target units below it; object stands ' +
+               S.floorPos.z + 'm out from the wall' +
+               (cfg.floor.objectHeightMeters > 0 ? ' at ' + cfg.floor.objectHeightMeters + 'm tall' : ''));
+    }
 
     if (el.scene.hasLoaded) wireScene();
     else el.scene.addEventListener('loaded', wireScene);
