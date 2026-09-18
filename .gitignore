@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+
+# original drop folder - these files now live in assets/ (kept on disk, not committed)
+image&video/

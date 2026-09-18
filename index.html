@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<meta name="description" content="Web AR museum guide - scans a painting, plays a video over it and places a related 3D object.">
+<title>Web AR Museum Guide</title>
+
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>">
+<link rel="stylesheet" href="./css/style.css">
+
+<!-- Logger first: it patches console + error handlers before any other script runs,
+     so failures inside A-Frame / MindAR are captured too. -->
+<script src="./js/logger.js"></script>
+<script src="./js/config.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/aframe@1.5.0/dist/aframe-master.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+</head>
+
+<body>
+
+<!-- ============ AR SCENE ============ -->
+<a-scene
+  id="scene"
+  mindar-image="imageTargetSrc: ./assets/targets/targets.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no"
+  color-space="sRGB"
+  embedded
+  renderer="colorManagement: true; alpha: true"
+  vr-mode-ui="enabled: false"
+  device-orientation-permission-ui="enabled: false"
+  loading-screen="enabled: false">
+
+  <a-assets timeout="10000">
+    <!-- 3D model is registered here at runtime only when one is configured. -->
+  </a-assets>
+
+  <a-camera position="0 0 0" look-controls="enabled: false" wasd-controls="enabled: false"></a-camera>
+
+  <a-entity id="anchor" mindar-image-target="targetIndex: 0">
+    <!-- Sized at runtime to match the target image exactly (see js/app.js). -->
+    <a-plane id="videoPlane" visible="false" position="0 0 0" width="1" height="1"></a-plane>
+    <!-- 3D object gets attached here when the user taps "Place 3D object". -->
+    <a-entity id="modelSlot" visible="false"></a-entity>
+  </a-entity>
+</a-scene>
+
+<!-- Kept outside <a-assets> so we control buffering/playback ourselves and can
+     report exactly what the element is doing to the log. -->
+<video id="arVideo" playsinline webkit-playsinline muted loop preload="auto" crossorigin="anonymous"></video>
+
+<!-- ============ OVERLAY UI ============ -->
+
+<!-- 1. Start screen (also the user gesture that unlocks camera + video on iOS) -->
+<section id="introScreen" class="screen">
+  <div class="intro-card">
+    <p class="eyebrow">Web AR</p>
+    <h1>Museum Guide</h1>
+    <img id="introThumb" class="intro-thumb" alt="Image target to scan">
+    <p class="intro-text">Point your camera at the painting above. The video plays right on top of it, then you can place a 3D object.</p>
+    <button id="startBtn" class="btn btn-primary btn-lg" type="button">Start AR</button>
+    <p class="intro-hint" id="introHint">Camera access is required. Nothing is uploaded — everything runs on your device.</p>
+  </div>
+</section>
+
+<!-- 2. Loading -->
+<section id="loadingScreen" class="screen hidden">
+  <div class="spinner" aria-hidden="true"></div>
+  <p id="loadingText">Starting camera…</p>
+</section>
+
+<!-- 3. Scanning hint -->
+<section id="scanScreen" class="overlay hidden">
+  <div class="scan-frame">
+    <span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span>
+    <div class="scan-line"></div>
+  </div>
+  <p class="scan-text">Point at the painting</p>
+</section>
+
+<!-- 4. Status chip -->
+<div id="statusChip" class="status-chip hidden"><span class="dot"></span><span id="statusText">Tracking</span></div>
+
+<!-- 5. Bottom action bar: appears only once the video is confirmed playing on target -->
+<div id="actionBar" class="action-bar hidden">
+  <button id="placeBtn" class="btn btn-primary btn-wide" type="button">
+    <span class="btn-icon">🗿</span><span id="placeBtnLabel">Place 3D object</span>
+  </button>
+</div>
+
+<!-- 6. Error banner -->
+<div id="errorBanner" class="error-banner hidden">
+  <p id="errorText"></p>
+  <button id="errorRetry" class="btn btn-ghost btn-sm" type="button">Retry</button>
+</div>
+
+<!-- 7. Debug / log window -->
+<button id="logToggle" class="log-toggle" type="button" aria-label="Open debug log">
+  <span>🐞</span><span id="logBadge" class="log-badge hidden">0</span>
+</button>
+
+<section id="logPanel" class="log-panel hidden" aria-hidden="true">
+  <header class="log-head">
+    <strong>Debug log</strong>
+    <span id="logCount" class="log-count">0</span>
+    <div class="spacer"></div>
+    <button id="logToolsToggle" class="btn btn-sm btn-ghost" type="button">Tools</button>
+    <button id="logCopy" class="btn btn-sm" type="button">Copy</button>
+    <button id="logDownload" class="btn btn-sm btn-ghost" type="button">Save</button>
+    <button id="logClear" class="btn btn-sm btn-ghost" type="button">Clear</button>
+    <button id="logClose" class="btn btn-sm btn-ghost" type="button" aria-label="Close">✕</button>
+  </header>
+
+  <div id="logTools" class="log-tools hidden">
+    <div class="tool-row">
+      <label>Video fit</label>
+      <button class="btn btn-sm btn-ghost" data-tool="fit">stretch</button>
+      <label>Orientation</label>
+      <button class="btn btn-sm btn-ghost" data-tool="orient">upright</button>
+    </div>
+    <div class="tool-row">
+      <label>Video nudge</label>
+      <button class="btn btn-sm btn-ghost" data-nudge="video:x:-1">←</button>
+      <button class="btn btn-sm btn-ghost" data-nudge="video:x:1">→</button>
+      <button class="btn btn-sm btn-ghost" data-nudge="video:y:1">↑</button>
+      <button class="btn btn-sm btn-ghost" data-nudge="video:y:-1">↓</button>
+      <button class="btn btn-sm btn-ghost" data-nudge="video:s:1">＋</button>
+      <button class="btn btn-sm btn-ghost" data-nudge="video:s:-1">－</button>
+    </div>
+    <div class="tool-row">
+      <label>Model nudge</label>
+      <button class="btn btn-sm btn-ghost" data-nudge="model:x:-1">←</button>
+      <button class="btn btn-sm btn-ghost" data-nudge="model:x:1">→</button>
+      <button class="btn btn-sm btn-ghost" data-nudge="model:y:1">↑</button>
+      <button class="btn btn-sm btn-ghost" data-nudge="model:y:-1">↓</button>
+      <button class="btn btn-sm btn-ghost" data-nudge="model:z:1">⊕</button>
+      <button class="btn btn-sm btn-ghost" data-nudge="model:z:-1">⊖</button>
+      <button class="btn btn-sm btn-ghost" data-nudge="model:s:1">＋</button>
+      <button class="btn btn-sm btn-ghost" data-nudge="model:s:-1">－</button>
+    </div>
+    <div class="tool-row">
+      <button id="dumpState" class="btn btn-sm btn-ghost">Log current values</button>
+      <button id="reloadBtn" class="btn btn-sm btn-ghost">Reload</button>
+    </div>
+  </div>
+
+  <ol id="logList" class="log-list"></ol>
+  <p id="copyToast" class="copy-toast hidden">Copied to clipboard</p>
+</section>
+
+<script src="./js/app.js"></script>
+</body>
+</html>
