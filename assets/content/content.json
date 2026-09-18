@@ -30,7 +30,7 @@
         "src": "./assets/content/exhibit-1-model.glb",
         "heightMeters": 1,
         "yawOffset": 0,
-        "scale": 1.65,
+        "scale": 1.00,
         "spin": false,
         "playClip": true,
         "lighting": "baked",
