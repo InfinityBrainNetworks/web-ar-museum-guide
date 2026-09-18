@@ -1,6 +1,6 @@
 # Web AR Museum Guide
 
-Markerless-free image-tracking AR that runs in the phone browser — no app install.
+Image-tracking AR that runs in the phone browser — no app install, no QR marker.
 Point the camera at the painting, a video plays mapped exactly onto it, and once
 playback is confirmed a button appears that drops a related 3D object into the scene.
 
@@ -66,8 +66,8 @@ is 2% of the painting's width).
 model: {
   src: './assets/models/artifact.glb',
   orientation: 'upright',   // 'flat' if the target lies on a table
-  fitSize: 0.5,             // largest dimension = half the painting's width
-  position: null,           // null = auto-place just below the painting
+  fitSize: 0.4,             // largest dimension = 40% of the painting's width
+  position: null,           // null = auto-place in front of the painting's lower third
 }
 ```
 
