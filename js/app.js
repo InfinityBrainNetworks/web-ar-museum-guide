@@ -1795,6 +1795,9 @@
     f.classList.remove('fire');
     void f.offsetWidth;            // forces the animation to restart
     f.classList.add('fire');
+    // Back to display:none afterwards, so it is never in the way between shots.
+    clearTimeout(flash._t);
+    flash._t = setTimeout(function () { f.classList.remove('fire'); }, 400);
   }
 
   /** Whether the share sheet - the only way into the camera roll - is open to us. */

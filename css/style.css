@@ -304,7 +304,7 @@ a-scene, .a-canvas { width: 100% !important; height: 100% !important; }
   justify-content: center;
   gap: 12px;
   padding: 6px 12px;
-  pointer-events: none;
+  pointer-events: none !important;   /* see .shutter-flash on why !important */
 }
 /* The strip owns the top of the screen while it is up, so the status chip and
    the debug button step down out from under it rather than sitting on a logo. */
@@ -373,15 +373,23 @@ a-scene, .a-canvas { width: 100% !important; height: 100% !important; }
 .shutter:active .shutter-ring { transform: scale(0.86); }
 .shutter.busy .shutter-ring { background: var(--accent); }
 
+/* A-Frame's dom-overlay injects
+     .a-dom-overlay:not(.a-no-style) > * { pointer-events: auto }
+   which outranks a plain class rule (0,3,0 beats 0,1,0). So every direct child
+   of #overlay is clickable whatever this file says, and a full-bleed layer here
+   swallows every tap on the page - which is exactly what this one did to
+   "Start AR". Hence both belt and braces: kept out of the DOM's hit-testing
+   entirely unless it is actually flashing, AND !important on top. */
 .shutter-flash {
   position: fixed;
   inset: 0;
   z-index: 70;
   background: #fff;
   opacity: 0;
-  pointer-events: none;
+  display: none;
+  pointer-events: none !important;
 }
-.shutter-flash.fire { animation: flash 0.32s ease-out; }
+.shutter-flash.fire { display: block; animation: flash 0.32s ease-out; }
 @keyframes flash { 0% { opacity: 0.85; } 100% { opacity: 0; } }
 
 /* ---------------------------------------------------------------- photo sheet */
