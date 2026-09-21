@@ -627,6 +627,65 @@
 
   // ------------------------------------------------------------------ adopt
   /** Pull whatever this site is currently serving into the portal, to edit it. */
+  /**
+   * Take the block that Adjust > Copy puts on the clipboard and apply it.
+   *
+   * The Save button in the viewer writes straight into this draft, which is the
+   * normal route. It cannot work when the adjusting happened on a phone and the
+   * portal lives on a laptop, so this is the bridge: copy there, paste here.
+   *
+   * Matched by exhibit id, never by position, because reordering exhibits is a
+   * thing people do and silently retuning the wrong one would be worse than
+   * refusing.
+   */
+  function pasteAdjustments(text) {
+    var data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      toast('That is not the block Adjust copies — it should start with {.', 'err');
+      return;
+    }
+
+    var settings = data && data.settings;
+    if (!settings || (!settings.model && !settings.video)) {
+      toast('No settings in that block.', 'err');
+      return;
+    }
+
+    var target = null;
+    for (var i = 0; i < draft.exhibits.length; i++) {
+      if (draft.exhibits[i].id === data.exhibit) { target = draft.exhibits[i]; break; }
+    }
+    if (!target) {
+      toast('No exhibit "' + (data.name || data.exhibit) + '" here. It has to be ' +
+            'the same exhibit, in this browser.', 'err');
+      return;
+    }
+
+    if (settings.model) { target.model = deepInto(target.model || {}, settings.model); }
+    if (settings.video) { target.video = deepInto(target.video || {}, settings.video); }
+
+    save().then(function () {
+      render();
+      toast('Applied to "' + target.name + '". Export to put it in the repo.', 'ok');
+    });
+  }
+
+  /** One level deep, enough for rotation/offset. */
+  function deepInto(target, source) {
+    Object.keys(source).forEach(function (k) {
+      var v = source[k];
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        target[k] = target[k] && typeof target[k] === 'object' ? target[k] : {};
+        Object.keys(v).forEach(function (j) { target[k][j] = v[j]; });
+      } else {
+        target[k] = v;
+      }
+    });
+    return target;
+  }
+
   function adopt() {
     busy('Loading the deployed content', 'Reading content.json…');
 
@@ -1016,6 +1075,11 @@
       if (draft.exhibits.length &&
           !confirm('This replaces everything in the portal with what the site is currently serving. Continue?')) return;
       adopt();
+    });
+    $('pasteBtn').addEventListener('click', function () {
+      $('menu').classList.add('hidden');
+      var text = prompt('Paste the block from the viewer\u2019s Adjust \u2192 Copy:');
+      if (text) pasteAdjustments(text.trim());
     });
     $('helpBtn').addEventListener('click', function () {
       $('menu').classList.add('hidden');

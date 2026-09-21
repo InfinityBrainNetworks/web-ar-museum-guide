@@ -100,8 +100,13 @@
     // debug menu so it can be dialled in on the device.
     lighting: 'baked',
     shadowOpacity: 0.5,
+    spin: false,
+    playClip: true,
     faceYaw: 0,            // radians, set at placement so the figure faces you
-    modelYaw: 0,           // degrees, the debug panel's turn on top of that
+    placedAt: null,        // where it was put down, in floor-scene units
+    // Live transform, seeded per exhibit and edited by the Adjust panel.
+    modelRot: { x: 0, y: 0, z: 0 },      // degrees
+    modelOffset: { x: 0, y: 0, z: 0 },   // metres from the placement point
 
     tStart: 0,
   };
@@ -169,7 +174,9 @@
      'logList', 'logCount', 'logCopy', 'logDownload', 'logClear', 'logClose', 'logTools',
      'logToolsToggle', 'copyToast', 'dumpState', 'reloadBtn', 'overlay',
      'brandBar', 'shotBtn', 'shutterFlash', 'photoSheet', 'photoPreview',
-     'photoHint', 'photoSave', 'photoClose'
+     'photoHint', 'photoSave', 'photoClose', 'adjustToggle', 'adjustPanel',
+     'adjustWho', 'adjustTabs', 'adjustBody', 'adjustClose', 'adjustSave',
+     'adjustCopy', 'adjustReset', 'adjustNote'
     ].forEach(function (id) {
       el[id] = $(id);
       if (!el[id]) missing.push(id);
@@ -200,6 +207,14 @@
   }
 
   function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+  /** Keep an angle in -180..180 so the sliders and the readout agree. */
+  function wrapDegrees(d) {
+    d = d % 360;
+    if (d > 180) d -= 360;
+    if (d < -180) d += 360;
+    return Math.round(d * 100) / 100;
+  }
 
   // ---------------------------------------------------------------- log panel
   function openLog(open) {
@@ -441,7 +456,10 @@
     S.videoScale = ex.video.scale;
     S.videoOffset = { x: ex.video.offset.x, y: ex.video.offset.y, z: ex.video.offset.z };
     S.modelScale = ex.model.scale;
-    S.modelYaw = 0;
+    S.modelRot = { x: ex.model.rotation.x, y: ex.model.rotation.y, z: ex.model.rotation.z };
+    S.modelOffset = { x: ex.model.offset.x, y: ex.model.offset.y, z: ex.model.offset.z };
+    S.spin = !!ex.model.spin;
+    S.playClip = ex.model.playClip !== false;
     S.lighting = ex.model.lighting === 'lit' ? 'lit' : 'baked';
     S.shadowOpacity = typeof ex.model.shadowOpacity === 'number' ? ex.model.shadowOpacity : 0.5;
 
@@ -557,8 +575,19 @@
     // rather than leaving it floating over scene 1.
     if (!onFloor) hide(el.photoSheet);
 
+    // Adjust is for an exhibit that is actually on screen.
+    var canAdjust = m !== MODE.BOOT && !!el.adjustToggle;
+    toggle(el.adjustToggle, canAdjust);
+    if (!canAdjust && el.adjustToggle) {
+      hide(el.adjustPanel);
+      el.adjustToggle.classList.remove('on');
+    }
+
     var anyButton = (m === MODE.SCAN && S.videoConfirmed) ||
                     (m === MODE.FLOOR) || (m === MODE.PLACED);
+    // The Adjust sheet covers the bottom of the screen; the bar underneath it
+    // would only be half-visible and unreachable.
+    if (el.adjustPanel && !el.adjustPanel.classList.contains('hidden')) anyButton = false;
     toggle(el.actionBar, anyButton);
     if (anyButton) requestAnimationFrame(function () { el.actionBar.classList.add('up'); });
     else el.actionBar.classList.remove('up');
@@ -1262,11 +1291,11 @@
     var pose = el.reticle.object3D.matrix;
     var p = new THREE.Vector3().setFromMatrixPosition(pose);
 
-    el.modelSlot.object3D.position.copy(p);
+    S.placedAt = p.clone();
     S.faceYaw = faceViewerYaw(p);
-    applyFigureYaw();
 
     buildFigure();
+    applyFigureTransform();
     setMode(MODE.PLACED);
     updateFloorShadow();     // after setMode: it only draws in the placed scene
     setStatus('Figure placed', 'ok');
@@ -1277,11 +1306,47 @@
 
   function degToRad(d) { return d * Math.PI / 180; }
 
-  /** Facing the viewer, plus any turn from config or the debug panel. */
-  function applyFigureYaw() {
-    el.modelSlot.object3D.rotation.set(
-      0, S.faceYaw + degToRad(modelCfg().yawOffset + S.modelYaw), 0);
+  /**
+   * Where the figure stands, which way it faces, and how it is tilted.
+   *
+   * Split across two entities on purpose:
+   *
+   *   #modelSlot       the spot on the floor. Carries the placement point, the
+   *                    horizontal part of the offset, and the facing yaw — and
+   *                    nothing else, because #floorShadow hangs here and has to
+   *                    stay lying flat on the floor.
+   *   #modelTransform  the figure's own pose: lifted by the vertical offset and
+   *                    turned/tilted on all three axes. Raising the figure
+   *                    therefore leaves its shadow on the ground, which is what
+   *                    a raised object does.
+   *
+   * The offset is read in the frame the figure was placed in — x to your right,
+   * z towards you — so a saved value means the same thing next time, wherever
+   * in the room it gets stood up.
+   */
+  function applyFigureTransform() {
+    var upm = S.engine ? S.engine.unitsPerMetre : 1;
+    var slot = el.modelSlot.object3D;
+
+    if (S.placedAt) {
+      var flat = new THREE.Vector3(S.modelOffset.x, 0, S.modelOffset.z)
+        .multiplyScalar(upm)
+        .applyAxisAngle(WORLD_UP, S.faceYaw);
+      slot.position.copy(S.placedAt).add(flat);
+    }
+    slot.rotation.set(0, S.faceYaw, 0);
+
+    var inner = $('modelTransform');
+    if (!inner) return;
+    inner.object3D.position.set(0, S.modelOffset.y * upm, 0);
+    // YXZ: turn about world up first, then pitch, then roll — the order the
+    // three sliders read in.
+    inner.object3D.rotation.order = 'YXZ';
+    inner.object3D.rotation.set(
+      degToRad(S.modelRot.x), degToRad(S.modelRot.y), degToRad(S.modelRot.z));
   }
+
+  var WORLD_UP = null;   // filled in at init, once THREE exists
 
   /** Turn the figure so its front faces wherever the camera is standing. */
   function faceViewerYaw(at) {
@@ -1301,7 +1366,7 @@
     var model = modelCfg();
     var pivot = document.createElement('a-entity');
     pivot.id = 'modelPivot';
-    if (model.spin) {
+    if (S.spin) {
       pivot.setAttribute('animation', {
         property: 'rotation', from: '0 0 0', to: '0 360 0',
         loop: true, dur: 14000, easing: 'linear',
@@ -1315,7 +1380,7 @@
       holder.addEventListener('model-loaded', function () {
         normalizeModel(holder);
         applyModelLighting(holder);
-        if (model.playClip) holder.setAttribute('clip-player', '');
+        if (S.playClip) holder.setAttribute('clip-player', '');
         updateFloorShadow();
         log.ok('3D model loaded for "' + (EX() ? EX().name : '?') + '": ' + shortSrc(model.src));
       });
@@ -1334,10 +1399,17 @@
                'built-in placeholder (add a .glb to this exhibit in admin.html)');
     }
 
-    el.modelSlot.appendChild(pivot);
+    // Its own pose lives here rather than on #modelSlot, so the contact shadow
+    // next door keeps lying flat on the floor however the figure is tilted.
+    var inner = document.createElement('a-entity');
+    inner.id = 'modelTransform';
+    inner.appendChild(pivot);
+    el.modelSlot.appendChild(inner);
   }
 
   function removeModel() {
+    var inner = $('modelTransform');
+    if (inner && inner.parentNode) inner.parentNode.removeChild(inner);
     var pivot = $('modelPivot');
     if (pivot && pivot.parentNode) pivot.parentNode.removeChild(pivot);
     el.modelSlot.setAttribute('visible', false);
@@ -1346,8 +1418,12 @@
     S.modelScale = model.scale;
     S.lighting = model.lighting === 'lit' ? 'lit' : 'baked';
     S.shadowOpacity = typeof model.shadowOpacity === 'number' ? model.shadowOpacity : 0.5;
-    S.modelYaw = 0;
+    S.modelRot = { x: model.rotation.x, y: model.rotation.y, z: model.rotation.z };
+    S.modelOffset = { x: model.offset.x, y: model.offset.y, z: model.offset.z };
+    S.spin = !!model.spin;
+    S.playClip = model.playClip !== false;
     S.faceYaw = 0;
+    S.placedAt = null;
     S.figureFootprint = 0;
   }
 
@@ -1556,7 +1632,7 @@
       applyModelLighting(holder);
     }
 
-    applyFigureYaw();
+    applyFigureTransform();
     updateFloorShadow();
   }
 
@@ -1881,6 +1957,405 @@
     });
   }
 
+  // ---------------------------------------------------------------- adjust panel
+  /*
+   * Tuning the exhibit in front of the real thing, then keeping it.
+   *
+   * The debug log is the wrong place for this: it is a wall of text covering
+   * the figure you are trying to look at. So this is its own sheet, half the
+   * screen at most, with no log in it - the log carries on recording exactly as
+   * before, this simply does not show it.
+   *
+   * Every control is declared once, in adjustSpec(). A row knows how to read
+   * and write the live state, what its limits are and how to print itself; the
+   * DOM is generated from that, so adding a control is one entry and nothing
+   * else.
+   *
+   * Save writes back into the admin portal's draft, which is what Export turns
+   * into assets/content/content.json - so an adjustment made while standing in
+   * the gallery survives into the repo.
+   */
+  var ADJUST = null;          // built on first open
+  var adjustTab = 'transform';
+
+  function metresOf(v) { return (Math.round(v * 1000) / 1000) + 'm'; }
+  function degreesOf(v) { return Math.round(v) + '\u00b0'; }
+  function timesOf(v) { return '\u00d7' + v.toFixed(2); }
+
+  function adjustSpec() {
+    return [
+      {
+        id: 'transform',
+        label: 'Transform',
+        hint: 'Size multiplies the exhibit\u2019s real height. Move is in metres ' +
+              'from where you put it down, in the direction you were facing: ' +
+              'X to your right, Y up, Z towards you.',
+        rows: [
+          { label: 'Size', min: 0.1, max: 5, step: 0.01,
+            get: function () { return S.modelScale; },
+            set: function (v) { S.modelScale = v; },
+            print: function (v) {
+              return timesOf(v) + ' \u00b7 ' +
+                     (modelCfg().heightMeters * v).toFixed(2) + 'm';
+            } },
+
+          { label: 'Rotate X', min: -180, max: 180, step: 1, wrap: true,
+            get: function () { return S.modelRot.x; },
+            set: function (v) { S.modelRot.x = v; }, print: degreesOf },
+          { label: 'Rotate Y', min: -180, max: 180, step: 1, wrap: true,
+            get: function () { return S.modelRot.y; },
+            set: function (v) { S.modelRot.y = v; }, print: degreesOf },
+          { label: 'Rotate Z', min: -180, max: 180, step: 1, wrap: true,
+            get: function () { return S.modelRot.z; },
+            set: function (v) { S.modelRot.z = v; }, print: degreesOf },
+
+          { label: 'Move X', min: -2, max: 2, step: 0.01,
+            get: function () { return S.modelOffset.x; },
+            set: function (v) { S.modelOffset.x = v; }, print: metresOf },
+          { label: 'Move Y', min: -1, max: 2, step: 0.01,
+            get: function () { return S.modelOffset.y; },
+            set: function (v) { S.modelOffset.y = v; }, print: metresOf },
+          { label: 'Move Z', min: -2, max: 2, step: 0.01,
+            get: function () { return S.modelOffset.z; },
+            set: function (v) { S.modelOffset.z = v; }, print: metresOf },
+        ],
+      },
+      {
+        id: 'effects',
+        label: 'Effects',
+        hint: 'Leave shading on Baked for a scan, or anything with its lighting ' +
+              'already in the texture. Set the shadow to 0 when the model ' +
+              'carries its own.',
+        rows: [
+          { label: 'Shading', choice: [['baked', 'Baked'], ['lit', 'Lit']],
+            get: function () { return S.lighting; },
+            set: function (v) { S.lighting = v; } },
+          { label: 'Shadow', min: 0, max: 1, step: 0.05,
+            get: function () { return S.shadowOpacity; },
+            set: function (v) { S.shadowOpacity = v; },
+            print: function (v) { return v <= 0 ? 'off' : v.toFixed(2); } },
+          { label: 'Spin', choice: [[false, 'Off'], [true, 'On']],
+            get: function () { return !!S.spin; },
+            set: function (v) { S.spin = v; }, rebuild: true },
+          { label: 'Animation', choice: [[true, 'Play'], [false, 'Hold']],
+            get: function () { return S.playClip !== false; },
+            set: function (v) { S.playClip = v; }, rebuild: true },
+        ],
+      },
+      {
+        id: 'video',
+        label: 'Video',
+        hint: 'How the video sits on the painting in scene 1. Nudge is in target ' +
+              'units, where 1 is the full width of the artwork.',
+        rows: [
+          { label: 'Fit', choice: [['stretch', 'Stretch'], ['cover', 'Cover'],
+                                   ['contain', 'Contain']],
+            get: function () { return S.fit; },
+            set: function (v) { S.fit = v; }, video: true },
+          { label: 'Size', min: 0.5, max: 2, step: 0.01,
+            get: function () { return S.videoScale; },
+            set: function (v) { S.videoScale = v; }, video: true, print: timesOf },
+          { label: 'Nudge X', min: -0.5, max: 0.5, step: 0.01,
+            get: function () { return S.videoOffset.x; },
+            set: function (v) { S.videoOffset.x = v; }, video: true,
+            print: function (v) { return v.toFixed(2); } },
+          { label: 'Nudge Y', min: -0.5, max: 0.5, step: 0.01,
+            get: function () { return S.videoOffset.y; },
+            set: function (v) { S.videoOffset.y = v; }, video: true,
+            print: function (v) { return v.toFixed(2); } },
+        ],
+      },
+    ];
+  }
+
+  /** Push a row's new value into the scene, as cheaply as that row allows. */
+  function applyRow(row) {
+    if (row.video) { applyVideoFit(); return; }
+    if (row.rebuild) { rebuildFigure(); return; }
+    refreshFigure();
+  }
+
+  /** Spin and clip playback are decided when the figure is built, so rebuild. */
+  function rebuildFigure() {
+    if (S.mode !== MODE.PLACED) return;
+    var inner = $('modelTransform');
+    if (inner && inner.parentNode) inner.parentNode.removeChild(inner);
+    buildFigure();
+    applyFigureTransform();
+    updateFloorShadow();
+  }
+
+  /** Round to the row's own step, so repeated clicks never drift to 1e-16. */
+  function roundToStep(value, step) {
+    var places = (String(step).split('.')[1] || '').length;
+    return parseFloat(value.toFixed(places));
+  }
+
+  function buildAdjustRow(row) {
+    var node = document.createElement('div');
+    node.className = 'adj-row' + (row.choice ? ' wide' : '');
+
+    var label = document.createElement('label');
+    label.textContent = row.label;
+    node.appendChild(label);
+
+    if (row.choice) {
+      var group = document.createElement('div');
+      group.className = 'adj-choice';
+      row.buttons = row.choice.map(function (pair) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = pair[1];
+        b.addEventListener('click', function () {
+          row.set(pair[0]);
+          applyRow(row);
+          syncAdjust();
+          markDirty();
+        });
+        group.appendChild(b);
+        return b;
+      });
+      node.appendChild(group);
+      row.node = node;
+      return node;
+    }
+
+    var nudge = function (dir) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'adj-step';
+      b.textContent = dir < 0 ? '\u2212' : '+';
+      b.addEventListener('click', function () {
+        var next = row.get() + dir * row.step;
+        row.set(row.wrap ? wrapDegrees(next)
+                         : clamp(roundToStep(next, row.step), row.min, row.max));
+        applyRow(row);
+        syncAdjust();
+        markDirty();
+      });
+      return b;
+    };
+
+    node.appendChild(nudge(-1));
+
+    var range = document.createElement('input');
+    range.type = 'range';
+    range.min = row.min;
+    range.max = row.max;
+    range.step = row.step;
+    range.addEventListener('input', function () {
+      row.set(parseFloat(range.value));
+      applyRow(row);
+      row.out.textContent = (row.print || String)(row.get());
+      markDirty();
+    });
+    node.appendChild(range);
+    node.appendChild(nudge(1));
+
+    var out = document.createElement('output');
+    node.appendChild(out);
+
+    row.range = range;
+    row.out = out;
+    row.node = node;
+    return node;
+  }
+
+  function buildAdjust() {
+    if (ADJUST) return;
+    ADJUST = adjustSpec();
+
+    el.adjustTabs.textContent = '';
+    el.adjustBody.textContent = '';
+
+    ADJUST.forEach(function (tab) {
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'adjust-tab';
+      button.textContent = tab.label;
+      button.addEventListener('click', function () { showAdjustTab(tab.id); });
+      tab.tabEl = button;
+      el.adjustTabs.appendChild(button);
+
+      var page = document.createElement('div');
+      page.className = 'adjust-page hidden';
+      tab.rows.forEach(function (row) { page.appendChild(buildAdjustRow(row)); });
+      if (tab.hint) {
+        var hint = document.createElement('p');
+        hint.className = 'adj-hint';
+        hint.textContent = tab.hint;
+        page.appendChild(hint);
+      }
+      tab.pageEl = page;
+      el.adjustBody.appendChild(page);
+    });
+  }
+
+  function showAdjustTab(id) {
+    adjustTab = id;
+    ADJUST.forEach(function (tab) {
+      tab.tabEl.classList.toggle('on', tab.id === id);
+      tab.pageEl.classList.toggle('hidden', tab.id !== id);
+    });
+    el.adjustBody.scrollTop = 0;
+  }
+
+  /** Redraw every control from the live state. Cheap, so call it freely. */
+  function syncAdjust() {
+    if (!ADJUST || el.adjustPanel.classList.contains('hidden')) return;
+    ADJUST.forEach(function (tab) {
+      tab.rows.forEach(function (row) {
+        var value = row.get();
+        if (row.choice) {
+          row.buttons.forEach(function (b, i) {
+            b.classList.toggle('on', row.choice[i][0] === value);
+          });
+          return;
+        }
+        row.range.value = value;
+        row.out.textContent = (row.print || String)(value);
+      });
+    });
+  }
+
+  function adjustNote(text, kind) {
+    el.adjustNote.textContent = text || '';
+    el.adjustNote.className = 'adjust-note' + (kind ? ' ' + kind : '');
+  }
+
+  /** A change makes the last "saved" message stale, so clear it. */
+  function markDirty() {
+    if (el.adjustNote.classList.contains('ok')) adjustNote('');
+  }
+
+  function openAdjust(open) {
+    if (open) {
+      buildAdjust();
+      var ex = EX();
+      el.adjustWho.textContent = ex ? ex.name : '';
+      showAdjustTab(S.mode === MODE.SCAN ? 'video' : adjustTab);
+      el.adjustPanel.classList.remove('hidden');
+      el.adjustPanel.setAttribute('aria-hidden', 'false');
+      el.adjustToggle.classList.add('on');
+      hide(el.actionBar);              // it sits under the sheet anyway
+      adjustNote('');
+      syncAdjust();
+    } else {
+      el.adjustPanel.classList.add('hidden');
+      el.adjustPanel.setAttribute('aria-hidden', 'true');
+      el.adjustToggle.classList.remove('on');
+      applyModeUI();
+    }
+  }
+
+  /** Exactly what Save writes, and what Copy puts on the clipboard. */
+  function adjustPatch() {
+    return {
+      model: {
+        scale: roundToStep(S.modelScale, 0.01),
+        rotation: { x: S.modelRot.x, y: S.modelRot.y, z: S.modelRot.z },
+        offset: {
+          x: roundToStep(S.modelOffset.x, 0.01),
+          y: roundToStep(S.modelOffset.y, 0.01),
+          z: roundToStep(S.modelOffset.z, 0.01),
+        },
+        lighting: S.lighting,
+        shadowOpacity: roundToStep(S.shadowOpacity, 0.01),
+        spin: !!S.spin,
+        playClip: S.playClip !== false,
+      },
+      video: {
+        fit: S.fit,
+        scale: roundToStep(S.videoScale, 0.01),
+        offset: {
+          x: roundToStep(S.videoOffset.x, 0.01),
+          y: roundToStep(S.videoOffset.y, 0.01),
+          z: S.videoOffset.z,
+        },
+      },
+    };
+  }
+
+  /** One level deep, which is all these patches ever are. */
+  function assignInto(target, source) {
+    if (!target) return;
+    Object.keys(source).forEach(function (k) {
+      var v = source[k];
+      if (v && typeof v === 'object') {
+        target[k] = target[k] || {};
+        Object.keys(v).forEach(function (j) { target[k][j] = v[j]; });
+      } else {
+        target[k] = v;
+      }
+    });
+  }
+
+  function saveAdjust() {
+    var ex = EX();
+    if (!ex) { adjustNote('No exhibit is loaded.', 'bad'); return; }
+
+    var patch = adjustPatch();
+    el.adjustSave.disabled = true;
+    window.ARContent.saveExhibitSettings(ex.id, patch).then(function (name) {
+      el.adjustSave.disabled = false;
+      // Keep the running copy in step, so leaving and re-entering the floor
+      // scene does not snap back to the old numbers.
+      assignInto(ex.model, patch.model);
+      assignInto(ex.video, patch.video);
+      adjustNote('Saved to "' + name + '" in the portal draft. Open admin.html ' +
+                 'and press Export to get it into the repo.', 'ok');
+      log.ok('adjust: saved "' + name + '" into the portal draft \u2014 ' +
+             JSON.stringify(patch.model));
+    }, function (err) {
+      el.adjustSave.disabled = false;
+      adjustNote(String((err && err.message) || err), 'bad');
+      log.warn('adjust: could not save \u2014 ' + err);
+    });
+  }
+
+  function copyAdjust() {
+    var ex = EX();
+    var payload = JSON.stringify({
+      exhibit: ex ? ex.id : null,
+      name: ex ? ex.name : null,
+      settings: adjustPatch(),
+    }, null, 2);
+
+    var done = function (ok) {
+      adjustNote(ok
+        ? 'Copied. Paste it into the portal with "Paste adjustments".'
+        : 'Copy was blocked \u2014 the values are in the log instead.',
+        ok ? 'ok' : 'bad');
+      if (!ok) log.info('adjust: settings for pasting into admin.html:\n' + payload);
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(payload)
+        .then(function () { done(true); }, function () { done(false); });
+    } else {
+      done(false);
+    }
+  }
+
+  function resetAdjust() {
+    var ex = EX();
+    if (!ex) return;
+    adoptExhibit(ex);
+    if (S.mode === MODE.PLACED) rebuildFigure(); else refreshFigure();
+    syncAdjust();
+    adjustNote('Back to this exhibit\u2019s saved values.');
+  }
+
+  function wireAdjust() {
+    el.adjustToggle.addEventListener('click', function () {
+      openAdjust(el.adjustPanel.classList.contains('hidden'));
+    });
+    el.adjustClose.addEventListener('click', function () { openAdjust(false); });
+    el.adjustSave.addEventListener('click', saveAdjust);
+    el.adjustCopy.addEventListener('click', copyAdjust);
+    el.adjustReset.addEventListener('click', resetAdjust);
+  }
+
   // ---------------------------------------------------------------- debug tools
   function wireDebugTools() {
     var fitBtn = el.logTools.querySelector('[data-tool="fit"]');
@@ -1936,11 +2411,12 @@
           else if (axis === 'sh') {
             S.shadowOpacity = clamp(Math.round((S.shadowOpacity + dir * 0.05) * 100) / 100, 0, 1);
           }
-          else S.modelYaw = (S.modelYaw + dir * 15) % 360;
+          else S.modelRot.y = wrapDegrees(S.modelRot.y + dir * 15);
           refreshFigure();
+          syncAdjust();
           log.info('figure: ' + (modelCfg().heightMeters * S.modelScale).toFixed(2) +
                    'm tall (×' + S.modelScale.toFixed(2) + '), turned ' +
-                   Math.round(S.modelYaw) + '°, shadow ' + S.shadowOpacity.toFixed(2));
+                   Math.round(S.modelRot.y) + '°, shadow ' + S.shadowOpacity.toFixed(2));
         }
       });
     });
@@ -1961,8 +2437,11 @@
       ', nudge x ' + r(S.videoOffset.x) + ' y ' + r(S.videoOffset.y) + '\n' +
       '  Figure height: ' + r(modelCfg().heightMeters) + 'm' +
       ', size ×' + r(S.modelScale) +
-      ' (= ' + r(modelCfg().heightMeters * S.modelScale) + 'm tall)' +
-      ', turn ' + r(modelCfg().yawOffset + S.modelYaw) + '°\n' +
+      ' (= ' + r(modelCfg().heightMeters * S.modelScale) + 'm tall)\n' +
+      '  Rotate x ' + r(S.modelRot.x) + '° y ' + r(S.modelRot.y) +
+      '° z ' + r(S.modelRot.z) + '°\n' +
+      '  Move x ' + r(S.modelOffset.x) + 'm y ' + r(S.modelOffset.y) +
+      'm z ' + r(S.modelOffset.z) + 'm\n' +
       '  Shading: ' + S.lighting +
       ', contact shadow ' + r(S.shadowOpacity) + '\n' +
       '  Phone height (js/config.js floor.cameraHeightMeters): ' + r(S.cameraHeight) + '\n' +
@@ -2082,6 +2561,7 @@
     on(el.shotBtn, 'click', takePhoto);
     on(el.photoSave, 'click', savePhoto);
     on(el.photoClose, 'click', closePhoto);
+    wireAdjust();
 
     window.addEventListener('orientationchange', function () {
       setTimeout(function () {
@@ -2244,6 +2724,7 @@
     }
 
     THREE = window.AFRAME.THREE;
+    WORLD_UP = new THREE.Vector3(0, 1, 0);
 
     // js/capture.js owns none of the scene; this is the whole of what it can
     // reach into, so there is one place to look when a photo comes out wrong.

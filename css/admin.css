@@ -261,6 +261,7 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px; }
 .field select { width: 180px; }
 .field .pair { display: flex; gap: 6px; }
 .field .pair input { width: 56px; }
+.field .pair.triple input { width: 50px; }
 .field input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent); }
 
 /* ------------------------------------------------------------------ empty */

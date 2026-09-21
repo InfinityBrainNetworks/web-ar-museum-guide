@@ -60,6 +60,7 @@
 <div id="menu" class="menu hidden">
   <button id="importBtn" class="menu-item" type="button">⬆ Import a bundle…</button>
   <button id="adoptBtn" class="menu-item" type="button">📥 Load what is currently deployed</button>
+  <button id="pasteBtn" class="menu-item" type="button">📋 Paste adjustments…</button>
   <button id="helpBtn" class="menu-item" type="button">❔ How this works</button>
   <button id="wipeBtn" class="menu-item danger" type="button">🗑 Delete everything</button>
 </div>
@@ -201,8 +202,20 @@
         <input type="number" step="0.05" min="0.1" max="10" data-set="model.scale">
       </div>
       <div class="field">
-        <label>Figure turn (°)</label>
-        <input type="number" step="15" min="-180" max="360" data-set="model.yawOffset">
+        <label title="Rotate the figure. Y is the turn about the vertical, which is the one you usually want; X and Z tilt it. Easiest to set with Adjust on the phone.">Rotate x / y / z (°)</label>
+        <span class="pair triple">
+          <input type="number" step="1" min="-180" max="180" data-set="model.rotation.x">
+          <input type="number" step="1" min="-180" max="180" data-set="model.rotation.y">
+          <input type="number" step="1" min="-180" max="180" data-set="model.rotation.z">
+        </span>
+      </div>
+      <div class="field">
+        <label title="Move the figure off the spot it was placed on, in metres, in the direction you were facing when you put it down: x to your right, y up, z towards you.">Move x / y / z (m)</label>
+        <span class="pair triple">
+          <input type="number" step="0.01" min="-5" max="5" data-set="model.offset.x">
+          <input type="number" step="0.01" min="-5" max="5" data-set="model.offset.y">
+          <input type="number" step="0.01" min="-5" max="5" data-set="model.offset.z">
+        </span>
       </div>
       <div class="field">
         <label title="Scans and models with ambient occlusion already in the texture should stay baked: the scene light would shade them a second time and darken whole sides as you walk around.">Shading</label>

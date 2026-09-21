@@ -88,6 +88,7 @@ combination cannot reach the repo.
 | `js/content.js` | Resolves which exhibits to show, and the shared IndexedDB store |
 | `js/app.js` | The three-scene machine, video mapping, both floor engines, debug tools |
 | `js/capture.js` | The photo: composing camera feed + figure + logo strip, and saving it |
+| `js/app.js` → *adjust panel* | The gear sheet: one spec builds every slider, tab and toggle |
 | `js/admin.js` | The portal: editing, compiling, export, import |
 | `js/zip.js` | Dependency-free ZIP reader/writer for the bundles |
 | `js/config.js` | Global settings, plus the defaults a new exhibit starts from |
@@ -234,6 +235,55 @@ behind it, and whether it also shows on screen during the floor scene — it doe
 by default, so what you frame is what you get. `photo` next to it sets the
 picture's size, format and file name.
 
+## Adjust — tuning an exhibit in front of the real thing
+
+Numbers guessed at a desk are never right. The gear button (top right, under
+🐞) opens a sheet with the exhibit's transform and look on live sliders, and a
+**Save to exhibit** that puts them where Export will find them.
+
+It is deliberately not part of the debug log. The log is a wall of text that
+covers the very thing you are trying to look at; this takes up half the screen
+at most and shows nothing but controls. The log carries on recording underneath
+exactly as before — including a line for every save.
+
+### The tabs
+
+| Tab | What is on it |
+|---|---|
+| **Transform** | Size, Rotate X/Y/Z, Move X/Y/Z |
+| **Effects** | Shading (baked/lit), contact shadow, spin, animation |
+| **Video** | Fit, size and nudge for the video on the painting |
+
+**Size** multiplies the exhibit's real height, and the readout shows what that
+comes to in metres. **Rotate Y** is the turn about the vertical — the one you
+normally want; X and Z tilt the figure. **Move** is in metres from the spot you
+put it down on, in the direction you were facing at the time: X to your right,
+Y up, Z towards you. Relative to the placement rather than to the room, so the
+same numbers mean the same thing wherever in the gallery it gets stood up.
+
+Raising a figure leaves its contact shadow on the floor, which is what a raised
+object does. Tilting it does not tilt the shadow either.
+
+### Getting it into the repo
+
+**Save to exhibit** writes into the admin portal's draft in this browser — the
+same draft the portal edits. Then open `admin.html`, press **Export bundle**,
+and commit the zip's contents as usual. The values ride along in
+`assets/content/content.json` like everything else.
+
+That works when the browser doing the adjusting is the browser holding the
+draft — which is the case when you reach the viewer through the portal's
+**Preview** button. Adjusting on a phone while the portal lives on a laptop is
+the other case, and that is what **Copy** is for: it puts a small block on the
+clipboard, and the portal's ⋯ menu has **Paste adjustments…** to take it back.
+Matched by exhibit id, never by position, so reordering exhibits cannot
+silently retune the wrong one.
+
+**Reset** puts the exhibit back to its saved values.
+
+Everything on the sheet is also editable by hand in the portal's **Settings**,
+and the debug log's **Log current values** still prints them all as text.
+
 ## Finding the floor
 
 Scene 2 picks one of two engines automatically and says which in the log.
@@ -363,7 +413,10 @@ native build to fight with. The official
 | An artwork will not track | Too few feature points. Compile and read the count on its card. |
 | Figure goes dark down one side as you walk around | Its lighting is baked into the texture and the scene light is shading it again. Set *Shading* to **baked**. |
 | Two shadows under the figure | The model carries its own. Set *Contact shadow* to 0. |
-| Figure is the wrong size | *Figure height* is the real-world height; *Size multiplier* is the quick nudge. |
+| Figure is the wrong size | *Figure height* is the real-world height; Adjust → **Size** is the quick nudge. |
+| Adjust → Save says there is no draft | That browser has never opened `admin.html`. Use **Copy**, then **Paste adjustments…** in the portal. |
+| Adjust → Save says the exhibit is not in the draft | The draft and the deployed bundle are different sets. Load what is deployed from the portal's ⋯ menu first. |
+| Saved in Adjust but the site is unchanged | Save only reaches the portal draft. Export from `admin.html` and commit, same as any other change. |
 | Photo has the figure but no room behind it | The device would not grant `camera-access`, so the WebXR passthrough is unreadable. The log says so. |
 | Photo button never appears | It is scene 3 only — place the figure first. `photo.enabled: false` also hides it. |
 | Logos show as dashed boxes | No `src` set for those slots. See **The logo strip**. |

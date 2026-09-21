@@ -115,12 +115,29 @@
     };
   }
 
+  /** A {x,y,z} that tolerates a partial or missing object. */
+  function vec3(value, fallback) {
+    var v = value || {};
+    return {
+      x: typeof v.x === 'number' ? v.x : fallback.x,
+      y: typeof v.y === 'number' ? v.y : fallback.y,
+      z: typeof v.z === 'number' ? v.z : fallback.z,
+    };
+  }
+
   function modelDefaults() {
     var m = cfg().model || {};
     var f = cfg().floor || {};
     return {
       heightMeters: typeof f.objectHeightMeters === 'number' ? f.objectHeightMeters : 1,
-      yawOffset: m.yawOffset || 0,
+      // Degrees. y is the turn that used to be called yawOffset on its own; a
+      // bundle still carrying that is folded in by normalize().
+      rotation: vec3(m.rotation, { x: 0, y: m.yawOffset || 0, z: 0 }),
+      // Metres from where the figure was put down, in the frame it was placed
+      // in: x to your right, y up, z towards you. Relative to the placement
+      // rather than the room, so the same numbers mean the same thing wherever
+      // in the gallery it is stood up.
+      offset: vec3(m.offset, { x: 0, y: 0, z: 0 }),
       // A plain multiplier on heightMeters, so a model can be nudged bigger or
       // smaller without restating the real-world measurement.
       scale: typeof m.scale === 'number' ? m.scale : 1,
@@ -135,8 +152,30 @@
   }
 
   /** Everything an exhibit may override on top of the model defaults. */
-  var MODEL_FIELDS = ['heightMeters', 'yawOffset', 'scale', 'spin', 'playClip',
-                      'lighting', 'shadowOpacity'];
+  var MODEL_FIELDS = ['heightMeters', 'rotation', 'offset', 'scale', 'spin',
+                      'playClip', 'lighting', 'shadowOpacity'];
+
+  /** Of those, the ones that are {x,y,z} and must be merged, not replaced. */
+  var MODEL_VECTORS = ['rotation', 'offset'];
+
+  /**
+   * Lay an exhibit's own model settings over the defaults.
+   *
+   * rotation and offset are merged component by component, so a bundle that
+   * only recorded one axis does not blank the other two.
+   */
+  function applyModelFields(target, source) {
+    MODEL_FIELDS.forEach(function (k) {
+      if (source[k] === undefined) return;
+      target[k] = MODEL_VECTORS.indexOf(k) === -1 ? source[k] : vec3(source[k], target[k]);
+    });
+    // Written before the Adjust panel existed: one turn, no other axes.
+    if (source.yawOffset !== undefined &&
+        (!source.rotation || source.rotation.y === undefined)) {
+      target.rotation.y = source.yawOffset;
+    }
+    return target;
+  }
 
   function assign(target, source) {
     for (var k in source) if (Object.prototype.hasOwnProperty.call(source, k)) target[k] = source[k];
@@ -186,16 +225,12 @@
         src: model.src || null,
         file: model.file || null,
       });
-      MODEL_FIELDS.forEach(function (k) {
-        if (model[k] !== undefined) out.model[k] = model[k];
-      });
+      applyModelFields(out.model, model);
     } else if (model) {
       // A model record with no file still carries its sizing, which the
       // built-in placeholder figure should honour.
       out.model = assign(assign({}, modelDefaults()), { src: null, file: null });
-      MODEL_FIELDS.forEach(function (k) {
-        if (model[k] !== undefined) out.model[k] = model[k];
-      });
+      applyModelFields(out.model, model);
     }
 
     if (!out.model) out.model = assign(modelDefaults(), { src: null, file: null });
@@ -290,6 +325,49 @@
     });
   }
 
+  /** One level deeper than assign(), so {x,y,z} merges instead of replacing. */
+  function deepAssign(target, source) {
+    for (var k in source) {
+      if (!Object.prototype.hasOwnProperty.call(source, k)) continue;
+      var v = source[k];
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        var into = (target[k] && typeof target[k] === 'object') ? target[k] : {};
+        target[k] = assign(into, v);
+      } else {
+        target[k] = v;
+      }
+    }
+    return target;
+  }
+
+  /**
+   * Write settings back into the portal's draft, so an adjustment made while
+   * standing in front of the real thing survives into the next Export and from
+   * there into the repo.
+   *
+   * Only the draft is touched — never the deployed bundle, which is a file in
+   * git and not ours to rewrite from a phone.
+   */
+  function saveExhibitSettings(id, patch) {
+    return ARStore.getDraft().then(function (draft) {
+      if (!draft || !draft.exhibits || !draft.exhibits.length) {
+        throw new Error('this browser has no portal draft to save into — open ' +
+                        'admin.html here first, or use Copy');
+      }
+      var target = null;
+      for (var i = 0; i < draft.exhibits.length; i++) {
+        if (draft.exhibits[i].id === id) { target = draft.exhibits[i]; break; }
+      }
+      if (!target) {
+        throw new Error('the draft in this browser has no exhibit "' + id +
+                        '" — it holds ' + draft.exhibits.length + ' other one(s)');
+      }
+      if (patch.model) { target.model = deepAssign(target.model || {}, patch.model); }
+      if (patch.video) { target.video = deepAssign(target.video || {}, patch.video); }
+      return ARStore.setDraft(draft).then(function () { return target.name || id; });
+    });
+  }
+
   function previewRequested() {
     return /[?&]preview=1\b/.test(location.search);
   }
@@ -330,6 +408,8 @@
   window.ARContent = {
     load: load,
     MODEL_FIELDS: MODEL_FIELDS,
+    MODEL_VECTORS: MODEL_VECTORS,
+    saveExhibitSettings: saveExhibitSettings,
     normalize: normalize,
     blankExhibit: blankExhibit,
     videoDefaults: videoDefaults,

@@ -71,7 +71,9 @@ a-scene, .a-canvas { width: 100% !important; height: 100% !important; }
 #overlay > .error-banner,
 #overlay > .log-toggle,
 #overlay > .log-panel,
-#overlay > .photo-sheet { pointer-events: auto; }
+#overlay > .photo-sheet,
+#overlay > .adjust-toggle,
+#overlay > .adjust-panel { pointer-events: auto; }
 .a-enter-vr, .a-enter-ar, .a-orientation-modal { display: none !important; }
 
 .hidden { display: none !important; }
@@ -310,6 +312,7 @@ a-scene, .a-canvas { width: 100% !important; height: 100% !important; }
    the debug button step down out from under it rather than sitting on a logo. */
 .framing .status-chip,
 .framing .log-toggle { top: calc(58px + var(--safe-t)); }
+.framing .adjust-toggle { top: calc(110px + var(--safe-t)); }
 
 .brand-bar img {
   height: 26px;
@@ -436,6 +439,214 @@ a-scene, .a-canvas { width: 100% !important; height: 100% !important; }
   flex-wrap: wrap;
   justify-content: center;
 }
+
+/* ---------------------------------------------------------------- adjust */
+/* Tuning the figure while standing in front of it. Kept apart from the log on
+   purpose: the log is a wall of text and this needs the picture visible. */
+.adjust-toggle {
+  position: fixed;
+  z-index: 70;
+  top: calc(62px + var(--safe-t));
+  right: calc(10px + var(--safe-r));
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--text);
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+}
+.adjust-toggle.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+
+.adjust-panel {
+  position: fixed;
+  z-index: 82;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* Under half the screen: the whole point is watching the figure change, so
+     the body scrolls rather than the sheet growing. */
+  max-height: min(50vh, 430px);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid var(--line);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -18px 50px rgba(0, 0, 0, 0.5);
+  padding-bottom: var(--safe-b);
+}
+
+.adjust-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px 8px;
+}
+.adjust-head strong { font-size: 15px; }
+.adjust-head .spacer { flex: 1; }
+.adjust-who {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 45%;
+}
+
+.adjust-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 0 14px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.adjust-tab {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 1;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 6px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.adjust-tab.on { background: rgba(255, 255, 255, 0.12); color: var(--text); }
+
+.adjust-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 10px 14px 4px;
+}
+
+.adj-row {
+  display: grid;
+  grid-template-columns: 74px 34px 1fr 34px 62px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.adj-row > label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.adj-row output {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text);
+}
+.adj-step {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 34px;
+  height: 30px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  border-radius: 8px;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.adj-step:active { background: rgba(255, 255, 255, 0.18); }
+
+/* A slider you can actually hit with a thumb. */
+.adj-row input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 30px;
+  background: transparent;
+  cursor: pointer;
+}
+.adj-row input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.18);
+}
+.adj-row input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.18);
+}
+.adj-row input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -9px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid rgba(0, 0, 0, 0.35);
+}
+.adj-row input[type="range"]::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid rgba(0, 0, 0, 0.35);
+}
+
+/* Toggles and pickers reuse the row grid, spanning the slider columns. */
+.adj-row.wide { grid-template-columns: 74px 1fr; }
+.adj-row .adj-choice {
+  display: flex;
+  gap: 6px;
+}
+.adj-choice button {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 1;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.adj-choice button.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+
+.adj-hint {
+  margin: 2px 0 10px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: rgba(154, 164, 181, 0.8);
+}
+
+.adjust-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--line);
+}
+.adjust-note {
+  flex: 1 0 100%;
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+  min-height: 1em;
+}
+.adjust-note.ok { color: var(--ok); }
+.adjust-note.bad { color: var(--err); }
 
 /* ---------------------------------------------------------------- error */
 .error-banner {

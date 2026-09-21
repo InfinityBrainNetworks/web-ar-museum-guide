@@ -155,7 +155,31 @@
   <button id="errorRetry" class="btn btn-ghost btn-sm" type="button">Retry</button>
 </div>
 
-<!-- 10. Debug / log window -->
+<!-- 10. Adjust: the figure's transform and look, tuned in front of the real
+         thing. Deliberately separate from the log so the picture stays visible
+         — the rows are built by js/app.js from one spec. -->
+<button id="adjustToggle" class="adjust-toggle hidden" type="button" aria-label="Adjust the figure">
+  <span>&#9881;</span>
+</button>
+
+<section id="adjustPanel" class="adjust-panel hidden" aria-hidden="true">
+  <header class="adjust-head">
+    <strong>Adjust</strong>
+    <span id="adjustWho" class="adjust-who"></span>
+    <div class="spacer"></div>
+    <button id="adjustClose" class="btn btn-sm btn-ghost" type="button" aria-label="Close">&#10005;</button>
+  </header>
+  <nav id="adjustTabs" class="adjust-tabs" role="tablist"></nav>
+  <div id="adjustBody" class="adjust-body"></div>
+  <footer class="adjust-foot">
+    <button id="adjustSave" class="btn btn-sm btn-primary" type="button">Save to exhibit</button>
+    <button id="adjustCopy" class="btn btn-sm btn-ghost" type="button">Copy</button>
+    <button id="adjustReset" class="btn btn-sm btn-ghost" type="button">Reset</button>
+    <p id="adjustNote" class="adjust-note"></p>
+  </footer>
+</section>
+
+<!-- 11. Debug / log window -->
 <button id="logToggle" class="log-toggle" type="button" aria-label="Open debug log">
   <span>🐞</span><span id="logBadge" class="log-badge hidden">0</span>
 </button>

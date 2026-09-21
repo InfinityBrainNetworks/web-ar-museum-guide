@@ -59,9 +59,16 @@ window.AR_CONFIG = {
     // placeholder so the whole flow is still testable.
     src: null,
 
-    // Extra turn applied after the figure has been stood up and faced at you,
-    // in degrees. Use it if the model was exported facing sideways or backwards.
-    yawOffset: 0,
+    // Degrees. y is the turn applied after the figure has been stood up and
+    // faced at you — use it if the model was exported facing sideways. x and z
+    // tilt it. Far easier to set with the viewer's Adjust panel than by hand.
+    rotation: { x: 0, y: 0, z: 0 },
+
+    // Metres from the spot the figure was placed on, in the direction you were
+    // facing when you put it down: x to your right, y up, z towards you.
+    // Relative to the placement rather than the room, so a saved value means
+    // the same thing wherever in the gallery it is stood up.
+    offset: { x: 0, y: 0, z: 0 },
 
     // Multiplier on the exhibit's own figure height, so the debug panel can
     // resize it on-device without touching the real-world measurement.
