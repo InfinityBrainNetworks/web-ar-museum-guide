@@ -151,7 +151,16 @@
   var $ = function (id) { return document.getElementById(id); };
   var el = {};
 
+  /**
+   * Cache every element, and say which ones are not there.
+   *
+   * A page held in the browser cache is older than the script that came with
+   * it, so ids added in a later release are simply absent. That must read as
+   * one clear line in the log, not as "cannot read properties of null" three
+   * functions away.
+   */
   function cacheDom() {
+    var missing = [];
     ['scene', 'floorScene', 'reticle', 'modelSlot', 'floorShadow',
      'arVideo', 'introScreen', 'introThumbs', 'introHint', 'startBtn', 'loadingScreen',
      'loadingText', 'scanScreen', 'floorScreen', 'floorText', 'statusChip', 'statusText',
@@ -161,7 +170,16 @@
      'logToolsToggle', 'copyToast', 'dumpState', 'reloadBtn', 'overlay',
      'brandBar', 'shotBtn', 'shutterFlash', 'photoSheet', 'photoPreview',
      'photoHint', 'photoSave', 'photoClose'
-    ].forEach(function (id) { el[id] = $(id); });
+    ].forEach(function (id) {
+      el[id] = $(id);
+      if (!el[id]) missing.push(id);
+    });
+    return missing;
+  }
+
+  /** addEventListener that shrugs when the element is not in this page. */
+  function on(node, event, handler) {
+    if (node) node.addEventListener(event, handler);
   }
 
   function show(node) { if (node) node.classList.remove('hidden'); }
@@ -523,7 +541,8 @@
     toggle(el.backBtn, m === MODE.FLOOR || m === MODE.PLACED);
     // The photo is of the figure standing on the floor, so it only makes sense
     // once there is one.
-    var shutter = m === MODE.PLACED && (cfg.photo || {}).enabled !== false;
+    var shutter = m === MODE.PLACED && (cfg.photo || {}).enabled !== false &&
+                  !!el.shotBtn;
     toggle(el.shotBtn, shutter);
     el.actionBar.classList.toggle('with-shutter', shutter);
 
@@ -531,9 +550,9 @@
     // floor scene rather than only at the moment of pressing the shutter.
     var onFloor = m === MODE.FLOOR || m === MODE.PLACED;
     var framing = onFloor && (cfg.branding || {}).showOnScreen !== false &&
-                  el.brandBar.childNodes.length > 0;
+                  !!el.brandBar && el.brandBar.childNodes.length > 0;
     toggle(el.brandBar, framing);
-    el.overlay.classList.toggle('framing', framing);
+    if (el.overlay) el.overlay.classList.toggle('framing', framing);
     // Leaving the floor scene while looking at a photo drops the sheet too,
     // rather than leaving it floating over scene 1.
     if (!onFloor) hide(el.photoSheet);
@@ -2054,10 +2073,12 @@
     });
     el.backBtn.addEventListener('click', leaveFloorScene);
 
+    // Guarded: an older cached index.html has none of these, and a souvenir
+    // photo is not worth losing the AR over.
     renderBrandBar();
-    el.shotBtn.addEventListener('click', takePhoto);
-    el.photoSave.addEventListener('click', savePhoto);
-    el.photoClose.addEventListener('click', closePhoto);
+    on(el.shotBtn, 'click', takePhoto);
+    on(el.photoSave, 'click', savePhoto);
+    on(el.photoClose, 'click', closePhoto);
 
     window.addEventListener('orientationchange', function () {
       setTimeout(function () {
@@ -2165,8 +2186,14 @@
   }
 
   function init() {
-    cacheDom();
+    var missing = cacheDom();
     wireLogPanel();
+
+    if (missing.length) {
+      log.warn('this index.html is older than js/app.js — it has no ' +
+               missing.join(', ') + '. Almost always a cached page: pull down to ' +
+               'refresh, or clear the site data. Anything needing those is off.');
+    }
 
     if (!preflight()) return;
 
@@ -2209,16 +2236,25 @@
       logContent(loaded);
 
       whenSceneReady(function () {
-        buildExhibitEntities();
-        S.activeIndex = 0;
-        adoptExhibit(exhibits[0]);
-        renderIntroThumbs();
+        try {
+          buildExhibitEntities();
+          S.activeIndex = 0;
+          adoptExhibit(exhibits[0]);
+          renderIntroThumbs();
 
-        wireVideoElement();
-        wireUI();
-        applyModeUI();
-        wireScene();
+          wireVideoElement();
+          wireUI();
+          applyModeUI();
+          wireScene();
+        } catch (err) {
+          log.error('setting the page up failed: ' + ((err && err.stack) || err));
+          showError('Part of the page could not be set up. Open the log and send ' +
+                    'it — Start AR still works.', false);
+        }
 
+        // Whatever happened above, the visitor gets their button back. A broken
+        // extra is not a reason to lock anyone out of the AR, and this used to
+        // be reported as "no exhibits could be loaded", which it never was.
         el.startBtn.disabled = false;
         log.ok('app ready — waiting for the Start button');
       });
