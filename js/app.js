@@ -2096,6 +2096,40 @@
   }
 
   // ---------------------------------------------------------------- init
+  /**
+   * What the Start button is waiting for, and a way to see it stuck.
+   *
+   * The button is disabled until the exhibits are known and the scene is wired,
+   * which is right — but a grey rectangle that never wakes up is indistinguishable
+   * from a broken page. So it carries its own label, and if it is still asleep
+   * after a few seconds the log says exactly which step never finished.
+   */
+  var boot = { content: false, sceneLoaded: false, wired: false, ready: false };
+
+  function setStartLabel(text, enabled) {
+    if (!el.startBtn) return;
+    el.startBtn.textContent = text;
+    el.startBtn.disabled = !enabled;
+  }
+
+  function bootWatchdog() {
+    setTimeout(function () {
+      if (boot.ready) return;
+      var stage = 'content=' + boot.content +
+                  ' sceneLoaded=' + (el.scene ? !!el.scene.hasLoaded : '?') +
+                  ' wired=' + boot.wired +
+                  ' AFRAME=' + (typeof window.AFRAME) +
+                  ' mindar=' + !!(window.AFRAME && window.AFRAME.systems &&
+                                  window.AFRAME.systems['mindar-image-system']);
+      log.error('Start AR is still not ready 10s in — ' + stage + '. ' +
+                (!boot.content
+                  ? 'The exhibit list never resolved: assets/content/content.json.'
+                  : 'A-Frame never finished loading the scene, which usually means ' +
+                    'WebGL is unavailable or blocked in this browser.'));
+      showError('The page did not finish starting. Open the log and send it.', true);
+    }, 10000);
+  }
+
   /** The start screen shows what to point the phone at — every exhibit. */
   function renderIntroThumbs() {
     var host = el.introThumbs;
@@ -2195,7 +2229,16 @@
                'refresh, or clear the site data. Anything needing those is off.');
     }
 
-    if (!preflight()) return;
+    setStartLabel('Loading…', false);
+    bootWatchdog();
+
+    if (!preflight()) {
+      setStartLabel('Unavailable', false);
+      // preflight has already put the real reason on screen; the watchdog would
+      // only talk over it.
+      boot.ready = true;
+      return;
+    }
 
     THREE = window.AFRAME.THREE;
 
@@ -2222,15 +2265,13 @@
     // component that already exists when the entity initialises.
     el.floorScene.setAttribute('floor-driver', '');
 
-    // Nothing can be built until we know what the exhibits are, so the Start
-    // button stays shut until the content has resolved.
-    el.startBtn.disabled = true;
     var whenSceneReady = function (fn) {
       if (el.scene.hasLoaded) fn();
       else el.scene.addEventListener('loaded', fn);
     };
 
     window.ARContent.load().then(function (loaded) {
+      boot.content = true;
       bundle = loaded;
       exhibits = loaded.exhibits;
       logContent(loaded);
@@ -2246,6 +2287,7 @@
           wireUI();
           applyModeUI();
           wireScene();
+          boot.wired = true;
         } catch (err) {
           log.error('setting the page up failed: ' + ((err && err.stack) || err));
           showError('Part of the page could not be set up. Open the log and send ' +
@@ -2255,13 +2297,18 @@
         // Whatever happened above, the visitor gets their button back. A broken
         // extra is not a reason to lock anyone out of the AR, and this used to
         // be reported as "no exhibits could be loaded", which it never was.
-        el.startBtn.disabled = false;
+        boot.ready = true;
+        setStartLabel('Start AR', true);
         log.ok('app ready — waiting for the Start button');
       });
     }).catch(function (err) {
-      log.error('content failed to load: ' + (err && err.message ? err.message : err));
+      log.error('content failed to load: ' + ((err && err.stack) || err));
       showError('No exhibits could be loaded. Open admin.html, add one, compile the ' +
                 'targets, export the bundle and deploy it.', false);
+      // Still let them in. The camera and the log are worth more than a button
+      // that does nothing, and the banner above already says what is wrong.
+      boot.ready = true;
+      setStartLabel('Start AR', true);
     });
   }
 
