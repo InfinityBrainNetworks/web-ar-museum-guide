@@ -102,6 +102,8 @@
     shadowOpacity: 0.5,
     // Soft ellipses on the floor. Empty = one circle sized from the figure.
     shadows: [],
+    shadowFollow: false,   // do they ride on the figure? (see updateFloorShadow)
+    shadowScale: 1,        // the figure scale they were drawn at
     spin: false,
     playClip: true,
     faceYaw: 0,            // radians, set at placement so the figure faces you
@@ -463,6 +465,8 @@
     S.spin = !!ex.model.spin;
     S.playClip = ex.model.playClip !== false;
     S.shadows = copyShadows(ex.model.shadows);
+    S.shadowFollow = !!ex.model.shadowFollow;
+    S.shadowScale = ex.model.shadowScale > 0 ? ex.model.shadowScale : ex.model.scale;
     S.lighting = ex.model.lighting === 'lit' ? 'lit' : 'baked';
     S.shadowOpacity = typeof ex.model.shadowOpacity === 'number' ? ex.model.shadowOpacity : 0.5;
 
@@ -1426,6 +1430,8 @@
     S.spin = !!model.spin;
     S.playClip = model.playClip !== false;
     S.shadows = copyShadows(model.shadows);
+    S.shadowFollow = !!model.shadowFollow;
+    S.shadowScale = model.shadowScale > 0 ? model.shadowScale : model.scale;
     S.faceYaw = 0;
     S.placedAt = null;
     S.figureFootprint = 0;
@@ -1650,35 +1656,52 @@
    * from the figure's own footprint. That is what every exhibit written before
    * this had, and what a new one still gets until someone says otherwise.
    *
-   * Geometry, material and texture are shared by every ellipse. Only the
-   * transforms differ, and the one material carries the master opacity.
+   * Geometry and texture are shared by every ellipse; the material is not,
+   * because each one carries its own colour and its own opacity.
    */
   var shadowKit = null;
+
+  /** The colours a shadow can be tinted, in the order the swatches appear. */
+  var SHADOW_COLOURS = [
+    ['#000000', 'Black'],
+    ['#1c2333', 'Cool — daylight'],
+    ['#2a1a12', 'Warm — tungsten'],
+    ['#123024', 'Green — foliage'],
+    ['#241026', 'Violet'],
+    ['#3d3d3d', 'Grey — faint'],
+  ];
 
   function shadowResources() {
     if (shadowKit) return shadowKit;
 
-    // Drawn at full strength and scaled down by material.opacity, so the
-    // exhibit's shadowOpacity IS the peak opacity you see.
+    // White, and tinted by material.color: MeshBasicMaterial multiplies the
+    // two, so a black map would swallow every colour. The ramp is alpha only
+    // and runs to full strength, scaled down by material.opacity, so the number
+    // in the panel IS the opacity you see.
     var c = document.createElement('canvas');
     c.width = c.height = 128;
     var ctx = c.getContext('2d');
     var grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-    grad.addColorStop(0, 'rgba(0,0,0,1)');
-    grad.addColorStop(0.5, 'rgba(0,0,0,0.44)');
-    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.5, 'rgba(255,255,255,0.44)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 128, 128);
 
     shadowKit = {
       geometry: new THREE.PlaneGeometry(1, 1),
-      material: new THREE.MeshBasicMaterial({
-        map: new THREE.CanvasTexture(c),
-        transparent: true, depthWrite: false, toneMapped: false,
-        opacity: S.shadowOpacity,
-      }),
+      texture: new THREE.CanvasTexture(c),
     };
     return shadowKit;
+  }
+
+  function shadowMaterial() {
+    return new THREE.MeshBasicMaterial({
+      map: shadowResources().texture,
+      color: 0x000000,
+      transparent: true, depthWrite: false, toneMapped: false,
+      opacity: S.shadowOpacity,
+    });
   }
 
   function buildFloorShadow() {
@@ -1694,12 +1717,14 @@
   function autoShadowBlob() {
     var upm = S.engine ? S.engine.unitsPerMetre : 1;
     var spread = Math.max(0.1 * upm, (S.figureFootprint || 0.5 * upm) * 2.1) / upm;
-    return { x: 0, z: 0, w: spread, d: spread, r: 0 };
+    return { x: 0, z: 0, w: spread, d: spread, r: 0, o: 1, c: '#000000' };
   }
 
   function copyShadows(list) {
     return (list || []).map(function (b) {
-      return { x: b.x, z: b.z, w: b.w, d: b.d, r: b.r };
+      return { x: b.x, z: b.z, w: b.w, d: b.d, r: b.r,
+               o: typeof b.o === 'number' ? b.o : 1,
+               c: b.c || '#000000' };
     });
   }
 
@@ -1710,13 +1735,15 @@
       // A wrapper turns the ellipse on the floor; the plane inside it keeps the
       // fixed lie-flat tilt. Two objects, so no Euler-order guesswork.
       var wrapper = new THREE.Object3D();
-      var mesh = new THREE.Mesh(kit.geometry, kit.material);
+      var mesh = new THREE.Mesh(kit.geometry, shadowMaterial());
       mesh.rotation.x = -Math.PI / 2;
       wrapper.add(mesh);
       group.add(wrapper);
     }
     while (group.children.length > wanted) {
-      group.remove(group.children[group.children.length - 1]);
+      var gone = group.children[group.children.length - 1];
+      group.remove(gone);
+      gone.children[0].material.dispose();   // its own, so nothing else loses it
     }
   }
 
@@ -1732,19 +1759,31 @@
     var group = el.floorShadow.getObject3D('mesh');
     if (!group) return;
 
-    shadowResources().material.opacity = opacity;
-    shadowResources().material.needsUpdate = true;
-
-    var blobs = S.shadows.length ? S.shadows : [autoShadowBlob()];
+    var auto = !S.shadows.length;
+    var blobs = auto ? [autoShadowBlob()] : S.shadows;
     syncShadowMeshes(group, blobs.length);
+
+    // Riding on the figure means two things: the layout grows with the Size
+    // slider, measured against the scale the ellipses were drawn at, and it
+    // turns with the figure's own yaw. Pitch, roll and lift are left out on
+    // purpose — a shadow stays flat on the floor whatever the thing above it is
+    // doing. The auto circle is sized from the live footprint and so already
+    // follows, hence the factor is for hand-drawn ellipses only.
+    var follow = S.shadowFollow && !auto;
+    var k = follow && S.shadowScale > 0 ? S.modelScale / S.shadowScale : 1;
+    group.rotation.set(0, follow ? degToRad(S.modelRot.y) : 0, 0);
 
     var upm = S.engine ? S.engine.unitsPerMetre : 1;
     var lift = 0.002 * upm;          // just clear of the floor, to avoid z-fighting
     blobs.forEach(function (blob, i) {
       var wrapper = group.children[i];
-      wrapper.position.set(blob.x * upm, lift + i * 0.0002 * upm, blob.z * upm);
+      var material = wrapper.children[0].material;
+      wrapper.position.set(blob.x * k * upm, lift + i * 0.0002 * upm, blob.z * k * upm);
       wrapper.rotation.set(0, degToRad(blob.r), 0);
-      wrapper.scale.set(Math.max(0.01, blob.w) * upm, 1, Math.max(0.01, blob.d) * upm);
+      wrapper.scale.set(Math.max(0.01, blob.w * k) * upm, 1,
+                        Math.max(0.01, blob.d * k) * upm);
+      material.color.set(blob.c || '#000000');
+      material.opacity = opacity * clamp(typeof blob.o === 'number' ? blob.o : 1, 0, 1);
     });
   }
 
@@ -2107,22 +2146,38 @@
         label: 'Shadow',
         hint: 'One circle, sized from the figure, until you add your own. Then ' +
               'build the shape up out of ellipses: one for the body, one per ' +
-              'foot, a long thin one under an outstretched arm.',
+              'foot, a long thin one under an outstretched arm. Follow ties ' +
+              'them to the figure, so resizing or turning it takes the whole ' +
+              'shadow with it.',
         rows: [
           { label: 'Strength', min: 0, max: 1, step: 0.05,
             get: function () { return S.shadowOpacity; },
             set: function (v) { S.shadowOpacity = v; },
             print: function (v) { return v <= 0 ? 'off' : v.toFixed(2); } },
+          { label: 'Follow', choice: [[false, 'Off'], [true, 'Object']],
+            get: function () { return !!S.shadowFollow; },
+            set: function (v) {
+              // Remember the size the ellipses are at right now, so switching
+              // this on changes nothing until the Size slider moves.
+              if (v && !S.shadowFollow) S.shadowScale = S.modelScale;
+              S.shadowFollow = !!v;
+            }, shadow: true },
         ],
         list: {
           items: function () { return S.shadows; },
           add: function () {
             // The first one matches what was already on the floor, so nothing
             // jumps the moment you take control of it.
-            if (!S.shadows.length) { S.shadows.push(autoShadowBlob()); return; }
+            if (!S.shadows.length) {
+              S.shadows.push(autoShadowBlob());
+              S.shadowScale = S.modelScale;      // the size it was drawn at
+              return;
+            }
+            // Colour and opacity carry over, so a shadow set once stays of a
+            // piece however many ellipses it ends up being made of.
             var last = S.shadows[S.shadows.length - 1];
             S.shadows.push({ x: last.x + 0.15, z: last.z, w: last.w * 0.6,
-                             d: last.d * 0.6, r: last.r });
+                             d: last.d * 0.6, r: last.r, o: last.o, c: last.c });
           },
           remove: function (i) { S.shadows.splice(i, 1); },
           rows: [
@@ -2132,6 +2187,9 @@
             { label: 'Depth', key: 'd', min: 0.02, max: 4, step: 0.01, print: metresOf },
             { label: 'Turn', key: 'r', min: -90, max: 90, step: 1, wrap: true,
               print: degreesOf },
+            { label: 'Opacity', key: 'o', min: 0, max: 1, step: 0.05,
+              print: function (v) { return v <= 0 ? 'off' : v.toFixed(2); } },
+            { label: 'Colour', key: 'c', swatch: SHADOW_COLOURS },
           ],
         },
       },
@@ -2187,7 +2245,7 @@
 
   function buildAdjustRow(row) {
     var node = document.createElement('div');
-    node.className = 'adj-row' + (row.choice ? ' wide' : '');
+    node.className = 'adj-row' + (row.choice || row.swatch ? ' wide' : '');
 
     var label = document.createElement('label');
     label.textContent = row.label;
@@ -2210,6 +2268,32 @@
         return b;
       });
       node.appendChild(group);
+      row.node = node;
+      return node;
+    }
+
+    if (row.swatch) {
+      // Swatches rather than <input type="color">: a native colour picker is
+      // not guaranteed to open over an immersive WebXR session, and one tap
+      // beats a dialog when you are holding a phone up at an exhibit.
+      var swatches = document.createElement('div');
+      swatches.className = 'adj-swatch';
+      row.buttons = row.swatch.map(function (pair) {
+        var s = document.createElement('button');
+        s.type = 'button';
+        s.title = pair[1];
+        s.setAttribute('aria-label', pair[1]);
+        s.style.background = pair[0];
+        s.addEventListener('click', function () {
+          row.set(pair[0]);
+          applyRow(row);
+          syncAdjust();
+          markDirty();
+        });
+        swatches.appendChild(s);
+        return s;
+      });
+      node.appendChild(swatches);
       row.node = node;
       return node;
     }
@@ -2297,6 +2381,7 @@
         var row = {
           label: spec.label,
           min: spec.min, max: spec.max, step: spec.step, wrap: spec.wrap,
+          swatch: spec.swatch,
           print: spec.print,
           get: function () { return blob[spec.key]; },
           set: function (v) { blob[spec.key] = v; },
@@ -2384,6 +2469,12 @@
       if (tab.list && tab.list.items().length !== shadowRendered) renderShadowList(tab);
       tab.rows.concat(tab.listRows || []).forEach(function (row) {
         var value = row.get();
+        if (row.swatch) {
+          row.buttons.forEach(function (b, i) {
+            b.classList.toggle('on', row.swatch[i][0] === value);
+          });
+          return;
+        }
         if (row.choice) {
           row.buttons.forEach(function (b, i) {
             b.classList.toggle('on', row.choice[i][0] === value);
@@ -2439,11 +2530,15 @@
         },
         lighting: S.lighting,
         shadowOpacity: roundToStep(S.shadowOpacity, 0.01),
+        shadowFollow: !!S.shadowFollow,
+        shadowScale: roundToStep(S.shadowScale, 0.01),
         shadows: S.shadows.map(function (b) {
           return {
             x: roundToStep(b.x, 0.01), z: roundToStep(b.z, 0.01),
             w: roundToStep(b.w, 0.01), d: roundToStep(b.d, 0.01),
             r: roundToStep(b.r, 1),
+            o: roundToStep(typeof b.o === 'number' ? b.o : 1, 0.01),
+            c: b.c || '#000000',
           };
         }),
         spin: !!S.spin,
@@ -2632,8 +2727,10 @@
       'm z ' + r(S.modelOffset.z) + 'm\n' +
       '  Shading: ' + S.lighting +
       ', contact shadow ' + r(S.shadowOpacity) +
-      ' (' + (S.shadows.length ? S.shadows.length + ' ellipse(s)' : 'auto circle') +
-      ')\n' +
+      ' (' + (S.shadows.length
+              ? S.shadows.length + ' ellipse(s)' +
+                (S.shadowFollow ? ', following the figure' : '')
+              : 'auto circle') + ')\n' +
       '  Phone height (js/config.js floor.cameraHeightMeters): ' + r(S.cameraHeight) + '\n' +
       '  photo: ' + (window.ARCapture ? window.ARCapture.report() : 'capture.js missing') +
       ' shareFiles=' + canShareFiles() +

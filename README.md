@@ -252,7 +252,7 @@ exactly as before — including a line for every save.
 |---|---|
 | **Transform** | Size, Rotate X/Y/Z, Move X/Y/Z |
 | **Effects** | Shading (baked/lit), spin, animation |
-| **Shadow** | Strength, and the shape of the shadow as ellipses |
+| **Shadow** | Strength, Follow, and the shape of the shadow as ellipses |
 | **Video** | Fit, size and nudge for the video on the painting |
 
 **Size** multiplies the exhibit's real height, and the readout shows what that
@@ -273,13 +273,31 @@ many soft ellipses as the shape needs: one under the body, one per foot, a long
 thin one under an outstretched arm.
 
 Each ellipse has **X** and **Z** (where it sits, in metres from the figure's
-feet), **Width** and **Depth** (unequal values stretch it) and **Turn**. The
-first one you add copies the automatic circle, so nothing jumps the moment you
-take control. **Strength** is the peak opacity of all of them together, and 0
-still turns the whole thing off.
+feet), **Width** and **Depth** (unequal values stretch it), **Turn**, its own
+**Opacity**, and a **Colour** picked from six swatches. The first one you add
+copies the automatic circle, so nothing jumps the moment you take control.
+
+**Strength** is the peak opacity of the whole shadow and each ellipse's own
+*Opacity* scales it from there, so a secondary blob under a raised arm can be
+faint while the body stays solid. Strength at 0 still turns the lot off.
+
+Colour is per ellipse too, and a new one inherits the last one's colour and
+opacity, so setting it once carries through. Black suits most rooms; the cool
+swatch reads truer under daylight and the warm one under tungsten. They are
+fixed swatches rather than a colour picker because a native picker is not
+guaranteed to open over an immersive WebXR session.
+
+**Follow** ties the shape to the figure. Off — the default, and how it behaved
+before — the ellipses stay put on the floor in metres. On, they grow with the
+**Size** slider and turn with the figure's own **Rotate Y**, so rescaling a
+model rescales its shadow to match instead of leaving you to redraw it. Pitch,
+roll and lift are deliberately left out: a shadow stays flat on the floor
+whatever the thing above it is doing. Switching Follow on records the size the
+ellipses are at right now, so nothing changes until you move the Size slider.
 
 Removing every ellipse goes back to the automatic circle, which is also what
-the portal's **Auto** button next to *Shadow shape* does.
+the portal's **Auto** button next to *Shadow shape* does. That circle is sized
+from the figure's live footprint, so it follows the size on its own.
 
 ### Getting it into the repo
 
@@ -431,6 +449,8 @@ native build to fight with. The official
 | Figure goes dark down one side as you walk around | Its lighting is baked into the texture and the scene light is shading it again. Set *Shading* to **baked**. |
 | Two shadows under the figure | The model carries its own. Set Adjust → Shadow → **Strength** to 0. |
 | Shadow is a circle under a figure that is not | Adjust → **Shadow** → add ellipses and shape it. |
+| Resizing the figure leaves the shadow behind | Adjust → Shadow → **Follow** → *Object*. |
+| Shadow looks too hard, or the wrong colour for the room | Drop that ellipse's **Opacity**, or pick a warmer or cooler **Colour**. |
 | Figure is the wrong size | *Figure height* is the real-world height; Adjust → **Size** is the quick nudge. |
 | Adjust → Save says there is no draft | That browser has never opened `admin.html`. Use **Copy**, then **Paste adjustments…** in the portal. |
 | Adjust → Save says the exhibit is not in the draft | The draft and the deployed bundle are different sets. Load what is deployed from the portal's ⋯ menu first. |

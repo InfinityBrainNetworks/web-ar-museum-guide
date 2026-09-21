@@ -622,6 +622,26 @@ a-scene, .a-canvas { width: 100% !important; height: 100% !important; }
 }
 .adj-choice button.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 
+/* Shadow colours. Fixed swatches, not a colour input: see buildAdjustRow. */
+.adj-row .adj-swatch {
+  display: flex;
+  gap: 6px;
+}
+.adj-swatch button {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 1;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.adj-swatch button.on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
 /* The shadow list: a heading per ellipse, then its rows. */
 .adj-group {
   display: flex;

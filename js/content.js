@@ -152,6 +152,15 @@
       // one circle sized automatically from the figure, which is what every
       // exhibit did before this existed - so an old bundle keeps its look.
       shadows: shadowList(m.shadows),
+      // Whether those ellipses ride on the figure: tied to its size and its
+      // turn, so scaling the object scales its shadow with it. Off leaves them
+      // fixed on the floor in metres, which is how they behaved before this.
+      shadowFollow: !!m.shadowFollow,
+      // The figure scale the ellipses were drawn at. Only means anything with
+      // shadowFollow on, where the shadow grows by scale / shadowScale.
+      shadowScale: typeof m.shadowScale === 'number' && m.shadowScale > 0
+        ? m.shadowScale
+        : (typeof m.scale === 'number' ? m.scale : 1),
     };
   }
 
@@ -159,9 +168,10 @@
    * Sanitise a list of shadow ellipses.
    *
    * x/z place the ellipse on the floor and w/d are its width and depth, all in
-   * metres from the figure's feet; r turns it, in degrees. Anything missing or
-   * non-numeric falls back rather than reaching the renderer as NaN, because a
-   * NaN in a matrix silently removes the whole mesh.
+   * metres from the figure's feet; r turns it, in degrees; o is its own opacity
+   * on top of the exhibit's shadowOpacity, and c its colour. Anything missing
+   * or non-numeric falls back rather than reaching the renderer as NaN, because
+   * a NaN in a matrix silently removes the whole mesh.
    */
   function shadowList(value) {
     if (!Array.isArray(value)) return [];
@@ -174,13 +184,28 @@
         w: Math.max(0.01, num(b.w, 0.6)),
         d: Math.max(0.01, num(b.d, 0.6)),
         r: num(b.r, 0),
+        o: Math.min(1, Math.max(0, num(b.o, 1))),
+        c: hexColour(b.c, '#000000'),
       };
     });
   }
 
+  /**
+   * A #rrggbb string, or the fallback.
+   *
+   * Worth being strict: three.js answers an unparsable colour with a warning
+   * and white, and white is the one colour a shadow must never be.
+   */
+  function hexColour(value, fallback) {
+    if (typeof value !== 'string') return fallback;
+    var v = value.charAt(0) === '#' ? value : '#' + value;
+    return /^#[0-9a-fA-F]{6}$/.test(v) ? v.toLowerCase() : fallback;
+  }
+
   /** Everything an exhibit may override on top of the model defaults. */
   var MODEL_FIELDS = ['heightMeters', 'rotation', 'offset', 'scale', 'spin',
-                      'playClip', 'lighting', 'shadowOpacity', 'shadows'];
+                      'playClip', 'lighting', 'shadowOpacity', 'shadows',
+                      'shadowFollow', 'shadowScale'];
 
   /** Of those, the ones that are {x,y,z} and must be merged, not replaced. */
   var MODEL_VECTORS = ['rotation', 'offset'];
@@ -197,6 +222,12 @@
       if (k === 'shadows') { target.shadows = shadowList(source.shadows); return; }
       target[k] = MODEL_VECTORS.indexOf(k) === -1 ? source[k] : vec3(source[k], target[k]);
     });
+    // An exhibit that sets a scale but never recorded what scale its ellipses
+    // were drawn at was drawn at that one - assuming otherwise would double the
+    // shadow the moment shadowFollow is hand-edited into content.json.
+    if (source.shadowScale === undefined && typeof source.scale === 'number') {
+      target.shadowScale = source.scale;
+    }
     // Written before the Adjust panel existed: one turn, no other axes.
     if (source.yawOffset !== undefined &&
         (!source.rotation || source.rotation.y === undefined)) {

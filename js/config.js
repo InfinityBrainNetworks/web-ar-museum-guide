@@ -96,12 +96,27 @@ window.AR_CONFIG = {
     //   { x, z }  where it sits, in metres from the figure's feet
     //   { w, d }  its width and depth in metres — unequal values stretch it
     //   { r }     its turn, in degrees
+    //   { o }     its own opacity, multiplied by shadowOpacity above, so one
+    //             blob can be darker than the rest
+    //   { c }     its colour as #rrggbb — black for most rooms, but a cool
+    //             blue under daylight or a warm one under tungsten reads truer
     // Empty means one circle sized automatically from the figure, which is
     // what every exhibit did before this existed. Build a real shape out of
     // several — one for the body, one per foot, a long thin one under an
     // outstretched arm — in the viewer's Adjust panel, where you can see it
     // against the real object. Per exhibit.
     shadows: [],
+
+    // Whether those ellipses ride on the figure. On, they grow with the Size
+    // slider and turn with the figure's own yaw, so scaling a model scales its
+    // shadow to match; pitch, roll and lift are deliberately left out, because
+    // a shadow stays flat on the floor whatever the thing above it is doing.
+    // Off, they stay put in metres. Per exhibit.
+    shadowFollow: false,
+    // The figure scale the ellipses were drawn at; the shadow then grows by
+    // scale / shadowScale. Written by the Adjust panel — there is no reason to
+    // set it by hand.
+    shadowScale: 1,
   },
 
   /**
