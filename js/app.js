@@ -100,6 +100,8 @@
     // debug menu so it can be dialled in on the device.
     lighting: 'baked',
     shadowOpacity: 0.5,
+    // Soft ellipses on the floor. Empty = one circle sized from the figure.
+    shadows: [],
     spin: false,
     playClip: true,
     faceYaw: 0,            // radians, set at placement so the figure faces you
@@ -460,6 +462,7 @@
     S.modelOffset = { x: ex.model.offset.x, y: ex.model.offset.y, z: ex.model.offset.z };
     S.spin = !!ex.model.spin;
     S.playClip = ex.model.playClip !== false;
+    S.shadows = copyShadows(ex.model.shadows);
     S.lighting = ex.model.lighting === 'lit' ? 'lit' : 'baked';
     S.shadowOpacity = typeof ex.model.shadowOpacity === 'number' ? ex.model.shadowOpacity : 0.5;
 
@@ -1422,6 +1425,7 @@
     S.modelOffset = { x: model.offset.x, y: model.offset.y, z: model.offset.z };
     S.spin = !!model.spin;
     S.playClip = model.playClip !== false;
+    S.shadows = copyShadows(model.shadows);
     S.faceYaw = 0;
     S.placedAt = null;
     S.figureFootprint = 0;
@@ -1637,8 +1641,22 @@
   }
 
   // ---------------------------------------------------------------- contact shadow
-  function buildFloorShadow() {
-    if (!cfg.floor.shadow || el.floorShadow.getObject3D('mesh')) return;
+  /*
+   * One soft ellipse per entry in S.shadows, so the shadow can be built up to
+   * roughly the shape of the thing casting it - a body blob, one per foot, a
+   * long thin one under an outstretched arm.
+   *
+   * An empty list keeps the original behaviour exactly: a single circle sized
+   * from the figure's own footprint. That is what every exhibit written before
+   * this had, and what a new one still gets until someone says otherwise.
+   *
+   * Geometry, material and texture are shared by every ellipse. Only the
+   * transforms differ, and the one material carries the master opacity.
+   */
+  var shadowKit = null;
+
+  function shadowResources() {
+    if (shadowKit) return shadowKit;
 
     // Drawn at full strength and scaled down by material.opacity, so the
     // exhibit's shadowOpacity IS the peak opacity you see.
@@ -1652,16 +1670,54 @@
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 128, 128);
 
-    var mesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(1, 1),
-      new THREE.MeshBasicMaterial({
+    shadowKit = {
+      geometry: new THREE.PlaneGeometry(1, 1),
+      material: new THREE.MeshBasicMaterial({
         map: new THREE.CanvasTexture(c),
         transparent: true, depthWrite: false, toneMapped: false,
         opacity: S.shadowOpacity,
-      })
-    );
-    mesh.rotation.x = -Math.PI / 2;   // lie flat on the floor
-    el.floorShadow.setObject3D('mesh', mesh);
+      }),
+    };
+    return shadowKit;
+  }
+
+  function buildFloorShadow() {
+    if (!cfg.floor.shadow) return;
+    if (!el.floorShadow.getObject3D('mesh')) {
+      el.floorShadow.setObject3D('mesh', new THREE.Group());
+      el.floorShadow.setAttribute('position', '0 0 0');
+      el.floorShadow.setAttribute('scale', '1 1 1');
+    }
+  }
+
+  /** The circle an exhibit gets when it has not been given a shadow shape. */
+  function autoShadowBlob() {
+    var upm = S.engine ? S.engine.unitsPerMetre : 1;
+    var spread = Math.max(0.1 * upm, (S.figureFootprint || 0.5 * upm) * 2.1) / upm;
+    return { x: 0, z: 0, w: spread, d: spread, r: 0 };
+  }
+
+  function copyShadows(list) {
+    return (list || []).map(function (b) {
+      return { x: b.x, z: b.z, w: b.w, d: b.d, r: b.r };
+    });
+  }
+
+  /** Grow or shrink the pool of ellipse meshes to match the list. */
+  function syncShadowMeshes(group, wanted) {
+    var kit = shadowResources();
+    while (group.children.length < wanted) {
+      // A wrapper turns the ellipse on the floor; the plane inside it keeps the
+      // fixed lie-flat tilt. Two objects, so no Euler-order guesswork.
+      var wrapper = new THREE.Object3D();
+      var mesh = new THREE.Mesh(kit.geometry, kit.material);
+      mesh.rotation.x = -Math.PI / 2;
+      wrapper.add(mesh);
+      group.add(wrapper);
+    }
+    while (group.children.length > wanted) {
+      group.remove(group.children[group.children.length - 1]);
+    }
   }
 
   function updateFloorShadow() {
@@ -1672,16 +1728,24 @@
     el.floorShadow.setAttribute('visible', on);
     if (!on) return;
 
-    var mesh = el.floorShadow.getObject3D('mesh');
-    if (mesh && mesh.material) {
-      mesh.material.opacity = opacity;
-      mesh.material.needsUpdate = true;
-    }
+    buildFloorShadow();
+    var group = el.floorShadow.getObject3D('mesh');
+    if (!group) return;
+
+    shadowResources().material.opacity = opacity;
+    shadowResources().material.needsUpdate = true;
+
+    var blobs = S.shadows.length ? S.shadows : [autoShadowBlob()];
+    syncShadowMeshes(group, blobs.length);
 
     var upm = S.engine ? S.engine.unitsPerMetre : 1;
-    var spread = Math.max(0.1 * upm, (S.figureFootprint || 0.5 * upm) * 2.1);
-    el.floorShadow.setAttribute('position', '0 ' + (0.002 * upm) + ' 0');
-    el.floorShadow.setAttribute('scale', spread + ' ' + spread + ' ' + spread);
+    var lift = 0.002 * upm;          // just clear of the floor, to avoid z-fighting
+    blobs.forEach(function (blob, i) {
+      var wrapper = group.children[i];
+      wrapper.position.set(blob.x * upm, lift + i * 0.0002 * upm, blob.z * upm);
+      wrapper.rotation.set(0, degToRad(blob.r), 0);
+      wrapper.scale.set(Math.max(0.01, blob.w) * upm, 1, Math.max(0.01, blob.d) * upm);
+    });
   }
 
   /**
@@ -2030,10 +2094,6 @@
           { label: 'Shading', choice: [['baked', 'Baked'], ['lit', 'Lit']],
             get: function () { return S.lighting; },
             set: function (v) { S.lighting = v; } },
-          { label: 'Shadow', min: 0, max: 1, step: 0.05,
-            get: function () { return S.shadowOpacity; },
-            set: function (v) { S.shadowOpacity = v; },
-            print: function (v) { return v <= 0 ? 'off' : v.toFixed(2); } },
           { label: 'Spin', choice: [[false, 'Off'], [true, 'On']],
             get: function () { return !!S.spin; },
             set: function (v) { S.spin = v; }, rebuild: true },
@@ -2041,6 +2101,39 @@
             get: function () { return S.playClip !== false; },
             set: function (v) { S.playClip = v; }, rebuild: true },
         ],
+      },
+      {
+        id: 'shadow',
+        label: 'Shadow',
+        hint: 'One circle, sized from the figure, until you add your own. Then ' +
+              'build the shape up out of ellipses: one for the body, one per ' +
+              'foot, a long thin one under an outstretched arm.',
+        rows: [
+          { label: 'Strength', min: 0, max: 1, step: 0.05,
+            get: function () { return S.shadowOpacity; },
+            set: function (v) { S.shadowOpacity = v; },
+            print: function (v) { return v <= 0 ? 'off' : v.toFixed(2); } },
+        ],
+        list: {
+          items: function () { return S.shadows; },
+          add: function () {
+            // The first one matches what was already on the floor, so nothing
+            // jumps the moment you take control of it.
+            if (!S.shadows.length) { S.shadows.push(autoShadowBlob()); return; }
+            var last = S.shadows[S.shadows.length - 1];
+            S.shadows.push({ x: last.x + 0.15, z: last.z, w: last.w * 0.6,
+                             d: last.d * 0.6, r: last.r });
+          },
+          remove: function (i) { S.shadows.splice(i, 1); },
+          rows: [
+            { label: 'X', key: 'x', min: -1.5, max: 1.5, step: 0.01, print: metresOf },
+            { label: 'Z', key: 'z', min: -1.5, max: 1.5, step: 0.01, print: metresOf },
+            { label: 'Width', key: 'w', min: 0.02, max: 4, step: 0.01, print: metresOf },
+            { label: 'Depth', key: 'd', min: 0.02, max: 4, step: 0.01, print: metresOf },
+            { label: 'Turn', key: 'r', min: -90, max: 90, step: 1, wrap: true,
+              print: degreesOf },
+          ],
+        },
       },
       {
         id: 'video',
@@ -2071,6 +2164,7 @@
   /** Push a row's new value into the scene, as cheaply as that row allows. */
   function applyRow(row) {
     if (row.video) { applyVideoFit(); return; }
+    if (row.shadow) { updateFloorShadow(); return; }
     if (row.rebuild) { rebuildFigure(); return; }
     refreshFigure();
   }
@@ -2161,6 +2255,83 @@
     return node;
   }
 
+  /**
+   * The shadow list, rebuilt only when its length changes.
+   *
+   * Regenerating on every sync would replace the very button being tapped, so
+   * values are updated in place and the DOM is only thrown away when an
+   * ellipse is added or removed.
+   */
+  var shadowRendered = -1;
+
+  function renderShadowList(tab) {
+    var host = tab.listEl;
+    host.textContent = '';
+    tab.listRows = [];
+
+    var blobs = tab.list.items();
+    blobs.forEach(function (blob, index) {
+      var head = document.createElement('div');
+      head.className = 'adj-group';
+
+      var title = document.createElement('span');
+      title.textContent = 'Ellipse ' + (index + 1);
+      head.appendChild(title);
+
+      var drop = document.createElement('button');
+      drop.type = 'button';
+      drop.className = 'adj-drop';
+      drop.textContent = 'Remove';
+      drop.addEventListener('click', function () {
+        tab.list.remove(index);
+        updateFloorShadow();
+        shadowRendered = -1;
+        renderShadowList(tab);
+        syncAdjust();
+        markDirty();
+      });
+      head.appendChild(drop);
+      host.appendChild(head);
+
+      tab.list.rows.forEach(function (spec) {
+        var row = {
+          label: spec.label,
+          min: spec.min, max: spec.max, step: spec.step, wrap: spec.wrap,
+          print: spec.print,
+          get: function () { return blob[spec.key]; },
+          set: function (v) { blob[spec.key] = v; },
+          shadow: true,
+        };
+        host.appendChild(buildAdjustRow(row));
+        tab.listRows.push(row);
+      });
+    });
+
+    if (!blobs.length) {
+      var note = document.createElement('p');
+      note.className = 'adj-hint';
+      note.textContent = 'No ellipses of your own yet, so one circle is being ' +
+                         'sized from the figure. Add one to take over.';
+      host.appendChild(note);
+    }
+
+    var add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'btn btn-sm adj-add';
+    add.textContent = '+ Add ellipse';
+    add.addEventListener('click', function () {
+      tab.list.add();
+      updateFloorShadow();
+      shadowRendered = -1;
+      renderShadowList(tab);
+      syncAdjust();
+      markDirty();
+    });
+    host.appendChild(add);
+
+    shadowRendered = blobs.length;
+  }
+
   function buildAdjust() {
     if (ADJUST) return;
     ADJUST = adjustSpec();
@@ -2180,6 +2351,12 @@
       var page = document.createElement('div');
       page.className = 'adjust-page hidden';
       tab.rows.forEach(function (row) { page.appendChild(buildAdjustRow(row)); });
+      if (tab.list) {
+        tab.listEl = document.createElement('div');
+        tab.listEl.className = 'adj-list';
+        page.appendChild(tab.listEl);
+        renderShadowList(tab);
+      }
       if (tab.hint) {
         var hint = document.createElement('p');
         hint.className = 'adj-hint';
@@ -2204,7 +2381,8 @@
   function syncAdjust() {
     if (!ADJUST || el.adjustPanel.classList.contains('hidden')) return;
     ADJUST.forEach(function (tab) {
-      tab.rows.forEach(function (row) {
+      if (tab.list && tab.list.items().length !== shadowRendered) renderShadowList(tab);
+      tab.rows.concat(tab.listRows || []).forEach(function (row) {
         var value = row.get();
         if (row.choice) {
           row.buttons.forEach(function (b, i) {
@@ -2261,6 +2439,13 @@
         },
         lighting: S.lighting,
         shadowOpacity: roundToStep(S.shadowOpacity, 0.01),
+        shadows: S.shadows.map(function (b) {
+          return {
+            x: roundToStep(b.x, 0.01), z: roundToStep(b.z, 0.01),
+            w: roundToStep(b.w, 0.01), d: roundToStep(b.d, 0.01),
+            r: roundToStep(b.r, 1),
+          };
+        }),
         spin: !!S.spin,
         playClip: S.playClip !== false,
       },
@@ -2281,6 +2466,7 @@
     if (!target) return;
     Object.keys(source).forEach(function (k) {
       var v = source[k];
+      if (Array.isArray(v)) { target[k] = v.slice(); return; }
       if (v && typeof v === 'object') {
         target[k] = target[k] || {};
         Object.keys(v).forEach(function (j) { target[k][j] = v[j]; });
@@ -2342,6 +2528,8 @@
     if (!ex) return;
     adoptExhibit(ex);
     if (S.mode === MODE.PLACED) rebuildFigure(); else refreshFigure();
+    updateFloorShadow();
+    shadowRendered = -1;
     syncAdjust();
     adjustNote('Back to this exhibit\u2019s saved values.');
   }
@@ -2443,7 +2631,9 @@
       '  Move x ' + r(S.modelOffset.x) + 'm y ' + r(S.modelOffset.y) +
       'm z ' + r(S.modelOffset.z) + 'm\n' +
       '  Shading: ' + S.lighting +
-      ', contact shadow ' + r(S.shadowOpacity) + '\n' +
+      ', contact shadow ' + r(S.shadowOpacity) +
+      ' (' + (S.shadows.length ? S.shadows.length + ' ellipse(s)' : 'auto circle') +
+      ')\n' +
       '  Phone height (js/config.js floor.cameraHeightMeters): ' + r(S.cameraHeight) + '\n' +
       '  photo: ' + (window.ARCapture ? window.ARCapture.report() : 'capture.js missing') +
       ' shareFiles=' + canShareFiles() +

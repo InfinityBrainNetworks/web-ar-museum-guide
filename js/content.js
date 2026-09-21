@@ -148,12 +148,39 @@
       lighting: m.lighting === 'lit' ? 'lit' : 'baked',
       // Peak opacity of the soft contact shadow under the figure. 0 turns it off.
       shadowOpacity: typeof m.shadowOpacity === 'number' ? m.shadowOpacity : 0.5,
+      // The shape of that shadow, as soft ellipses on the floor. Empty means
+      // one circle sized automatically from the figure, which is what every
+      // exhibit did before this existed - so an old bundle keeps its look.
+      shadows: shadowList(m.shadows),
     };
+  }
+
+  /**
+   * Sanitise a list of shadow ellipses.
+   *
+   * x/z place the ellipse on the floor and w/d are its width and depth, all in
+   * metres from the figure's feet; r turns it, in degrees. Anything missing or
+   * non-numeric falls back rather than reaching the renderer as NaN, because a
+   * NaN in a matrix silently removes the whole mesh.
+   */
+  function shadowList(value) {
+    if (!Array.isArray(value)) return [];
+    var num = function (v, fallback) { return typeof v === 'number' && isFinite(v) ? v : fallback; };
+    return value.map(function (blob) {
+      var b = blob || {};
+      return {
+        x: num(b.x, 0),
+        z: num(b.z, 0),
+        w: Math.max(0.01, num(b.w, 0.6)),
+        d: Math.max(0.01, num(b.d, 0.6)),
+        r: num(b.r, 0),
+      };
+    });
   }
 
   /** Everything an exhibit may override on top of the model defaults. */
   var MODEL_FIELDS = ['heightMeters', 'rotation', 'offset', 'scale', 'spin',
-                      'playClip', 'lighting', 'shadowOpacity'];
+                      'playClip', 'lighting', 'shadowOpacity', 'shadows'];
 
   /** Of those, the ones that are {x,y,z} and must be merged, not replaced. */
   var MODEL_VECTORS = ['rotation', 'offset'];
@@ -167,6 +194,7 @@
   function applyModelFields(target, source) {
     MODEL_FIELDS.forEach(function (k) {
       if (source[k] === undefined) return;
+      if (k === 'shadows') { target.shadows = shadowList(source.shadows); return; }
       target[k] = MODEL_VECTORS.indexOf(k) === -1 ? source[k] : vec3(source[k], target[k]);
     });
     // Written before the Adjust panel existed: one turn, no other axes.
@@ -409,6 +437,7 @@
     load: load,
     MODEL_FIELDS: MODEL_FIELDS,
     MODEL_VECTORS: MODEL_VECTORS,
+    shadowList: shadowList,
     saveExhibitSettings: saveExhibitSettings,
     normalize: normalize,
     blankExhibit: blankExhibit,

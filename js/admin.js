@@ -924,6 +924,24 @@
       e.target.textContent = settings.classList.contains('hidden') ? 'Settings ▾' : 'Settings ▴';
     });
 
+    // --- shadow shape: a list, so it cannot be a bound form field. The viewer's
+    //     Adjust panel builds it against the real object; this just reports it
+    //     and offers the way back to the automatic circle.
+    var shadowCount = settings.querySelector('.shadow-count');
+    var showShadows = function () {
+      var list = (ex.model && ex.model.shadows) || [];
+      shadowCount.textContent = list.length
+        ? list.length + (list.length === 1 ? ' ellipse' : ' ellipses')
+        : 'auto circle';
+    };
+    settings.querySelector('[data-act="clearShadows"]').addEventListener('click', function () {
+      if (!ex.model || !(ex.model.shadows || []).length) return;
+      ex.model.shadows = [];
+      showShadows();
+      save();
+    });
+    showShadows();
+
     // --- settings, bound by path
     settings.querySelectorAll('[data-set]').forEach(function (input) {
       var path = input.dataset.set;

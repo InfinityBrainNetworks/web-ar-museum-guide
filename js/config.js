@@ -91,6 +91,17 @@ window.AR_CONFIG = {
     // 0 turns it off — worth doing when the model already carries its own
     // grounding shadow in the texture. Per exhibit in the portal.
     shadowOpacity: 0.5,
+
+    // The SHAPE of that shadow, as soft ellipses lying on the floor:
+    //   { x, z }  where it sits, in metres from the figure's feet
+    //   { w, d }  its width and depth in metres — unequal values stretch it
+    //   { r }     its turn, in degrees
+    // Empty means one circle sized automatically from the figure, which is
+    // what every exhibit did before this existed. Build a real shape out of
+    // several — one for the body, one per foot, a long thin one under an
+    // outstretched arm — in the viewer's Adjust panel, where you can see it
+    // against the real object. Per exhibit.
+    shadows: [],
   },
 
   /**

@@ -251,7 +251,8 @@ exactly as before — including a line for every save.
 | Tab | What is on it |
 |---|---|
 | **Transform** | Size, Rotate X/Y/Z, Move X/Y/Z |
-| **Effects** | Shading (baked/lit), contact shadow, spin, animation |
+| **Effects** | Shading (baked/lit), spin, animation |
+| **Shadow** | Strength, and the shape of the shadow as ellipses |
 | **Video** | Fit, size and nudge for the video on the painting |
 
 **Size** multiplies the exhibit's real height, and the readout shows what that
@@ -263,6 +264,22 @@ same numbers mean the same thing wherever in the gallery it gets stood up.
 
 Raising a figure leaves its contact shadow on the floor, which is what a raised
 object does. Tilting it does not tilt the shadow either.
+
+### Shaping the shadow
+
+Out of the box the shadow is one circle, sized automatically from the figure —
+exactly what it always was. The **Shadow** tab lets you replace that with as
+many soft ellipses as the shape needs: one under the body, one per foot, a long
+thin one under an outstretched arm.
+
+Each ellipse has **X** and **Z** (where it sits, in metres from the figure's
+feet), **Width** and **Depth** (unequal values stretch it) and **Turn**. The
+first one you add copies the automatic circle, so nothing jumps the moment you
+take control. **Strength** is the peak opacity of all of them together, and 0
+still turns the whole thing off.
+
+Removing every ellipse goes back to the automatic circle, which is also what
+the portal's **Auto** button next to *Shadow shape* does.
 
 ### Getting it into the repo
 
@@ -412,7 +429,8 @@ native build to fight with. The official
 | Portal is empty after it worked | Browser site data was cleared. Import your last exported zip. |
 | An artwork will not track | Too few feature points. Compile and read the count on its card. |
 | Figure goes dark down one side as you walk around | Its lighting is baked into the texture and the scene light is shading it again. Set *Shading* to **baked**. |
-| Two shadows under the figure | The model carries its own. Set *Contact shadow* to 0. |
+| Two shadows under the figure | The model carries its own. Set Adjust → Shadow → **Strength** to 0. |
+| Shadow is a circle under a figure that is not | Adjust → **Shadow** → add ellipses and shape it. |
 | Figure is the wrong size | *Figure height* is the real-world height; Adjust → **Size** is the quick nudge. |
 | Adjust → Save says there is no draft | That browser has never opened `admin.html`. Use **Copy**, then **Paste adjustments…** in the portal. |
 | Adjust → Save says the exhibit is not in the draft | The draft and the deployed bundle are different sets. Load what is deployed from the portal's ⋯ menu first. |
