@@ -158,7 +158,9 @@
      'actionBar', 'arBtn', 'placeBtn', 'placeBtnLabel', 'moveBtn', 'removeBtn', 'backBtn',
      'errorBanner', 'errorText', 'errorRetry', 'logToggle', 'logBadge', 'logPanel',
      'logList', 'logCount', 'logCopy', 'logDownload', 'logClear', 'logClose', 'logTools',
-     'logToolsToggle', 'copyToast', 'dumpState', 'reloadBtn', 'overlay'
+     'logToolsToggle', 'copyToast', 'dumpState', 'reloadBtn', 'overlay',
+     'brandBar', 'shotBtn', 'shutterFlash', 'photoSheet', 'photoPreview',
+     'photoHint', 'photoSave', 'photoClose'
     ].forEach(function (id) { el[id] = $(id); });
   }
 
@@ -519,6 +521,22 @@
     toggle(el.moveBtn, m === MODE.PLACED);
     toggle(el.removeBtn, m === MODE.PLACED);
     toggle(el.backBtn, m === MODE.FLOOR || m === MODE.PLACED);
+    // The photo is of the figure standing on the floor, so it only makes sense
+    // once there is one.
+    var shutter = m === MODE.PLACED && (cfg.photo || {}).enabled !== false;
+    toggle(el.shotBtn, shutter);
+    el.actionBar.classList.toggle('with-shutter', shutter);
+
+    // The logo strip frames the shot, so it is on screen for the whole of the
+    // floor scene rather than only at the moment of pressing the shutter.
+    var onFloor = m === MODE.FLOOR || m === MODE.PLACED;
+    var framing = onFloor && (cfg.branding || {}).showOnScreen !== false &&
+                  el.brandBar.childNodes.length > 0;
+    toggle(el.brandBar, framing);
+    el.overlay.classList.toggle('framing', framing);
+    // Leaving the floor scene while looking at a photo drops the sheet too,
+    // rather than leaving it floating over scene 1.
+    if (!onFloor) hide(el.photoSheet);
 
     var anyButton = (m === MODE.SCAN && S.videoConfirmed) ||
                     (m === MODE.FLOOR) || (m === MODE.PLACED);
@@ -1047,6 +1065,11 @@
       },
 
       tick: function () {
+        // A photo taken during a WebXR session can only read the passthrough
+        // picture from inside an XRFrame, and this is the only place that has
+        // one. Outside XR scene.frame is null and the shot is already done.
+        if (window.ARCapture) window.ARCapture.tick(el.scene.frame);
+
         var engine = S.engine;
         if (!engine || (S.mode !== MODE.FLOOR && S.mode !== MODE.PLACED)) return;
 
@@ -1709,6 +1732,133 @@
                 ? ' ("View in 3D" stays available — scene 2 does not need the painting)' : ''));
   }
 
+  // ---------------------------------------------------------------- the photo
+  /*
+   * Scene 3's souvenir. js/capture.js does the compositing; everything here is
+   * the button, the flash and what happens to the picture afterwards.
+   */
+  var lastShot = null;
+
+  /** The logo row over the camera feed, mirroring what the photo will print. */
+  function renderBrandBar() {
+    var host = el.brandBar;
+    var brand = cfg.branding || {};
+    if (!host) return;
+
+    host.textContent = '';
+    if (brand.showOnScreen === false) return;
+
+    var slot = function (label) {
+      var span = document.createElement('span');
+      span.className = 'brand-slot';
+      span.textContent = label;
+      return span;
+    };
+
+    (brand.logos || []).forEach(function (entry) {
+      var label = entry.label || 'LOGO';
+      if (!entry.src) { host.appendChild(slot(label)); return; }
+      var img = document.createElement('img');
+      img.alt = label;
+      // No file there yet: show the same dashed box the photo will draw, so the
+      // strip is never a silent gap.
+      img.addEventListener('error', function () {
+        if (img.parentNode) img.parentNode.replaceChild(slot(label), img);
+      });
+      img.src = entry.src;
+      host.appendChild(img);
+    });
+  }
+
+  function flash() {
+    var f = el.shutterFlash;
+    if (!f) return;
+    f.classList.remove('fire');
+    void f.offsetWidth;            // forces the animation to restart
+    f.classList.add('fire');
+  }
+
+  /** Whether the share sheet - the only way into the camera roll - is open to us. */
+  function canShareFiles() {
+    try {
+      if (!navigator.share || !navigator.canShare) return false;
+      return navigator.canShare({ files: [new File([], 'p.jpg', { type: 'image/jpeg' })] });
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function takePhoto() {
+    if (!window.ARCapture) { log.error('js/capture.js did not load'); return; }
+
+    el.shotBtn.disabled = true;
+    el.shotBtn.classList.add('busy');
+    flash();
+    log.event('photo: shutter pressed in the ' +
+              (S.engine ? S.engine.name : 'no') + ' engine');
+
+    var done = function () {
+      el.shotBtn.disabled = false;
+      el.shotBtn.classList.remove('busy');
+    };
+
+    window.ARCapture.request().then(function (shot) {
+      done();
+      showPhoto(shot);
+    }, function (err) {
+      done();
+      log.error('photo failed: ' + (err && err.message ? err.message : err));
+      showError('The photo could not be taken. Open the log and send it.', false);
+    });
+  }
+
+  function showPhoto(shot) {
+    if (lastShot) URL.revokeObjectURL(lastShot.url);
+    lastShot = { blob: shot.blob, url: URL.createObjectURL(shot.blob) };
+    el.photoPreview.src = lastShot.url;
+
+    var notes = [];
+    if (!shot.hasFeed) {
+      notes.push('This device would not hand over the camera picture, so there ' +
+                 'is no room behind the figure.');
+    }
+    if (!shot.hasLayer) notes.push('The figure could not be drawn into this one.');
+    if (!notes.length) {
+      notes.push(canShareFiles()
+        ? 'Save opens the share sheet - pick Photos to put it in your gallery.'
+        : 'Save downloads the picture. You can also press and hold it to save it.');
+    }
+    el.photoHint.textContent = notes.join(' ');
+    show(el.photoSheet);
+  }
+
+  function closePhoto() {
+    hide(el.photoSheet);
+    el.photoSave.disabled = false;
+    el.photoSave.textContent = 'Save to photos';
+  }
+
+  function savePhoto() {
+    if (!lastShot) return;
+    el.photoSave.disabled = true;
+    window.ARCapture.save(lastShot.blob).then(function (how) {
+      el.photoSave.disabled = false;
+      if (how === 'cancelled') return;
+      if (how === 'downloaded') {
+        el.photoSave.textContent = 'Saved';
+        el.photoHint.textContent = 'Saved to this device. Android files it under ' +
+                                   'Downloads, which your gallery picks up.';
+        return;
+      }
+      closePhoto();
+    }, function (err) {
+      el.photoSave.disabled = false;
+      log.error('saving the photo failed: ' + err);
+      el.photoHint.textContent = 'That could not be saved. Press and hold the ' +
+                                 'picture instead.';
+    });
+  }
+
   // ---------------------------------------------------------------- debug tools
   function wireDebugTools() {
     var fitBtn = el.logTools.querySelector('[data-tool="fit"]');
@@ -1794,6 +1944,9 @@
       '  Shading: ' + S.lighting +
       ', contact shadow ' + r(S.shadowOpacity) + '\n' +
       '  Phone height (js/config.js floor.cameraHeightMeters): ' + r(S.cameraHeight) + '\n' +
+      '  photo: ' + (window.ARCapture ? window.ARCapture.report() : 'capture.js missing') +
+      ' shareFiles=' + canShareFiles() +
+      ' logoSlots=' + ((cfg.branding && cfg.branding.logos) || []).length + '\n' +
       '  content: ' + (bundle ? bundle.source : '?') + ', ' + exhibits.length +
       ' exhibit(s), active ' + S.activeIndex + '\n' +
       '  scene: ' + S.mode +
@@ -1900,6 +2053,11 @@
       log.event('figure removed');
     });
     el.backBtn.addEventListener('click', leaveFloorScene);
+
+    renderBrandBar();
+    el.shotBtn.addEventListener('click', takePhoto);
+    el.photoSave.addEventListener('click', savePhoto);
+    el.photoClose.addEventListener('click', closePhoto);
 
     window.addEventListener('orientationchange', function () {
       setTimeout(function () {
@@ -2013,6 +2171,24 @@
     if (!preflight()) return;
 
     THREE = window.AFRAME.THREE;
+
+    // js/capture.js owns none of the scene; this is the whole of what it can
+    // reach into, so there is one place to look when a photo comes out wrong.
+    if (window.ARCapture) {
+      window.ARCapture.init({
+        log: log,
+        photo: cfg.photo || {},
+        branding: cfg.branding || {},
+        renderer: function () { return el.scene.renderer; },
+        sceneObject: function () { return el.scene.object3D; },
+        camera: function () { return el.scene.camera; },
+        videoFeed: function () {
+          var system = el.scene.systems['mindar-image-system'];
+          return system && system.video;
+        },
+      });
+    }
+
     registerClipPlayer();
     registerFloorDriver();
     // Registered above rather than in index.html, because A-Frame only applies a

@@ -143,6 +143,50 @@ window.AR_CONFIG = {
     shadow: true,
   },
 
+  /**
+   * Scene 3's camera button.
+   *
+   * The picture is composed, not screenshotted: the camera feed and the 3D
+   * figure live in different places (see js/capture.js), so both are fetched
+   * deliberately and drawn onto one canvas at the screen's aspect ratio.
+   */
+  photo: {
+    enabled: true,
+    // Longest edge of the saved picture, in pixels.
+    maxEdge: 1600,
+    format: 'image/jpeg',
+    quality: 0.92,
+    // Saved as <fileName>-<timestamp>.jpg.
+    fileName: 'museum-ar',
+  },
+
+  /**
+   * The logo strip printed across the top of every photo.
+   *
+   * Each slot is a labelled dashed box until you give it a `src`: drop the
+   * artwork into assets/logos/ and fill the path in. Transparent PNG or SVG,
+   * any width — the strip sizes every logo by height and keeps its aspect
+   * ratio. Add, remove or rename slots freely; the row is centred and rescaled
+   * to whatever is in it.
+   */
+  branding: {
+    // Also show the strip on screen while the floor scene is open, so what you
+    // frame is what you get.
+    showOnScreen: true,
+    // Strip height as a fraction of the picture's height.
+    heightRatio: 0.075,
+    // Gap between logos, same units.
+    gapRatio: 0.03,
+    // Dark gradient behind the strip, so pale logos stay legible over a bright
+    // gallery wall.
+    scrim: true,
+    logos: [
+      { src: null, label: 'LOGO 1' },   // e.g. './assets/logos/logo-1.png'
+      { src: null, label: 'LOGO 2' },
+      { src: null, label: 'LOGO 3' },
+    ],
+  },
+
   // MindAR tuning. -1 keeps the library default.
   //   filterMinCF  lower  = smoother, laggier   (default 0.001)
   //   filterBeta   higher = snappier, jitterier (default 1000)

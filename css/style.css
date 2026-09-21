@@ -18,6 +18,10 @@
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
+  /* How far the action bar sits above the bottom edge, on top of the safe
+     area. The last band of the screen belongs to the gesture bar and the
+     browser's own chrome, and a button down there is awkward to reach. */
+  --bar-lift: 38px;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -66,7 +70,8 @@ a-scene, .a-canvas { width: 100% !important; height: 100% !important; }
 #overlay > .action-bar,
 #overlay > .error-banner,
 #overlay > .log-toggle,
-#overlay > .log-panel { pointer-events: auto; }
+#overlay > .log-panel,
+#overlay > .photo-sheet { pointer-events: auto; }
 .a-enter-vr, .a-enter-ar, .a-orientation-modal { display: none !important; }
 
 .hidden { display: none !important; }
@@ -277,13 +282,152 @@ a-scene, .a-canvas { width: 100% !important; height: 100% !important; }
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 16px calc(18px + var(--safe-r)) calc(20px + var(--safe-b)) calc(18px + var(--safe-l));
+  padding: 16px calc(18px + var(--safe-r)) calc(var(--bar-lift) + var(--safe-b)) calc(18px + var(--safe-l));
   background: linear-gradient(to top, rgba(6, 8, 12, 0.85), transparent);
   transform: translateY(130%);
   transition: transform 0.38s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.25s ease;
 }
 .action-bar.up { transform: translateY(0); }
 .action-bar.dim { opacity: 0.45; }
+
+/* ---------------------------------------------------------------- brand strip */
+/* Decoration over the camera feed. js/capture.js draws the same row into the
+   photo itself, so this is only here to show where it will land. */
+.brand-bar {
+  position: fixed;
+  z-index: 25;
+  top: calc(10px + var(--safe-t));
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 6px 12px;
+  pointer-events: none;
+}
+/* The strip owns the top of the screen while it is up, so the status chip and
+   the debug button step down out from under it rather than sitting on a logo. */
+.framing .status-chip,
+.framing .log-toggle { top: calc(58px + var(--safe-t)); }
+
+.brand-bar img {
+  height: 26px;
+  width: auto;
+  max-width: 28vw;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.55));
+}
+/* A slot whose file is not there yet, matching what the photo draws. */
+.brand-slot {
+  height: 26px;
+  min-width: 62px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px dashed rgba(255, 255, 255, 0.6);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.10);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+/* ---------------------------------------------------------------- shutter */
+.shutter {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 66px;
+  height: 66px;
+  padding: 0;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.12s ease;
+}
+.shutter:active { transform: scale(0.92); }
+.action-bar.with-shutter .shutter { order: -1; }
+.action-bar.with-shutter::after {
+  content: '';
+  order: -1;
+  flex-basis: 100%;
+  height: 0;
+}
+.shutter:disabled { opacity: 0.5; pointer-events: none; }
+.shutter-ring {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.12s ease;
+}
+.shutter:active .shutter-ring { transform: scale(0.86); }
+.shutter.busy .shutter-ring { background: var(--accent); }
+
+.shutter-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+}
+.shutter-flash.fire { animation: flash 0.32s ease-out; }
+@keyframes flash { 0% { opacity: 0.85; } 100% { opacity: 0; } }
+
+/* ---------------------------------------------------------------- photo sheet */
+.photo-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(16px + var(--safe-t)) 16px calc(16px + var(--safe-b));
+  background: rgba(6, 8, 12, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.photo-card {
+  width: 100%;
+  max-width: 420px;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.photo-card img {
+  min-height: 0;
+  max-width: 100%;
+  flex: 1 1 auto;
+  object-fit: contain;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: #000;
+}
+.photo-hint {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+  text-align: center;
+}
+.photo-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
 
 /* ---------------------------------------------------------------- error */
 .error-banner {

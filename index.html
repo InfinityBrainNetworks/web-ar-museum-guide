@@ -31,11 +31,14 @@
        #floorScene - scene 2/3, floor mapping, driven by WebXR hit-test or the
                      gyroscope fallback. Never both at once.
      webxr's dom-overlay keeps #overlay on screen during an immersive session;
-     without it the whole UI would vanish the moment WebXR starts. -->
+     without it the whole UI would vanish the moment WebXR starts. camera-access
+     is what lets the photo button reach the passthrough picture; it is optional,
+     so a device without it still starts a normal session and only the photo's
+     background is lost. -->
 <a-scene
   id="scene"
   mindar-image="imageTargetSrc: ./assets/content/targets.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no"
-  webxr="optionalFeatures: hit-test,dom-overlay; overlayElement: #overlay"
+  webxr="optionalFeatures: hit-test,dom-overlay,camera-access; overlayElement: #overlay"
   color-space="sRGB"
   embedded
   renderer="colorManagement: true; alpha: true"
@@ -108,10 +111,14 @@
   <p class="scan-text" id="floorText">Point your phone down at the floor and move it slowly</p>
 </section>
 
-<!-- 5. Status chip -->
+<!-- 5. Logo strip. Decoration only - the same row is drawn into every
+        photo by js/capture.js, so what you frame is what you get. -->
+<div id="brandBar" class="brand-bar hidden" aria-hidden="true"></div>
+
+<!-- 6. Status chip -->
 <div id="statusChip" class="status-chip hidden"><span class="dot"></span><span id="statusText">Tracking</span></div>
 
-<!-- 6. Bottom action bar. Which buttons show is entirely a function of the
+<!-- 7. Bottom action bar. Which buttons show is entirely a function of the
         current scene — see applyModeUI() in js/app.js. -->
 <div id="actionBar" class="action-bar hidden">
   <button id="backBtn" class="btn btn-ghost btn-sm hidden" type="button">↩ Painting</button>
@@ -122,16 +129,33 @@
     <span class="btn-icon">🗿</span><span id="placeBtnLabel">Place AR figure on the floor</span>
   </button>
   <button id="moveBtn" class="btn btn-ghost btn-sm hidden" type="button">Move</button>
+  <button id="shotBtn" class="shutter hidden" type="button" aria-label="Take a photo">
+    <span class="shutter-ring"></span>
+  </button>
   <button id="removeBtn" class="btn btn-ghost btn-sm hidden" type="button">Remove</button>
 </div>
 
-<!-- 7. Error banner -->
+<!-- 8. Shutter flash, and the picture that came out of it -->
+<div id="shutterFlash" class="shutter-flash" aria-hidden="true"></div>
+
+<section id="photoSheet" class="photo-sheet hidden">
+  <div class="photo-card">
+    <img id="photoPreview" alt="The picture you just took">
+    <p id="photoHint" class="photo-hint"></p>
+    <div class="photo-actions">
+      <button id="photoSave" class="btn btn-primary" type="button">Save to photos</button>
+      <button id="photoClose" class="btn btn-ghost" type="button">Back to AR</button>
+    </div>
+  </div>
+</section>
+
+<!-- 9. Error banner -->
 <div id="errorBanner" class="error-banner hidden">
   <p id="errorText"></p>
   <button id="errorRetry" class="btn btn-ghost btn-sm" type="button">Retry</button>
 </div>
 
-<!-- 8. Debug / log window -->
+<!-- 10. Debug / log window -->
 <button id="logToggle" class="log-toggle" type="button" aria-label="Open debug log">
   <span>🐞</span><span id="logBadge" class="log-badge hidden">0</span>
 </button>
@@ -194,6 +218,7 @@
 
 </div><!-- /#overlay -->
 
+<script src="./js/capture.js"></script>
 <script src="./js/app.js"></script>
 </body>
 </html>

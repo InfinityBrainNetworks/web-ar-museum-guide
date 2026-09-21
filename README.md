@@ -8,7 +8,8 @@ Three separate scenes, in order:
    onto it. Once playback is confirmed, **View in 3D** appears.
 2. **Floor** — image tracking and the video stop. Point the phone at the floor;
    when a surface holds still, **Place AR figure on the floor** appears.
-3. **Placed** — the figure stands where you put it.
+3. **Placed** — the figure stands where you put it, and the shutter button
+   takes a photo of the whole scene for the visitor to keep.
 
 They are deliberately independent. Nothing in scenes 2 and 3 needs the painting,
 so you can walk away from it, and **View in 3D** stays on screen once earned
@@ -86,6 +87,7 @@ combination cannot reach the repo.
 | `admin.html` | The authoring portal |
 | `js/content.js` | Resolves which exhibits to show, and the shared IndexedDB store |
 | `js/app.js` | The three-scene machine, video mapping, both floor engines, debug tools |
+| `js/capture.js` | The photo: composing camera feed + figure + logo strip, and saving it |
 | `js/admin.js` | The portal: editing, compiling, export, import |
 | `js/zip.js` | Dependency-free ZIP reader/writer for the bundles |
 | `js/config.js` | Global settings, plus the defaults a new exhibit starts from |
@@ -94,6 +96,7 @@ combination cannot reach the repo.
 | `assets/content/content.json` | **What the AR page reads** — every exhibit, in target order |
 | `assets/content/targets.mind` | Compiled tracking data, written by the portal |
 | `assets/targets/`, `assets/video/` | The original single exhibit, still referenced by `content.json` |
+| `assets/logos/` | Drop the logo strip's artwork in here |
 | `tools/` | Offline compiler, the command-line equivalent of the portal's Compile |
 
 ### Where content comes from
@@ -172,6 +175,64 @@ the device without reloading anything.
 *Contact shadow* is the soft blob under the figure, 0 to 1. **Set it to 0 or
 around 0.1 for a model that already has its own grounding shadow in the
 texture**, or you get a second shadow stacked under the first.
+
+## The photo
+
+Once the figure is standing, a shutter button appears. It takes one picture of
+the whole scene — the real room from the camera, the figure standing in it, and
+a strip of logos across the top — and offers it to the phone's share sheet,
+which is what puts it in the camera roll on both platforms. If the share sheet
+is unavailable the picture downloads instead; on Android that lands in
+Downloads, which the gallery picks up.
+
+Nothing is uploaded. The picture is composed in the page and handed straight to
+the operating system.
+
+### Why it is composed rather than screenshotted
+
+Neither half of the picture is in the canvas:
+
+- **The camera feed** is a `<video>` painted *behind* the canvas on the gyro
+  path, and on WebXR it is the system compositor's passthrough, which never
+  enters our GL context at all. That one has to be asked for by name — the
+  `camera-access` session feature, requested in `index.html` — and read back
+  inside the very XR frame that handed the texture over.
+- **The figure** is in the drawing buffer, which is wiped before the next line
+  of JavaScript runs, and during a WebXR session is not the canvas's buffer at
+  all but the session's.
+
+So `js/capture.js` fetches both deliberately: it re-renders the scene into an
+offscreen target through the live camera's own pose and projection, reads the
+camera picture back, and draws feed → figure → logos onto a 2D canvas. The log
+says which parts it got: `camera feed: yes, figure: yes`.
+
+`camera-access` is requested as *optional*, so a device that will not grant it
+still starts a normal AR session — only the photo's background is lost, and
+both the log and the preview say so in as many words.
+
+### The logo strip
+
+Three labelled dashed boxes by default. To use real artwork, drop it into
+`assets/logos/` and fill in the `src` for that slot in `branding.logos`
+(`js/config.js`):
+
+```js
+logos: [
+  { src: './assets/logos/logo-1.png', label: 'LOGO 1' },
+  ...
+]
+```
+
+Transparent PNG or SVG, any width — every logo is sized by height and keeps its
+aspect ratio, so wordmarks and square badges mix. Add, remove or rename slots
+freely; the row is centred and squeezed to fit whatever is in it. A slot without
+a `src` stays a placeholder box, in the photo and on screen, so the layout is
+visible and correctly spaced before the artwork exists.
+
+The same `branding` block sets the strip's height and spacing, the dark gradient
+behind it, and whether it also shows on screen during the floor scene — it does
+by default, so what you frame is what you get. `photo` next to it sets the
+picture's size, format and file name.
 
 ## Finding the floor
 
@@ -303,6 +364,9 @@ native build to fight with. The official
 | Figure goes dark down one side as you walk around | Its lighting is baked into the texture and the scene light is shading it again. Set *Shading* to **baked**. |
 | Two shadows under the figure | The model carries its own. Set *Contact shadow* to 0. |
 | Figure is the wrong size | *Figure height* is the real-world height; *Size multiplier* is the quick nudge. |
+| Photo has the figure but no room behind it | The device would not grant `camera-access`, so the WebXR passthrough is unreadable. The log says so. |
+| Photo button never appears | It is scene 3 only — place the figure first. `photo.enabled: false` also hides it. |
+| Logos show as dashed boxes | No `src` set for those slots. See **The logo strip**. |
 | "Must be served over https" | Camera is blocked on plain http. Use the Pages URL. |
 | Camera never starts on iOS | Opened inside Instagram/Facebook/etc. Those in-app browsers block `getUserMedia` — open in Safari. |
 | Permission was denied once | iOS: Settings → Safari → Camera. Android: tap the padlock in the address bar → Permissions. |
