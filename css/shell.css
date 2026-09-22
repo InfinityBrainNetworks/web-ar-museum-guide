@@ -1,0 +1,646 @@
+/* ============================================================================
+   The browse half: Explore, Exhibit, Settings, and the bottom navigation.
+   ---------------------------------------------------------------------------
+   Everything here lives in #shell, which is a SIBLING of #overlay, not a child
+   of it. That is deliberate and worth keeping:
+
+     #overlay is WebXR's dom-overlay element. A-Frame injects
+     `.a-dom-overlay:not(.a-no-style) > * { pointer-events: auto }` into the
+     page, so every full-bleed direct child of #overlay silently swallows taps
+     meant for the ones beneath it. It has cost us two bugs already.
+
+   These screens never coexist with a WebXR session - entering AR hides the
+   whole shell - so they have no business inside that element, and outside it
+   they cannot join the pointer-events opt-in list by accident.
+   ========================================================================== */
+
+.shell {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  background: var(--c-bg);
+  color: var(--c-text);
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------------ top bar */
+.shell-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(10px + var(--safe-t)) 14px 10px;
+  background: linear-gradient(180deg, rgba(20, 17, 16, 0.96), rgba(20, 17, 16, 0.82));
+  border-bottom: 1px solid var(--c-hairline-soft);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  z-index: 2;
+}
+
+.shell-wordmark {
+  font-family: var(--font-serif);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  /* display:block, not flex. text-overflow only ellipsizes a block's own
+     text; in a flex container the words become an anonymous child and a long
+     Sinhala screen name runs under the buttons instead of trailing off. */
+  display: block;
+  text-overflow: ellipsis;
+}
+/* The lamp: a small warm dot that breathes, the only ornament in the bar. */
+.shell-wordmark::before {
+  content: "";
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c-amber);
+  box-shadow: 0 0 10px 2px rgba(232, 163, 61, 0.6);
+  animation: ibn-breathe var(--d-amb) ease-in-out infinite;
+}
+
+.icon-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 38px;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--c-hairline-soft);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--c-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background-color var(--d-base) var(--ease-soft),
+              border-color var(--d-base) var(--ease-soft),
+              transform var(--d-fast) var(--ease-press);
+}
+.icon-btn:active { transform: scale(0.94); }
+.icon-btn svg { width: 19px; height: 19px; }
+.icon-btn.on { border-color: var(--c-terracotta); color: var(--c-terracotta-lt); }
+
+/* --------------------------------------------------------------- the views */
+.shell-body {
+  flex: 1 1 auto;
+  position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  /* Clears the nav bar, whose raised centre button sits above its own box. */
+  padding-bottom: calc(96px + var(--safe-b));
+}
+
+.view { display: none; }
+.view.on { display: block; }
+
+/* ------------------------------------------------------------------ explore */
+.explore-head { padding: 22px 18px 16px; }
+.explore-head .eyebrow {
+  margin: 0 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--c-amber);
+}
+.explore-head .eyebrow::before {
+  content: "";
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.explore-head h1 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 30px;
+  line-height: 1.18;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+/* The second line of the headline, set in italic terracotta - the one place
+   the app lets itself be decorative. */
+.explore-head h1 em {
+  display: block;
+  font-style: italic;
+  color: var(--c-terracotta-lt);
+}
+
+/* The grid of artworks. Two columns on a phone; the target image doubles as
+   the photograph, which is why Explore needed no new content. */
+.exhibit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 4px 18px 8px;
+}
+@media (min-width: 560px) {
+  .exhibit-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+.exhibit-card {
+  appearance: none;
+  -webkit-appearance: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 8px;
+  border: 1px solid var(--c-hairline-soft);
+  border-radius: 14px;
+  background: var(--c-surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--d-base) var(--ease-museum),
+              border-color var(--d-base) var(--ease-soft);
+}
+.exhibit-card:active { transform: scale(0.975); }
+.exhibit-card:hover { border-color: var(--c-hairline); }
+
+.exhibit-thumb {
+  position: relative;
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--c-elevated);
+  aspect-ratio: 1 / 1;
+}
+.exhibit-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* No target image is not a broken card - it is an exhibit the portal has not
+   finished. Say which. */
+.exhibit-thumb .no-image {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  opacity: 0.4;
+}
+
+/* What this exhibit can do, as a badge in the corner of its photograph. */
+.exhibit-badge {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--c-hairline);
+  background: var(--c-glass);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--c-amber);
+}
+.exhibit-badge svg { width: 14px; height: 14px; }
+
+.exhibit-card h3 {
+  margin: 9px 2px 0;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.28;
+  font-weight: 600;
+  /* Two lines, then ellipsis. A Sinhala title runs 20-40% longer than its
+     English original, so the clamp is what keeps the grid on a grid. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.exhibit-card p {
+  margin: 3px 2px 2px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--c-text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* --------------------------------------------------------- the empty state */
+.shell-empty {
+  margin: 8px 18px;
+  padding: 26px 20px;
+  border: 1px dashed var(--c-hairline);
+  border-radius: 16px;
+  text-align: center;
+}
+.shell-empty .glyph { font-size: 30px; opacity: 0.55; }
+.shell-empty h2 {
+  margin: 12px 0 6px;
+  font-family: var(--font-serif);
+  font-size: 19px;
+  font-weight: 600;
+}
+.shell-empty p { margin: 0; color: var(--c-text-2); font-size: 13.5px; line-height: 1.6; }
+
+/* ------------------------------------------------------- the exhibit screen */
+/* The same label the AR sheet shows, given a whole page: opened from Explore
+   there is no camera behind it to keep visible, so there is no reason to
+   crowd it into the bottom 82%. */
+.exhibit-hero {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: var(--c-elevated);
+  overflow: hidden;
+}
+.exhibit-hero img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* The photograph dissolves into the page rather than ending on a hard edge. */
+.exhibit-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(20,17,16,0.35) 0%, transparent 32%,
+                              transparent 58%, var(--c-bg) 100%);
+  pointer-events: none;
+}
+
+.exhibit-head { padding: 2px 18px 0; margin-top: -26px; position: relative; z-index: 1; }
+.exhibit-head .kicker {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--c-amber);
+}
+.exhibit-head h1 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 26px;
+  line-height: 1.22;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+/* The same title in the museum's other languages, under the one being read.
+   A visitor recognising their own script here is how they learn the app has
+   it at all. */
+.exhibit-alts { margin: 7px 0 0; display: flex; flex-direction: column; gap: 2px; }
+.exhibit-alts span { font-size: 14px; color: var(--c-text-2); }
+
+/* What this exhibit carries, as three small facts rather than prose. */
+.exhibit-facts {
+  display: flex;
+  gap: 9px;
+  padding: 16px 18px 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.exhibit-facts::-webkit-scrollbar { display: none; }
+.exhibit-facts:empty { display: none; }
+.fact {
+  flex: 0 0 auto;
+  min-width: 96px;
+  padding: 10px 12px;
+  border: 1px solid var(--c-hairline-soft);
+  border-radius: 12px;
+  background: var(--c-surface);
+}
+.fact svg { width: 17px; height: 17px; color: var(--c-amber); display: block; }
+.fact strong { display: block; margin-top: 7px; font-size: 13px; font-weight: 600; }
+.fact span { display: block; margin-top: 1px; font-size: 11.5px; color: var(--c-text-2); }
+
+/* A gold rule with a small ornament, between the facts and the narrative. */
+.exhibit-rule {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 20px 18px 14px;
+  color: var(--c-gold);
+  font-size: 12px;
+}
+.exhibit-rule::before, .exhibit-rule::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--c-hairline), transparent);
+}
+
+.exhibit-body { padding: 0 18px; }
+.exhibit-body h2 {
+  margin: 0 0 10px;
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 600;
+}
+/* The authored rich text. Styled for exactly the tags the sanitiser allows -
+   see RICH_TAGS in js/content.js - so nothing can arrive here unstyled. */
+.rich-text { font-size: 15.5px; line-height: 1.68; color: var(--c-text); }
+.rich-text h2 {
+  margin: 22px 0 8px;
+  font-family: var(--font-serif);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--c-text);
+}
+.rich-text h3 {
+  margin: 18px 0 6px;
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--c-terracotta-lt);
+}
+.rich-text p { margin: 0 0 12px; }
+.rich-text ul, .rich-text ol { margin: 0 0 12px; padding-left: 1.25em; }
+.rich-text li { margin: 0 0 6px; }
+.rich-text li::marker { color: var(--c-amber); }
+.rich-text strong { font-weight: 700; }
+.rich-text u { text-decoration-color: var(--c-amber); text-underline-offset: 2px; }
+.rich-text > *:first-child { margin-top: 0; }
+.rich-text .empty-note { color: var(--c-text-3); font-style: italic; }
+
+.exhibit-note {
+  margin: 14px 18px 0;
+  padding: 10px 13px;
+  border-left: 2px solid var(--c-amber);
+  border-radius: 0 8px 8px 0;
+  background: rgba(232, 163, 61, 0.09);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--c-text-2);
+}
+
+/* The language chips, repeated here because this is the other place a visitor
+   discovers the text is not in their language. */
+.exhibit-langs {
+  display: flex;
+  gap: 8px;
+  padding: 12px 18px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.exhibit-langs::-webkit-scrollbar { display: none; }
+.exhibit-langs:empty { display: none; }
+
+/* The two actions, pinned above the nav so they survive a long narrative. */
+.exhibit-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 10px;
+  /* The negative top margin pulls the fade up over the text rather than
+     leaving a gap; the padding gives it the height to fade IN. Without both,
+     the last line of a long label reads through the buttons. */
+  margin-top: -28px;
+  padding: 34px 18px calc(14px + var(--safe-b));
+  background: linear-gradient(180deg, rgba(20, 17, 16, 0) 0%, var(--c-bg) 46%);
+}
+/* ...and the label needs somewhere to scroll TO, so its last line can clear
+   the buttons instead of ending underneath them. */
+.exhibit-body { padding-bottom: 14px; }
+.exhibit-actions .btn { flex: 1 1 0; justify-content: center; }
+.exhibit-actions .btn svg { width: 17px; height: 17px; }
+
+/* ----------------------------------------------------------------- settings */
+.settings-group { padding: 18px 18px 4px; }
+.settings-group > h2 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--c-text-3);
+}
+.settings-list {
+  border: 1px solid var(--c-hairline-soft);
+  border-radius: 14px;
+  background: var(--c-surface);
+  overflow: hidden;
+}
+.settings-row {
+  appearance: none;
+  -webkit-appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 15px;
+  border: 0;
+  border-bottom: 1px solid var(--c-hairline-soft);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.settings-row:last-child { border-bottom: 0; }
+.settings-row:active { background: var(--c-elevated); }
+.settings-row > svg { flex: none; width: 19px; height: 19px; color: var(--c-amber); }
+.settings-row .label { flex: 1 1 auto; min-width: 0; }
+.settings-row .label strong { display: block; font-size: 14.5px; font-weight: 600; }
+.settings-row .label span { display: block; margin-top: 2px; font-size: 12.5px; color: var(--c-text-2); }
+.settings-row .value { flex: none; font-size: 13px; color: var(--c-text-2); }
+.settings-row .chev { flex: none; color: var(--c-text-3); }
+
+/* A switch, not a checkbox: it reads as a setting rather than a form field. */
+.switch {
+  flex: none;
+  width: 44px;
+  height: 25px;
+  border-radius: 999px;
+  border: 1px solid var(--c-hairline-soft);
+  background: var(--c-elevated);
+  position: relative;
+  transition: background-color var(--d-base) var(--ease-soft),
+              border-color var(--d-base) var(--ease-soft);
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: var(--c-text-2);
+  transition: transform var(--d-base) var(--ease-museum),
+              background-color var(--d-base) var(--ease-soft);
+}
+.settings-row.on .switch { background: var(--c-terracotta-dk); border-color: var(--c-terracotta); }
+.settings-row.on .switch::after { transform: translateX(19px); background: var(--c-text); }
+
+.settings-about {
+  padding: 18px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--c-text-3);
+  text-align: center;
+}
+.settings-about strong { color: var(--c-text-2); }
+
+/* ------------------------------------------------------- not-yet-built tabs */
+/* Map and Feedback are in the bar because the shape of the app is five slots,
+   but neither has what it needs yet - a floor plan and a place to send a
+   message. A tab that says so is honest; one that opens a fake screen is not. */
+.soon-panel {
+  padding: 60px 26px;
+  text-align: center;
+}
+.soon-panel .glyph { color: var(--c-text-3); }
+.soon-panel .glyph svg { width: 40px; height: 40px; }
+.soon-panel h2 {
+  margin: 16px 0 8px;
+  font-family: var(--font-serif);
+  font-size: 21px;
+  font-weight: 600;
+}
+.soon-panel p { margin: 0 auto; max-width: 320px; color: var(--c-text-2); font-size: 14px; line-height: 1.65; }
+.soon-panel .needs {
+  margin: 18px auto 0;
+  max-width: 320px;
+  padding: 12px 14px;
+  border: 1px solid var(--c-hairline-soft);
+  border-radius: 12px;
+  background: var(--c-surface);
+  text-align: left;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--c-text-3);
+}
+.soon-panel .needs strong { display: block; margin-bottom: 4px; color: var(--c-text-2); }
+
+/* ------------------------------------------------------------ bottom nav */
+.shell-nav {
+  flex: 0 0 auto;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-around;
+  height: calc(70px + var(--safe-b));
+  padding: 8px 6px var(--safe-b);
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-hairline-soft);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.6);
+}
+
+.nav-item {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 6px 2px;
+  border: 0;
+  background: none;
+  color: var(--c-text-2);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color var(--d-base) var(--ease-soft), transform var(--d-fast) var(--ease-press);
+}
+.nav-item:active { transform: scale(0.95); }
+.nav-item svg { width: 23px; height: 23px; }
+.nav-item .nav-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-item.on { color: var(--c-terracotta-lt); font-weight: 700; }
+/* The active tab carries a small dot under it, the way the Kotlin app marks
+   the current destination. */
+.nav-item.on::after {
+  content: "";
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.nav-item.dimmed { color: var(--c-text-3); opacity: 0.6; }
+
+/* The raised AR button. The one thing on the bar that is not a destination:
+   it starts the camera. */
+.nav-fab-slot { flex: 1 1 0; display: flex; justify-content: center; }
+.nav-fab {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  top: -18px;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  border: 2px solid var(--c-terracotta-lt);
+  background: var(--c-terracotta);
+  color: #2A1409;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform var(--d-fast) var(--ease-press);
+}
+.nav-fab:active { transform: scale(0.9); }
+.nav-fab svg { width: 27px; height: 27px; }
+.nav-fab[disabled] {
+  background: var(--c-elevated);
+  border-color: var(--c-hairline-soft);
+  color: var(--c-text-3);
+  animation: none;
+  box-shadow: none;
+  cursor: default;
+}
+
+/* A one-line message that rises from the nav and goes away by itself. Used
+   when a tab cannot do anything yet, and when AR is unavailable. */
+.shell-toast {
+  position: absolute;
+  /* Centred by auto margins rather than translateX(-50%): the entrance
+     animation below animates `transform`, and the two would fight - the toast
+     landed hard against the right edge of the screen. */
+  left: 20px;
+  right: 20px;
+  width: fit-content;
+  max-width: calc(100% - 40px);
+  margin: 0 auto;
+  /* Clear of the debug button, which drops to the bottom-right while the
+     shell is up (see .log-toggle.browsing). */
+  bottom: calc(146px + var(--safe-b));
+  z-index: 4;
+  padding: 10px 16px;
+  border: 1px solid var(--c-hairline-soft);
+  border-radius: 999px;
+  background: var(--c-elevated);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+  animation: ibn-rise var(--d-base) var(--ease-museum) both;
+}

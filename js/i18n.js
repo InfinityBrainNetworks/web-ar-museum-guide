@@ -41,11 +41,6 @@
       'lang.continue': 'Continue',
       'lang.change': 'Language',
 
-      'intro.text': 'Point your camera at an artwork. It comes to life on the wall, and you can read or listen to its story.',
-      'intro.start': 'Start AR',
-      'intro.loading': 'Loading…',
-      'intro.unavailable': 'Unavailable',
-      'intro.hint': 'Camera access is required. Nothing is uploaded — everything runs on your device.',
       'intro.empty.title': 'No exhibits yet',
       'intro.empty.text': 'This gallery has no artworks loaded. Add them in the admin portal, compile the targets and export the bundle.',
 
@@ -72,6 +67,53 @@
       'photo.save': 'Save to photos',
       'photo.back': 'Back to AR',
 
+
+      'nav.explore': 'Explore',
+      'nav.map': 'Map',
+      'nav.ar': 'Start AR',
+      'nav.feedback': 'Feedback',
+      'nav.settings': 'Settings',
+
+      'explore.title1': 'Ancient echoes,',
+      'explore.title2': 'living canvas',
+      'explore.count': '{count} artworks',
+      'explore.countOne': '1 artwork',
+
+      'exhibit.about': 'About this exhibit',
+      'exhibit.viewInAr': 'View in AR',
+      'exhibit.scanHint': 'Point your camera at this artwork in the gallery to watch it come alive.',
+
+      'fact.video': 'AR video',
+      'fact.videoSub': 'Plays on the artwork',
+      'fact.image': 'AR picture',
+      'fact.imageSub': 'Appears on the artwork',
+      'fact.model': '3D object',
+      'fact.modelSub': 'Stand it on the floor',
+      'fact.audio': 'Narration',
+      'fact.audioSub': '{count} languages',
+      'fact.audioSubOne': '1 language',
+
+      'btn.back2': 'Back',
+      'btn.exitAr': 'Close AR',
+
+      'settings.language': 'Language',
+      'settings.languageSub': 'Interface and exhibit text',
+      'settings.display': 'Display',
+      'settings.motion': 'Reduce motion',
+      'settings.motionSub': 'Turn off the drifting dust and the slow fades',
+      'settings.log': 'Debug log',
+      'settings.logSub': 'Show the bug button over the camera',
+      'settings.aboutText': 'Everything runs on your device. The camera picture is never uploaded.',
+
+      'soon.map.title': 'Gallery map',
+      'soon.map.text': 'A floor plan showing where each artwork hangs, and which one is nearest to you.',
+      'soon.map.needs': 'Still needed: a floor plan of the gallery, and the room and wall for each exhibit.',
+      'soon.feedback.title': 'Tell us what you think',
+      'soon.feedback.text': 'A short note to the museum about your visit.',
+      'soon.feedback.needs': 'Still needed: somewhere for the messages to go. This guide is a static site, so it has no server of its own yet.',
+
+      'toast.arUnavailable': 'AR is not ready yet.',
+      'toast.noExhibits': 'Add an artwork in the admin portal first.',
       'status.searching': 'Searching…',
       'status.tracking': 'Tracking',
       'status.floor': 'Looking for the floor',
@@ -89,11 +131,6 @@
       'lang.continue': 'ඉදිරියට',
       'lang.change': 'භාෂාව',
 
-      'intro.text': 'කලා කෘතියක් දෙසට ඔබේ කැමරාව එල්ල කරන්න. එය බිත්තියේම දිවි ගෙන එන අතර, එහි කතාව කියවීමට හෝ ඇසීමට ඔබට හැකිය.',
-      'intro.start': 'AR ආරම්භ කරන්න',
-      'intro.loading': 'පූරණය වෙමින්…',
-      'intro.unavailable': 'නොමැත',
-      'intro.hint': 'කැමරා අවසරය අවශ්‍යයි. කිසිවක් උඩුගත නොවේ — සියල්ල ඔබේ උපාංගය තුළම ක්‍රියාත්මක වේ.',
       'intro.empty.title': 'තවම ප්‍රදර්ශන නැත',
       'intro.empty.text': 'මෙම ගැලරියට කලා කෘති එක් කර නැත. පරිපාලන පිවිසුමෙන් ඒවා එක් කරන්න.',
 
@@ -120,6 +157,53 @@
       'photo.save': 'ඡායාරූප වෙත සුරකින්න',
       'photo.back': 'AR වෙත ආපසු',
 
+
+      'nav.explore': 'ගවේෂණය',
+      'nav.map': 'සිතියම',
+      'nav.ar': 'AR ආරම්භ කරන්න',
+      'nav.feedback': 'ප්‍රතිපෝෂණ',
+      'nav.settings': 'සැකසුම්',
+
+      'explore.title1': 'පැරණි දෝංකාර,',
+      'explore.title2': 'ජීවමාන කැන්වසය',
+      'explore.count': 'කලා කෘති {count}ක්',
+      'explore.countOne': 'කලා කෘති 1ක්',
+
+      'exhibit.about': 'මෙම ප්‍රදර්ශනය ගැන',
+      'exhibit.viewInAr': 'AR තුළ බලන්න',
+      'exhibit.scanHint': 'ගැලරියේදී මෙම කලා කෘතිය දෙසට ඔබේ කැමරාව එල්ල කර එය දිවි ගෙන එනු බලන්න.',
+
+      'fact.video': 'AR දෘශ්‍යය',
+      'fact.videoSub': 'කලා කෘතිය මතම ධාවනය වේ',
+      'fact.image': 'AR පින්තූරය',
+      'fact.imageSub': 'කලා කෘතිය මත දිස් වේ',
+      'fact.model': '3D වස්තුව',
+      'fact.modelSub': 'එය බිම තබන්න',
+      'fact.audio': 'හඬ විවරණය',
+      'fact.audioSub': 'භාෂා {count}ක්',
+      'fact.audioSubOne': 'භාෂා 1ක්',
+
+      'btn.back2': 'ආපසු',
+      'btn.exitAr': 'AR වසන්න',
+
+      'settings.language': 'භාෂාව',
+      'settings.languageSub': 'අතුරුමුහුණත සහ ප්‍රදර්ශන විස්තර',
+      'settings.display': 'සංදර්ශනය',
+      'settings.motion': 'චලනය අඩු කරන්න',
+      'settings.motionSub': 'සෙමින් ගෙවෙන සජීවිකරණ ක්‍රියා විරහිත කරන්න',
+      'settings.log': 'දෝෂ ලොගය',
+      'settings.logSub': 'කැමරාව මත දෝෂ බොත්තම පෙන්වන්න',
+      'settings.aboutText': 'සියල්ල ඔබේ උපාංගය තුළම ක්‍රියාත්මක වේ. කැමරා රූපය කිසිදා උඩුගත නොවේ.',
+
+      'soon.map.title': 'ගැලරි සිතියම',
+      'soon.map.text': 'එක් එක් කලා කෘතිය ඇති ස්ථානය සහ ඔබට ළඟම ඇත්තේ කුමක්ද යන්න පෙන්වන බිම් සැලැස්මක්.',
+      'soon.map.needs': 'තවම අවශ්‍යයි: ගැලරියේ බිම් සැලැස්ම සහ එක් එක් ප්‍රදර්ශනයේ කාමරය හා බිත්තිය.',
+      'soon.feedback.title': 'ඔබේ අදහස කියන්න',
+      'soon.feedback.text': 'ඔබේ සංචාරය ගැන කෞතුකාගාරයට කෙටි සටහනක්.',
+      'soon.feedback.needs': 'තවම අවශ්‍යයි: පණිවිඩ යවන තැනක්. මෙම මාර්ගෝපදේශය ස්ථිතික අඩවියක් වන බැවින් තවම එයට සේවාදායකයක් නැත.',
+
+      'toast.arUnavailable': 'AR තවම සූදානම් නැත.',
+      'toast.noExhibits': 'පළමුව පරිපාලන පිවිසුමෙන් කලා කෘතියක් එක් කරන්න.',
       'status.searching': 'සොයමින්…',
       'status.tracking': 'හඳුනාගෙන ඇත',
       'status.floor': 'බිම සොයමින්',
@@ -137,11 +221,6 @@
       'lang.continue': 'தொடரவும்',
       'lang.change': 'மொழி',
 
-      'intro.text': 'ஒரு கலைப்படைப்பை நோக்கி உங்கள் கேமராவைக் காட்டுங்கள். அது சுவரிலேயே உயிர்பெறும்; அதன் கதையை நீங்கள் படிக்கவோ கேட்கவோ முடியும்.',
-      'intro.start': 'AR ஐத் தொடங்கு',
-      'intro.loading': 'ஏற்றுகிறது…',
-      'intro.unavailable': 'கிடைக்கவில்லை',
-      'intro.hint': 'கேமரா அனுமதி தேவை. எதுவும் பதிவேற்றப்படவில்லை — அனைத்தும் உங்கள் சாதனத்திலேயே இயங்குகிறது.',
       'intro.empty.title': 'இன்னும் காட்சிப்பொருட்கள் இல்லை',
       'intro.empty.text': 'இந்தக் கேலரியில் கலைப்படைப்புகள் ஏற்றப்படவில்லை. நிர்வாகப் பக்கத்தில் அவற்றைச் சேர்க்கவும்.',
 
@@ -168,6 +247,53 @@
       'photo.save': 'படங்களில் சேமி',
       'photo.back': 'AR க்குத் திரும்பு',
 
+
+      'nav.explore': 'ஆராய்க',
+      'nav.map': 'வரைபடம்',
+      'nav.ar': 'AR தொடங்கு',
+      'nav.feedback': 'கருத்து',
+      'nav.settings': 'அமைப்புகள்',
+
+      'explore.title1': 'பழைய எதிரொலிகள்,',
+      'explore.title2': 'உயிர்ப்புள்ள ஓவியம்',
+      'explore.count': '{count} கலைப்படைப்புகள்',
+      'explore.countOne': '1 கலைப்படைப்பு',
+
+      'exhibit.about': 'இந்தக் கண்காட்சிப் பொருள் பற்றி',
+      'exhibit.viewInAr': 'AR இல் பார்க்க',
+      'exhibit.scanHint': 'கேலரியில் இந்தக் கலைப்படைப்பை நோக்கி உங்கள் கேமராவைக் காட்டி அது உயிர்பெறுவதைப் பாருங்கள்.',
+
+      'fact.video': 'AR காணொளி',
+      'fact.videoSub': 'கலைப்படைப்பின் மீதே இயங்கும்',
+      'fact.image': 'AR படம்',
+      'fact.imageSub': 'கலைப்படைப்பின் மீது தோன்றும்',
+      'fact.model': '3D பொருள்',
+      'fact.modelSub': 'தரையில் வைக்கவும்',
+      'fact.audio': 'குரல் விளக்கம்',
+      'fact.audioSub': '{count} மொழிகள்',
+      'fact.audioSubOne': '1 மொழி',
+
+      'btn.back2': 'பின்செல்',
+      'btn.exitAr': 'AR ஐ மூடு',
+
+      'settings.language': 'மொழி',
+      'settings.languageSub': 'இடைமுகம் மற்றும் கண்காட்சி உரை',
+      'settings.display': 'காட்சி',
+      'settings.motion': 'அசைவைக் குறைக்க',
+      'settings.motionSub': 'மெதுவான அசைவூட்டங்களை நிறுத்து',
+      'settings.log': 'பிழைப் பதிவு',
+      'settings.logSub': 'கேமராவின் மீது பிழை பொத்தானைக் காட்டு',
+      'settings.aboutText': 'அனைத்தும் உங்கள் சாதனத்திலேயே இயங்குகிறது. கேமரா படம் எப்போதும் பதிவேற்றப்படுவதில்லை.',
+
+      'soon.map.title': 'கேலரி வரைபடம்',
+      'soon.map.text': 'ஒவ்வொரு கலைப்படைப்பும் எங்கே உள்ளது, உங்களுக்கு எது அருகில் உள்ளது என்பதைக் காட்டும் தளவமைப்பு.',
+      'soon.map.needs': 'இன்னும் தேவை: கேலரியின் தளவமைப்பு, மற்றும் ஒவ்வொரு கண்காட்சிப் பொருளின் அறை மற்றும் சுவர்.',
+      'soon.feedback.title': 'உங்கள் கருத்தைச் சொல்லுங்கள்',
+      'soon.feedback.text': 'உங்கள் வருகை குறித்து அருங்காட்சியகத்துக்கு ஒரு சிறு குறிப்பு.',
+      'soon.feedback.needs': 'இன்னும் தேவை: செய்திகள் செல்ல ஓர் இடம். இந்த வழிகாட்டி ஒரு நிலையான தளம், எனவே இதற்கு இன்னும் சொந்த சேவையகம் இல்லை.',
+
+      'toast.arUnavailable': 'AR இன்னும் தயாராகவில்லை.',
+      'toast.noExhibits': 'முதலில் நிர்வாகப் பக்கத்தில் ஒரு கலைப்படைப்பைச் சேர்க்கவும்.',
       'status.searching': 'தேடுகிறது…',
       'status.tracking': 'கண்டறியப்பட்டது',
       'status.floor': 'தரையைத் தேடுகிறது',

@@ -87,6 +87,8 @@
     langOpen: false,
     detailsOpen: false,
     empty: false,          // a deployment with no exhibits in it
+    fatal: false,          // something stopped the camera from ever starting
+    blockNote: '',         // ...and the one sentence to show a visitor about it
 
     // Which exhibit is on screen, or was last seen. Scene 2 keeps using it
     // after the painting leaves the frame, which is the whole point of the door.
@@ -200,10 +202,14 @@
   function cacheDom() {
     var missing = [];
     ['scene', 'floorScene', 'reticle', 'modelSlot', 'floorShadow',
-     'arVideo', 'introScreen', 'introThumbs', 'introHint', 'startBtn', 'loadingScreen',
+     'arVideo', 'loadingScreen',
      'loadingText', 'scanScreen', 'floorScreen', 'floorText', 'statusChip', 'statusText',
      'actionBar', 'arBtn', 'detailsBtn', 'placeBtn', 'placeBtnLabel', 'moveBtn',
-     'removeBtn', 'backBtn', 'langScreen', 'langList', 'langGo', 'introLang',
+     'removeBtn', 'backBtn', 'langScreen', 'langList', 'langGo', 'exitAR',
+     // The browse half's root. It is a sibling of #overlay, not a child - see
+     // the note at the top of css/shell.css - but this is still the one place
+     // that decides whether it or the camera owns the screen.
+     'shell',
      'detailsSheet', 'detailsTitle', 'detailsLangs', 'detailsFallback', 'detailsBody',
      'detailsPlay', 'detailsPlayLabel', 'detailsProgress', 'detailsProgressFill',
      'detailsAudio', 'detailsClose',
@@ -320,7 +326,7 @@
 
     if (!window.isSecureContext) {
       showError('This page must be served over https (or localhost). The camera is blocked otherwise.', false);
-      el.introHint.textContent = 'Blocked: open this page over https. Cameras do not work on plain http.';
+      S.blockNote = 'Blocked: open this page over https. Cameras do not work on plain http.';
       fatal = true;
     }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -340,7 +346,7 @@
     var isIOS = /iPad|iPhone|iPod/.test(ua) ||
                 (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     if (isIOS && /FBAN|FBAV|Instagram|Line\/|MicroMessenger|Twitter/i.test(ua)) {
-      el.introHint.textContent = 'Open this link in Safari — in-app browsers block the camera on iOS.';
+      S.blockNote = 'Open this link in Safari — in-app browsers block the camera on iOS.';
       log.warn('iOS in-app browser detected; camera will likely be blocked');
     }
     log.info('platform: iOS=' + isIOS + ' android=' + /Android/.test(ua));
@@ -349,7 +355,7 @@
     // the user never reaches the floor scene.
     probeWebXR();
 
-    if (fatal) el.startBtn.disabled = true;
+    if (fatal) S.fatal = true;
     return !fatal;
   }
 
@@ -683,8 +689,17 @@
   function applyModeUI() {
     var m = S.mode;
 
-    toggle(el.introScreen, m === MODE.BOOT && !S.langOpen);
-    toggle(el.langScreen, m === MODE.BOOT && S.langOpen);
+    // Three things can own the screen, and exactly one does: the language
+    // question, the browse shell, or the camera. S.started rather than the
+    // mode, because starting the camera takes a second or two during which the
+    // mode is still BOOT and the shell must already be out of the way.
+    var browsing = m === MODE.BOOT && !S.started;
+    toggle(el.langScreen, browsing && S.langOpen);
+    toggle(el.shell, browsing && !S.langOpen);
+    toggle(el.exitAR, !browsing && !S.detailsOpen);
+    // The debug button keeps the top-right corner over the camera and gives it
+    // up to the shell's own controls while browsing. See .log-toggle.browsing.
+    if (el.logToggle) el.logToggle.classList.toggle('browsing', browsing);
     toggle(el.scanScreen, m === MODE.SCAN && !S.targetFound);
     toggle(el.floorScreen, m === MODE.FLOOR && !S.floorStable);
     toggle(el.statusChip, m !== MODE.BOOT);
@@ -1960,7 +1975,8 @@
     S.tStart = performance.now();
 
     hide(el.errorBanner);
-    hide(el.introScreen);
+    hide(el.shell);
+    hide(el.langScreen);
     show(el.loadingScreen);
     el.loadingText.textContent = 'Starting camera…';
 
@@ -2008,6 +2024,49 @@
         el.loadingText.textContent = 'Still starting… open the debug log (🐞).';
       }
     }, 20000);
+  }
+
+  /**
+   * Put the camera down and go back to browsing.
+   *
+   * MindAR's stop() releases the camera track and removes its video element;
+   * start() builds a new one, which is the library's own restart path. The
+   * anchors are NOT rebuilt - they were registered before the first start()
+   * and survive the stop/start cycle the gyro fallback already puts MindAR
+   * through, so a second visit to the viewfinder tracks exactly as the first.
+   */
+  function exitAR() {
+    if (!S.started) return;
+
+    openDetails(false);
+    leaveFloorScene();          // no-op unless the floor scene is open
+    stopNarration();
+    if (el.arVideo) { try { el.arVideo.pause(); } catch (e) {} }
+
+    var system = el.scene.systems['mindar-image-system'];
+    if (system) {
+      try { system.stop(); }
+      catch (e) { log.warn('MindAR stop() threw: ' + e); }
+    }
+
+    S.started = false;
+    S.arReady = false;
+    S.targetFound = false;
+    S.mediaReady = false;
+    // S.activeIndex and S.loadedVideo are deliberately LEFT ALONE. The <video>
+    // element still holds the right file and, on iOS, the playback grant that
+    // came with the first tap — throwing either away would make the second
+    // visit to the viewfinder worse than the first. It also has to stay
+    // consistent with onTargetFound, which reloads only when the exhibit
+    // changes: clearing loadedVideo here made confirmPlayback() treat its own
+    // watch as stale, so the buttons never came back.
+
+    hide(el.loadingScreen);
+    hide(el.errorBanner);
+    setMode(MODE.BOOT);
+    applyModeUI();
+    if (window.ARShell) window.ARShell.refresh();
+    log.event('left AR — camera released');
   }
 
   function onArError(err) {
@@ -2260,8 +2319,8 @@
    * for the text the app builds itself, which no attribute can reach.
    */
   function refreshChrome() {
-    setStartLabel(startLabelText(), !S.empty && boot.ready);
     renderLanguages();
+    if (window.ARShell) window.ARShell.refresh();
     if (S.detailsOpen) renderDetails();
     log.info('language: ' + ARI18n.code() +
              (ARI18n.translated(ARI18n.code()) ? '' :
@@ -2269,24 +2328,9 @@
               'around the museum’s own words)'));
   }
 
-  function startLabelText() {
-    if (!boot.ready) return ARI18n.t('intro.loading');
-    if (S.empty) return ARI18n.t('intro.empty.title');
-    return ARI18n.t('intro.start');
-  }
-
   /** A deployment with no exhibits in it. Not an error — just nothing to scan. */
   function showEmptyGallery() {
     S.empty = true;
-    // The keys are swapped rather than the words, so the empty state stays
-    // translated when the language changes behind it.
-    var text = el.introScreen && el.introScreen.querySelector('.intro-text');
-    if (text) text.setAttribute('data-i18n', 'intro.empty.text');
-    // "Camera access is required" is not the useful thing to say to someone
-    // looking at a gallery with nothing in it.
-    if (el.introHint) hide(el.introHint);
-    ARI18n.apply(document);
-    setStartLabel(ARI18n.t('intro.empty.title'), false);
     log.warn('this deployment has no exhibits — add them in admin.html, compile ' +
              'the targets and export the bundle');
   }
@@ -3268,7 +3312,6 @@
   }
 
   function wireUI() {
-    renderIntroThumbs();
     renderLanguages();
     wireDetails();
 
@@ -3277,9 +3320,8 @@
     ARI18n.onChange(refreshChrome);
 
     on(el.langGo, 'click', function () { openLanguagePicker(false); });
-    on(el.introLang, 'click', function () { openLanguagePicker(true); });
+    on(el.exitAR, 'click', exitAR);
 
-    el.startBtn.addEventListener('click', startAR);
     el.errorRetry.addEventListener('click', function () {
       hide(el.errorBanner);
       if (!S.arReady) { S.started = false; startAR(); }
@@ -3332,12 +3374,6 @@
    */
   var boot = { content: false, sceneLoaded: false, wired: false, ready: false };
 
-  function setStartLabel(text, enabled) {
-    if (!el.startBtn) return;
-    el.startBtn.textContent = text;
-    el.startBtn.disabled = !enabled;
-  }
-
   function bootWatchdog() {
     setTimeout(function () {
       if (boot.ready) return;
@@ -3357,35 +3393,6 @@
   }
 
   /** The start screen shows what to point the phone at — every exhibit. */
-  function renderIntroThumbs() {
-    var host = el.introThumbs;
-    if (!host) return;
-
-    host.textContent = '';
-    host.classList.toggle('many', exhibits.length > 1);
-
-    exhibits.forEach(function (ex) {
-      var figure = document.createElement('figure');
-      figure.className = 'intro-thumb';
-
-      var img = document.createElement('img');
-      img.alt = ex.name;
-      img.addEventListener('error', function () {
-        figure.classList.add('missing');
-        log.warn('target thumbnail missing for "' + ex.name + '": ' + shortSrc(ex.image.src));
-      });
-      img.src = ex.image.src || '';
-      figure.appendChild(img);
-
-      if (exhibits.length > 1) {
-        var caption = document.createElement('figcaption');
-        caption.textContent = ex.name;
-        figure.appendChild(caption);
-      }
-      host.appendChild(figure);
-    });
-  }
-
   /**
    * One anchor per exhibit, built before MindAR starts.
    *
@@ -3464,14 +3471,15 @@
                'refresh, or clear the site data. Anything needing those is off.');
     }
 
-    setStartLabel(ARI18n.t('intro.loading'), false);
     bootWatchdog();
 
     if (!preflight()) {
-      setStartLabel(ARI18n.t('intro.unavailable'), false);
       // preflight has already put the real reason on screen; the watchdog would
-      // only talk over it.
+      // only talk over it. The shell still opens, because Explore and the
+      // labels are worth reading on a phone that cannot run the camera.
       boot.ready = true;
+      applyModeUI();
+      announceReady();
       return;
     }
 
@@ -3520,8 +3528,7 @@
           buildExhibitEntities();
           S.activeIndex = 0;
           adoptExhibit(exhibits[0]);
-          renderIntroThumbs();
-          // Ask before the start screen, but only on a first visit and only
+          // Ask before anything else, but only on a first visit and only
           // when there is genuinely a choice to make.
           S.langOpen = !ARI18n.chosen() && ARI18n.languages().length > 1;
 
@@ -3541,9 +3548,9 @@
         // be reported as "no exhibits could be loaded", which it never was.
         boot.ready = true;
         if (!exhibits.length) showEmptyGallery();
-        else setStartLabel(ARI18n.t('intro.start'), true);
         applyModeUI();
-        log.ok('app ready — waiting for the Start button');
+        announceReady();
+        log.ok('app ready — waiting for the AR button');
       });
     }).catch(function (err) {
       log.error('content failed to load: ' + ((err && err.stack) || err));
@@ -3552,9 +3559,61 @@
       // Still let them in. The camera and the log are worth more than a button
       // that does nothing, and the banner above already says what is wrong.
       boot.ready = true;
-      setStartLabel(ARI18n.t('intro.start'), true);
+      applyModeUI();
+      announceReady();
     });
   }
+
+  /**
+   * What the browse half is allowed to know about the AR half.
+   *
+   * Deliberately small and one-directional: js/shell.js reads the exhibits
+   * app.js has already loaded and asks it to start or stop the camera. It
+   * never reaches into the scene, and nothing in here hands out a live
+   * A-Frame entity.
+   */
+  var readyHandlers = [];
+
+  function announceReady() {
+    var queue = readyHandlers;
+    readyHandlers = [];
+    queue.forEach(function (fn) {
+      try { fn(); } catch (e) { log.error('a ready handler threw: ' + ((e && e.stack) || e)); }
+    });
+  }
+
+  window.ARViewer = {
+    /** The normalised exhibits, in target order. Do not mutate. */
+    exhibits: function () { return exhibits; },
+    /** The loaded bundle, for its `languages` list. */
+    bundle: function () { return bundle; },
+    ready: function () { return boot.ready; },
+    /** True when the gallery genuinely has nothing in it. */
+    empty: function () { return S.empty; },
+    /** True when something stopped the app from ever starting the camera. */
+    broken: function () { return !!S.fatal; },
+    /** One sentence saying why, when there is one worth showing. */
+    blockNote: function () { return S.blockNote; },
+    inAR: function () { return S.started; },
+    startAR: startAR,
+    exitAR: exitAR,
+    /** Reopen the language question. The picker itself stays app.js's. */
+    openLanguage: openLanguagePicker,
+    /**
+     * The visitor's label for one exhibit, in the language they chose, with
+     * whether that IS the language they chose. The same call the AR sheet
+     * makes, so the two presentations can never drift.
+     */
+    detailsOf: function (ex) {
+      return window.ARContent.detailsFor(ex, ARI18n.code(), bundle && bundle.languages);
+    },
+    log: log,
+    /** Runs fn once the exhibits have landed — immediately if they already have. */
+    onReady: function (fn) {
+      if (boot.ready) fn();
+      else readyHandlers.push(fn);
+    },
+  };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

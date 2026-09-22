@@ -2,22 +2,28 @@
 
 Web AR that runs in the phone browser — no app install, no QR marker.
 
-A visitor picks their language, points the camera at an artwork, and the
-artwork answers.
+A visitor picks their language, browses the gallery, and points the camera at
+an artwork to make it answer.
 
 1. **Language** — asked once, before anything else, and remembered. English,
    Sinhala and Tamil out of the box; the list is editable in the portal.
-2. **Artwork** — the camera finds the piece and its media plays mapped exactly
-   onto it: a video, or a still such as an archival photograph. Once it is up,
-   **More details** appears, and **View in 3D** too if that exhibit has a 3D
-   object.
-3. **Details** — the museum's own label, in the visitor's language, with a
-   **Listen** button when a recording exists. It slides up over the artwork
-   rather than replacing it.
-4. **Floor** — image tracking and the video stop. Point the phone at the floor;
+2. **Explore** — every artwork in the gallery as a grid of cards, with a bottom
+   bar: Explore · Map · **AR** · Feedback · Settings. Tapping a card opens its
+   full label — photograph, title in each language, what it carries, the
+   museum's text, **Listen**, and **View in AR**.
+3. **Artwork** — the AR button starts the camera. It finds the piece and its
+   media plays mapped exactly onto it: a video, or a still such as an archival
+   photograph. Once it is up, **More details** appears, and **View in 3D** too
+   if that exhibit has a 3D object.
+4. **Details** — the same label, this time as a sheet that slides up over the
+   artwork rather than replacing it, so the piece stays visible while you read.
+5. **Floor** — image tracking and the video stop. Point the phone at the floor;
    when a surface holds still, **Place on the floor** appears.
-5. **Placed** — the object stands where you put it, and the shutter button
+6. **Placed** — the object stands where you put it, and the shutter button
    takes a photo of the whole scene for the visitor to keep.
+
+**✕**, top-left, leaves AR at any point: the camera is released and the visitor
+lands back in Explore.
 
 Scenes 4 and 5 are deliberately independent of the artwork: nothing in them
 needs it, so you can walk away, and the buttons stay on screen once earned
@@ -34,8 +40,84 @@ Works on Android (Chrome) and iOS (Safari 11.3+).
 **Live:** https://infinitybrainnetworks.github.io/web-ar-museum-guide/
 **Portal:** add `/admin.html` to that URL
 
-Open it on the phone, choose a language, tap **Start AR**, allow the camera, and
-point at one of the artworks shown on the start screen.
+Open it on the phone, choose a language, and you are in Explore. Tap the
+round **AR** button in the middle of the bottom bar, allow the camera, and
+point at one of the artworks in the grid.
+
+## The two halves — browse and AR
+
+The app is two halves that never run at once, and knowing which is which
+explains most of the code.
+
+| | Owns | Lives in |
+|---|---|---|
+| **Browse** | Explore, the label page, Settings, the bottom bar | `#shell` · `js/shell.js` · `css/shell.css` |
+| **AR** | The camera, the scene, the scan HUD, the details sheet, the floor | `#overlay` · `js/app.js` · `css/style.css` |
+
+`js/app.js` publishes a small one-directional interface, `window.ARViewer`:
+the shell reads the exhibits app.js has already loaded, renders them, and asks
+for the camera to start or stop. It never reaches into the scene.
+
+**`#shell` is a sibling of `#overlay`, not a child of it — keep it that way.**
+`#overlay` is WebXR's dom-overlay element, and A-Frame injects
+`.a-dom-overlay:not(.a-no-style) > * { pointer-events: auto }` into the page.
+Every full-bleed direct child of `#overlay` therefore swallows taps meant for
+the ones beneath it; that has cost this project two bugs. The browse screens
+never coexist with a WebXR session, so they belong outside it.
+
+`#overlay` sits at `z-index: 45`, **above** the shell. That is safe only
+because it is transparent to pointers and its children opt back in one by one.
+It is that way so the debug button and the error banner stay reachable while
+browsing — which is exactly when someone is staring at a start screen
+wondering why nothing works.
+
+### Map and Feedback
+
+Both are in the bottom bar and neither is built. Each says what it still needs
+rather than opening a screen that pretends:
+
+- **Map** needs a floor plan of the gallery, and a room and wall for each
+  exhibit. Neither exists in the content model or the portal yet.
+- **Feedback** needs somewhere for the messages to go. This guide deploys as a
+  static site, so there is no server to post to — that is a decision to make
+  (a form endpoint, a serverless function, or an email link), not a missing
+  screen.
+
+### Settings
+
+Language, **Reduce motion** (which does the same thing as the OS-level
+preference), and **Debug log** — the switch that shows or hides the 🐞 button
+over the camera. Both preferences are remembered per device in
+`localStorage`, and both reads are wrapped: a private window makes the
+accessor throw rather than return nothing.
+
+## The look
+
+The palette, the motion tokens and the atmosphere layers in `css/theme.css`
+are ported from the Kotlin app's `design/shared/theme.css`, value for value, so
+the two apps read as one product. **`css/theme.css` is the single source of
+truth for colour** — the names in `style.css`, `shell.css` and `admin.css` are
+each file's own vocabulary pointed at it. Change a colour there, not in three
+places.
+
+Type is a dual serif/sans hierarchy: a serif carries curatorial authority on
+artwork names and titles, a sans keeps body copy legible in a dark room. Both
+are the **device's own faces**, not a download. Android resolves them to the
+very Noto Serif and Noto Sans the Kotlin app asks for, and its font fallback
+already covers Sinhala and Tamil — so a webfont would cost a few hundred KB on
+museum wifi to arrive at the same glyphs, and a gallery in a basement would get
+a flash of nothing first.
+
+Icons are inline SVG symbols defined once at the bottom of `index.html`. The
+Kotlin designs use Material Symbols, which is also a webfont; these are the
+same glyphs as paths, so the gallery's wifi is never between a visitor and a
+legible button.
+
+Sinhala and Tamil run **20–40% longer than English** with taller glyphs. Two
+rules follow and are load-bearing throughout: line heights stay generous so
+vowel diacritics are not cropped, and every title clamps to a line count rather
+than a pixel height, so a long translation truncates instead of breaking the
+grid.
 
 ## Adding exhibits — the admin portal
 
@@ -161,14 +243,16 @@ by a script, or by a merge nobody read.
 | `admin.html` | The authoring portal |
 | `js/content.js` | Resolves which exhibits to show, the rich-text sanitiser, the language rules, and the shared IndexedDB store |
 | `js/i18n.js` | The interface's own words, in each language, and the remembered choice |
-| `js/app.js` | The scene machine, media mapping, the details sheet, both floor engines, debug tools |
+| `js/app.js` | The scene machine, media mapping, the details sheet, both floor engines, debug tools. Publishes `window.ARViewer` |
+| `js/shell.js` | The browse half: Explore, the label page, Settings, the bottom bar |
 | `js/capture.js` | The photo: composing camera feed + figure + logo strip, and saving it |
 | `js/app.js` → *adjust panel* | The gear sheet: one spec builds every slider, tab and toggle |
 | `js/admin.js` | The portal: editing, compiling, export, import |
 | `js/zip.js` | Dependency-free ZIP reader/writer for the bundles |
 | `js/config.js` | Global settings, plus the defaults a new exhibit starts from |
 | `js/logger.js` | On-screen log window (loads first so it captures everything) |
-| `css/style.css`, `css/admin.css` | Overlay UI, portal UI |
+| `css/theme.css` | **The palette, motion and type tokens.** Ported from the Kotlin app; every other stylesheet points at it |
+| `css/style.css`, `css/shell.css`, `css/admin.css` | AR overlay, browse screens, portal |
 | `assets/content/content.json` | **What the AR page reads** — every exhibit, in target order |
 | `assets/content/targets.mind` | Compiled tracking data, written by the portal |
 | `assets/logos/` | Drop the logo strip's artwork in here |
@@ -183,7 +267,7 @@ by a script, or by a merge nobody read.
 | **preview** | `index.html?preview=1` — the portal's draft, from IndexedDB |
 | **bundle** | `assets/content/content.json` — what visitors get |
 | **legacy** | `js/config.js` — only if it names a target image; the shipped one does not |
-| **empty** | Nothing is deployed. The start screen says so instead of inventing an exhibit. |
+| **empty** | Nothing is deployed. Explore says so instead of inventing an exhibit. |
 
 ## Running it
 
@@ -518,15 +602,21 @@ native build to fight with. The official
 | Symptom | Cause |
 |---|---|
 | Right artwork, **wrong video** | The tracker and `content.json` are out of step. Re-export from the portal. |
-| "No exhibits yet" on the start screen | Nothing is deployed. Add exhibits in the portal, compile, export, push. |
+| "No exhibits yet" on Explore | Nothing is deployed. Add exhibits in the portal, compile, export, push. |
 | **More details** opens an empty sheet | That exhibit has no text in the fallback language. The portal marks the card incomplete and blocks Export, so this means a hand-edited `content.json`. |
 | Sheet says "Shown in English" | That exhibit has no translation in the chosen language yet. Fill its tab in the portal. |
 | **Listen** never appears | No recording was uploaded for that language. There is no text-to-speech fallback, on purpose. |
-| The language picker never appears | It is asked once and remembered. Tap **Language** under the Start button, or clear the site data. |
+| The language picker never appears | It is asked once and remembered. Tap the **EN / සි / த** chip in the top bar, or Settings → Language. |
 | A language is missing from the picker | It is not in ⋯ → 🌐 Languages, or the deployed bundle predates it. Re-export. |
 | Formatting vanished after pasting from Word | Only `h2 h3 p strong em u ul ol li br` survive the sanitiser, by design. |
 | Export says an exhibit "still needs…" | The card says exactly what: a target image, a projection, or its details in the fallback language. |
 | Portal is empty after it worked | Browser site data was cleared. Import your last exported zip. |
+| **Map** or **Feedback** says "still needed" | Neither is built. The panel lists exactly what each one is waiting for. |
+| The 🐞 button is not there | Settings → **Debug log** turns it off, and the choice is remembered per device. |
+| The 🐞 button sits on the language chip | It should drop to the bottom-right while browsing. If it did not, `index.html` is older than `js/app.js` — hard-refresh. |
+| Everything still animates with Reduce motion on | The switch sets `data-motion="off"` on `<html>`; a cached `css/theme.css` will not honour it. Clear the site data. |
+| Explore is blank but the log says exhibits loaded | `js/shell.js` did not load. Check the network tab; it is the last script in `index.html`. |
+| Leaving AR and going back in shows no buttons | The video is re-confirmed on the way back. If it stays blank for more than 6s the log says why. |
 | An artwork will not track | Too few feature points. Compile and read the count on its card. |
 | Figure goes dark down one side as you walk around | Its lighting is baked into the texture and the scene light is shading it again. Set *Shading* to **baked**. |
 | Two shadows under the figure | The model carries its own. Set Adjust → Shadow → **Strength** to 0. |

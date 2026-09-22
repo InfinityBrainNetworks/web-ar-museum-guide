@@ -1,0 +1,296 @@
+/* ============================================================================
+   Museum theme — palette, type, motion.
+   ---------------------------------------------------------------------------
+   Ported from the Kotlin app's design/shared/theme.css so the two apps read as
+   one product. The palette values are copied exactly and are the single source
+   of truth here, the way ui/theme/Color.kt is over there: do not introduce a
+   colour outside this file.
+
+   What was deliberately NOT carried across:
+     - the Tailwind-shaped selectors ([class*="grid-cols-"] and friends). Those
+       exist because the designs are Tailwind output; our markup has its own
+       class names, so the same effects are opt-in classes instead.
+     - the entrance stagger on every block. Half our "screens" sit over a live
+       camera feed and must not be transformed - see the note on .ibn-fx below.
+
+   Design intent, unchanged from the original: a dim gallery at night. Warm
+   lamplight on ancient ochre. Motion is slow and deliberate, never bouncy.
+   ========================================================================== */
+
+:root {
+  /* ---- Approved palette (single source of truth) ---- */
+  --c-bg:            #141110;
+  --c-surface:       #1F1A17;
+  --c-elevated:      #2A2420;
+  --c-elevated-hi:   #332C27;
+
+  --c-terracotta:    #E0673A;
+  --c-terracotta-dk: #C4552C;
+  --c-terracotta-lt: #F0885C;  /* text/icon tint — meets 4.5:1 on --c-bg */
+
+  --c-amber:         #E8A33D;
+  --c-gold:          #C9A227;
+  --c-jade:          #3F7D5C;
+  --c-jade-lt:       #5FA87B;
+
+  --c-text:          #F5EDE5;
+  --c-text-2:        #AE9F94;
+  --c-text-3:        #7A6E66;
+
+  --c-hairline:      rgba(201, 162, 39, 0.30);
+  --c-hairline-soft: rgba(201, 162, 39, 0.15);
+  --c-glass:         rgba(20, 17, 16, 0.72);
+
+  /* ---- Motion tokens ---- */
+  --ease-museum: cubic-bezier(0.22, 1, 0.36, 1);   /* expo-out: settles, never overshoots */
+  --ease-soft:   cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-press:  cubic-bezier(0.2, 0, 0, 1);
+
+  --d-fast:   180ms;
+  --d-base:   320ms;
+  --d-slow:   620ms;
+  --d-enter:  820ms;
+  --d-amb:    6s;      /* ambient / atmospheric loops */
+
+  /* ---- Type ----
+     The device's own faces, not a download. Android resolves these to the very
+     Noto Serif / Noto Sans the Kotlin app asks for, and its font fallback
+     already covers Sinhala and Tamil - so a webfont would cost a few hundred
+     KB on museum wifi to arrive at the same glyphs. A gallery in a basement
+     gets text immediately instead of a flash of nothing. */
+  --font-serif: Georgia, "Noto Serif", "Times New Roman", "Iskoola Pota",
+                "Latha", serif;
+  --font-sans:  -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ============================================================================
+   1 · ENTRANCE CHOREOGRAPHY
+   Opt-in only. Applied to the browse shell, never to camera-space chrome.
+   ========================================================================== */
+
+@keyframes ibn-rise {
+  from { opacity: 0; transform: translate3d(0, 18px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes ibn-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes ibn-scale-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.ibn-rise     { animation: ibn-rise var(--d-enter) var(--ease-museum) both; }
+.ibn-fade     { animation: ibn-fade var(--d-slow) var(--ease-soft) both; }
+.ibn-scale-in { animation: ibn-scale-in var(--d-slow) var(--ease-museum) both; }
+
+/* Lists, grids and card rows assemble row by row. */
+.ibn-stagger > * {
+  animation: ibn-rise var(--d-slow) var(--ease-museum) both;
+}
+.ibn-stagger > *:nth-child(1) { animation-delay: 120ms; }
+.ibn-stagger > *:nth-child(2) { animation-delay: 190ms; }
+.ibn-stagger > *:nth-child(3) { animation-delay: 260ms; }
+.ibn-stagger > *:nth-child(4) { animation-delay: 330ms; }
+.ibn-stagger > *:nth-child(5) { animation-delay: 400ms; }
+.ibn-stagger > *:nth-child(6) { animation-delay: 470ms; }
+.ibn-stagger > *:nth-child(7) { animation-delay: 540ms; }
+.ibn-stagger > *:nth-child(8) { animation-delay: 610ms; }
+.ibn-stagger > *:nth-child(9) { animation-delay: 680ms; }
+/* Past nine, everything arrives together. A visitor scrolling to the
+   twentieth artwork should not wait 1.4s to see it. */
+.ibn-stagger > *:nth-child(n+10) { animation-delay: 680ms; }
+
+/* ============================================================================
+   2 · MUSEUM ATMOSPHERE
+   Gold leaf catching light, candleglow, slow drifting dust.
+   ========================================================================== */
+
+/* Gold hairline rules catch a slow travelling glint */
+@keyframes ibn-gold-sweep {
+  0%   { background-position: -160% 0; }
+  100% { background-position: 260% 0; }
+}
+.ibn-gold-rule {
+  position: relative;
+  overflow: hidden;
+}
+.ibn-gold-rule::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(232, 195, 120, 0.85) 45%,
+    rgba(255, 240, 200, 0.95) 50%,
+    rgba(232, 195, 120, 0.85) 55%,
+    transparent 100%
+  );
+  background-size: 55% 100%;
+  background-repeat: no-repeat;
+  animation: ibn-gold-sweep 7s var(--ease-soft) infinite;
+  pointer-events: none;
+}
+
+/* Warm lamp bloom — the light in the room, breathing */
+@keyframes ibn-breathe {
+  0%, 100% { opacity: 0.34; transform: scale(1); }
+  50%      { opacity: 0.72; transform: scale(1.04); }
+}
+.ibn-breathe { animation: ibn-breathe var(--d-amb) ease-in-out infinite; }
+
+/* Suspended dust drifting through a light shaft */
+@keyframes ibn-dust {
+  0%   { transform: translate3d(0, 0, 0);          opacity: 0; }
+  12%  {                                            opacity: 0.5; }
+  88%  {                                            opacity: 0.35; }
+  100% { transform: translate3d(14px, -120px, 0);  opacity: 0; }
+}
+.ibn-dust-field { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
+.ibn-dust-field i {
+  position: absolute;
+  width: 2px; height: 2px;
+  border-radius: 9999px;
+  background: rgba(232, 163, 61, 0.75);
+  filter: blur(0.4px);
+  animation: ibn-dust 14s linear infinite;
+}
+.ibn-dust-field i:nth-child(1) { left: 12%; bottom: 18%; animation-delay: 0s;   }
+.ibn-dust-field i:nth-child(2) { left: 28%; bottom: 30%; animation-delay: 2.4s; }
+.ibn-dust-field i:nth-child(3) { left: 47%; bottom: 12%; animation-delay: 5.1s; }
+.ibn-dust-field i:nth-child(4) { left: 63%; bottom: 26%; animation-delay: 7.6s; }
+.ibn-dust-field i:nth-child(5) { left: 81%; bottom: 16%; animation-delay: 9.9s; }
+.ibn-dust-field i:nth-child(6) { left: 91%; bottom: 34%; animation-delay: 12.2s;}
+
+/* ============================================================================
+   3 · SPATIAL / AR INSTRUMENTATION
+   Precision hardware layered over the live camera view.
+   ========================================================================== */
+
+/* Sensor sweep across the viewfinder */
+@keyframes ibn-scanline {
+  0%   { transform: translateY(-100%); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateY(1100%); opacity: 0; }
+}
+
+/* Target acquisition — brackets converge and lock */
+@keyframes ibn-bracket-lock {
+  0%   { transform: scale(1.22); opacity: 0; }
+  55%  { opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+.ibn-bracket { animation: ibn-bracket-lock 900ms var(--ease-museum) both; }
+
+@keyframes ibn-lock-flash {
+  0%   { box-shadow: 0 0 0 0   rgba(63, 125, 92, 0.0); border-color: rgba(232,163,61,0.55); }
+  35%  { box-shadow: 0 0 28px 4px rgba(63, 125, 92, 0.75); border-color: var(--c-jade-lt); }
+  100% { box-shadow: 0 0 0 0   rgba(63, 125, 92, 0.0); border-color: var(--c-jade); }
+}
+.ibn-lock { animation: ibn-lock-flash 1.6s var(--ease-soft) infinite; }
+
+/* Radar ping — expanding sensor ring */
+@keyframes ibn-radar {
+  0%   { transform: scale(0.55); opacity: 0.85; }
+  100% { transform: scale(2.1);  opacity: 0;    }
+}
+
+/* Live telemetry — the "recording" tick */
+@keyframes ibn-telemetry {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.25; }
+}
+.ibn-telemetry { animation: ibn-telemetry 1.4s steps(1) infinite; }
+
+/* ============================================================================
+   4 · COMPONENT MICRO-INTERACTIONS
+   ========================================================================== */
+
+/* The AR button breathes so the eye is drawn to it */
+@keyframes ibn-fab-halo {
+  0%, 100% { box-shadow: 0 0 0 0    rgba(224, 103, 58, 0.55), 0 8px 26px -6px rgba(224,103,58,0.6); }
+  50%      { box-shadow: 0 0 0 12px rgba(224, 103, 58, 0.0),  0 8px 26px -6px rgba(224,103,58,0.6); }
+}
+.ibn-fab { animation: ibn-fab-halo 2.8s var(--ease-soft) infinite; }
+
+/* Audio waveform bars */
+@keyframes ibn-wave {
+  0%, 100% { transform: scaleY(0.32); }
+  50%      { transform: scaleY(1);    }
+}
+.ibn-wave { display: flex; align-items: center; gap: 2px; height: 16px; }
+.ibn-wave > i {
+  display: block;
+  width: 3px;
+  height: 100%;
+  border-radius: 9999px;
+  background: var(--c-amber);
+  transform-origin: center;
+  animation: ibn-wave 1.1s ease-in-out infinite;
+}
+.ibn-wave > i:nth-child(3n)   { animation-delay: .15s; }
+.ibn-wave > i:nth-child(3n+1) { animation-delay: .32s; }
+.ibn-wave > i:nth-child(3n+2) { animation-delay: .48s; }
+
+/* Skeleton shimmer for loading states */
+@keyframes ibn-skeleton {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0;  }
+}
+.ibn-skeleton {
+  background: linear-gradient(90deg, var(--c-surface) 25%, var(--c-elevated) 50%, var(--c-surface) 75%);
+  background-size: 200% 100%;
+  animation: ibn-skeleton 1.8s linear infinite;
+}
+
+/* ============================================================================
+   5 · SCRIPT SUPPORT
+   Sinhala and Tamil need extra vertical room for diacritics, and run 20-40%
+   longer than English - the same two rules that are load-bearing in the
+   Kotlin app's typography.
+   ========================================================================== */
+
+:lang(si), :lang(ta) {
+  line-height: 1.75;
+  padding-block: 1px;
+  overflow-wrap: anywhere;
+}
+:lang(ja), :lang(ko) { line-height: 1.7; }
+
+/* ============================================================================
+   6 · ACCESSIBILITY
+   The Settings "reduce motion" switch sets data-motion="off" on <html>, which
+   has to mean the same thing as the OS-level preference.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+html[data-motion="off"] *,
+html[data-motion="off"] *::before,
+html[data-motion="off"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+/* The ambient layers are decoration with no state to read; with motion off
+   they are just noise on an OLED panel. */
+html[data-motion="off"] .ibn-dust-field,
+html[data-motion="off"] .ibn-gold-rule::after { display: none; }
+
+:focus-visible {
+  outline: 2px solid var(--c-amber);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

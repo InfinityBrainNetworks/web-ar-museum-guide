@@ -16,6 +16,15 @@
 window.AR_CONFIG = {
 
   /**
+   * The museum, as it wants to be named on the Explore screen. A proper noun,
+   * so it is deliberately NOT translated - the interface around it is.
+   * Set it to '' to leave the eyebrow showing only the artwork count.
+   */
+  gallery: {
+    name: 'National Museum',
+  },
+
+  /**
    * The languages a visitor can choose between, in the order the picker shows
    * them. The FIRST one is the fallback: an exhibit must have its details
    * written in that language, and every other language falls back to it when a

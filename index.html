@@ -3,12 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#0b0d12">
+<meta name="theme-color" content="#141110">
 <meta name="description" content="Web AR museum guide - scans an artwork, plays its video or picture over it, reads out its label in your language, then places a related 3D object on the floor.">
 <title>Web AR Museum Guide</title>
 
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>">
+<link rel="stylesheet" href="./css/theme.css">
 <link rel="stylesheet" href="./css/style.css">
+<link rel="stylesheet" href="./css/shell.css">
 
 <!-- Logger first: it patches console + error handlers before any other script runs,
      so failures inside A-Frame / MindAR are captured too. -->
@@ -81,33 +83,6 @@
 <!-- One wrapper, because WebXR's dom-overlay can only promote a single element. -->
 <div id="overlay">
 
-<!-- 0. Language. Shown before anything else, because every word after this
-        depends on the answer. Skipped on later visits - the choice is
-        remembered - and the globe in the action bar reopens it. -->
-<section id="langScreen" class="screen hidden">
-  <div class="intro-card lang-card">
-    <p class="eyebrow" data-i18n="app.eyebrow">Web AR</p>
-    <h1 data-i18n="app.name">Museum Guide</h1>
-    <p class="lang-title" data-i18n="lang.title">Choose your language</p>
-    <div id="langList" class="lang-list"></div>
-    <button id="langGo" class="btn btn-primary btn-lg" type="button" data-i18n="lang.continue">Continue</button>
-    <p class="intro-hint" data-i18n="lang.sub">You can change this at any time.</p>
-  </div>
-</section>
-
-<!-- 1. Start screen (also the user gesture that unlocks camera + video on iOS) -->
-<section id="introScreen" class="screen hidden">
-  <div class="intro-card">
-    <p class="eyebrow" data-i18n="app.eyebrow">Web AR</p>
-    <h1 data-i18n="app.name">Museum Guide</h1>
-    <div id="introThumbs" class="intro-thumbs"></div>
-    <p class="intro-text" data-i18n="intro.text">Point your camera at an artwork.</p>
-    <button id="startBtn" class="btn btn-primary btn-lg" type="button">Start AR</button>
-    <p class="intro-hint" id="introHint" data-i18n="intro.hint">Camera access is required.</p>
-    <button id="introLang" class="link-btn" type="button" data-i18n="lang.change">Language</button>
-  </div>
-</section>
-
 <!-- 2. Loading -->
 <section id="loadingScreen" class="screen hidden">
   <div class="spinner" aria-hidden="true"></div>
@@ -131,6 +106,13 @@
 <!-- 5. Logo strip. Decoration only - the same row is drawn into every
         photo by js/capture.js, so what you frame is what you get. -->
 <div id="brandBar" class="brand-bar hidden" aria-hidden="true"></div>
+
+<!-- 5b. Leave AR. The camera stops and the visitor lands back in Explore;
+     without this the only way out of the viewfinder is the browser's own back
+     button, which on a phone means leaving the app altogether. -->
+<button id="exitAR" class="exit-ar hidden" type="button" data-i18n-label="btn.exitAr" aria-label="Close AR">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-close"></use></svg>
+</button>
 
 <!-- 6. Status chip -->
 <div id="statusChip" class="status-chip hidden"><span class="dot"></span><span id="statusText">Tracking</span></div>
@@ -296,7 +278,223 @@
 
 </div><!-- /#overlay -->
 
+<!-- ============ ICONS ============ -->
+<!-- Drawn rather than downloaded. The Kotlin designs use Material Symbols,
+     which is a webfont; these are the same glyphs as inline paths, so the
+     gallery's wifi is never between a visitor and a legible button. -->
+<svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
+  <defs>
+    <g id="i-explore" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>
+    </g>
+    <g id="i-map" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 4L3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5z"/><path d="M9 4v13M15 6.5v13"/>
+    </g>
+    <g id="i-ar" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3l7.5 4.2v8.6L12 20l-7.5-4.2V7.2z"/><path d="M4.5 7.2L12 11.5l7.5-4.3M12 11.5V20"/>
+    </g>
+    <g id="i-feedback" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12a8 8 0 01-8 8H7l-4 3V12a8 8 0 018-8h2a8 8 0 018 8z"/><path d="M8.5 11h7M8.5 14.5h4"/>
+    </g>
+    <g id="i-gear" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3.2"/>
+      <path d="M19.1 14.5a1.5 1.5 0 00.3 1.7l.1.1a1.9 1.9 0 11-2.7 2.7l-.1-.1a1.5 1.5 0 00-1.7-.3 1.5 1.5 0 00-.9 1.4v.2a1.9 1.9 0 11-3.8 0v-.1a1.5 1.5 0 00-1-1.4 1.5 1.5 0 00-1.7.3l-.1.1a1.9 1.9 0 11-2.7-2.7l.1-.1a1.5 1.5 0 00.3-1.7 1.5 1.5 0 00-1.4-.9h-.2a1.9 1.9 0 110-3.8h.1a1.5 1.5 0 001.4-1 1.5 1.5 0 00-.3-1.7l-.1-.1a1.9 1.9 0 112.7-2.7l.1.1a1.5 1.5 0 001.7.3h.1a1.5 1.5 0 00.9-1.4v-.2a1.9 1.9 0 113.8 0v.1a1.5 1.5 0 00.9 1.4 1.5 1.5 0 001.7-.3l.1-.1a1.9 1.9 0 112.7 2.7l-.1.1a1.5 1.5 0 00-.3 1.7v.1a1.5 1.5 0 001.4.9h.2a1.9 1.9 0 110 3.8h-.1a1.5 1.5 0 00-1.4.9z"/>
+    </g>
+    <g id="i-globe" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18 14 14 0 010-18z"/>
+    </g>
+    <g id="i-close" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <path d="M6 6l12 12M18 6L6 18"/>
+    </g>
+    <g id="i-back" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M15 5l-7 7 7 7"/>
+    </g>
+    <g id="i-chevron" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 5l7 7-7 7"/>
+    </g>
+    <g id="i-video" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="5.5" width="13" height="13" rx="2.5"/><path d="M16 10.5l5-3v9l-5-3z"/>
+    </g>
+    <g id="i-image" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="8.5" cy="10" r="1.6"/><path d="M3.5 17l5-4.5 4.5 4 3-2.5 4.5 4"/>
+    </g>
+    <g id="i-audio" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 14v-2a8 8 0 0116 0v2"/><rect x="2.5" y="13.5" width="4.5" height="6.5" rx="2"/><rect x="17" y="13.5" width="4.5" height="6.5" rx="2"/>
+    </g>
+    <g id="i-motion" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 12h4l3-7 4 14 3-7h4"/>
+    </g>
+    <g id="i-bug" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="7" y="7" width="10" height="13" rx="5"/><path d="M3 11h4M17 11h4M3.5 17h3.5M17 17h3.5M9 5l1.5 2M15 5l-1.5 2"/>
+    </g>
+  </defs>
+</svg>
+
+<!-- ============ LANGUAGE ============ -->
+<!-- Asked before anything else, because every word after this depends on the
+     answer, and asked at all because a museum cannot know who walked in.
+     Deliberately OUTSIDE #overlay: it is a browse screen, never AR chrome. -->
+<section id="langScreen" class="screen hidden">
+  <div class="intro-card lang-card">
+    <p class="eyebrow" data-i18n="app.eyebrow">Web AR</p>
+    <h1 data-i18n="app.name">Museum Guide</h1>
+    <p class="lang-title" data-i18n="lang.title">Choose your language</p>
+    <div id="langList" class="lang-list"></div>
+    <button id="langGo" class="btn btn-primary btn-lg" type="button" data-i18n="lang.continue">Continue</button>
+    <p class="intro-hint" data-i18n="lang.sub">You can change this at any time.</p>
+  </div>
+</section>
+
+<!-- ============ BROWSE SHELL ============ -->
+<!-- Explore, the exhibit label, and Settings - everything the app can do with
+     the camera off. See the note at the top of css/shell.css for why this is a
+     sibling of #overlay rather than a child of it. -->
+<div id="shell" class="shell hidden">
+
+  <header class="shell-bar">
+    <button id="shellBack" class="icon-btn hidden" type="button" data-i18n-label="btn.back2" aria-label="Back">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-back"></use></svg>
+    </button>
+    <span id="shellTitle" class="shell-wordmark" data-i18n="app.name">Museum Guide</span>
+    <button id="shellLang" class="icon-btn" type="button" data-i18n-label="lang.change" aria-label="Language">
+      <span id="shellLangCode">EN</span>
+    </button>
+  </header>
+
+  <div id="shellBody" class="shell-body">
+
+    <!-- Explore: every artwork in the gallery, whether or not it is in front
+         of you. The target image doubles as the photograph, which is why this
+         screen needed no new content. -->
+    <section id="viewExplore" class="view on">
+      <div class="explore-head">
+        <p class="eyebrow" id="exploreEyebrow"></p>
+        <h1 id="exploreTitle"></h1>
+      </div>
+      <div id="exhibitGrid" class="exhibit-grid ibn-stagger"></div>
+      <div id="exploreEmpty" class="shell-empty hidden">
+        <div class="glyph" aria-hidden="true">&#128444;&#65039;</div>
+        <h2 data-i18n="intro.empty.title">No exhibits yet</h2>
+        <p data-i18n="intro.empty.text">Nothing has been added to this gallery yet.</p>
+      </div>
+    </section>
+
+    <!-- The label, as a page. The same words and the same recording as the AR
+         sheet renders - one source, two presentations. -->
+    <section id="viewExhibit" class="view">
+      <div class="exhibit-hero" id="exhibitHero"></div>
+      <div class="exhibit-head">
+        <p class="kicker" id="exhibitKicker"></p>
+        <h1 id="exhibitTitle"></h1>
+        <div class="exhibit-alts" id="exhibitAlts"></div>
+      </div>
+      <div class="exhibit-facts" id="exhibitFacts"></div>
+      <nav class="exhibit-langs" id="exhibitLangs" aria-label="Language"></nav>
+      <p class="exhibit-note hidden" id="exhibitFallback"></p>
+      <div class="exhibit-rule" aria-hidden="true"><span>&#10038;</span></div>
+      <div class="exhibit-body">
+        <h2 data-i18n="exhibit.about">About this exhibit</h2>
+        <div class="rich-text" id="exhibitText"></div>
+      </div>
+      <div class="exhibit-actions">
+        <button id="exhibitListen" class="btn btn-ghost hidden" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-audio"></use></svg>
+          <span id="exhibitListenLabel" data-i18n="details.listen">Listen</span>
+        </button>
+        <button id="exhibitAr" class="btn btn-primary" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-ar"></use></svg>
+          <span data-i18n="exhibit.viewInAr">View in AR</span>
+        </button>
+      </div>
+      <audio id="exhibitAudio" preload="none"></audio>
+    </section>
+
+    <!-- Settings -->
+    <section id="viewSettings" class="view">
+      <div class="settings-group">
+        <h2 data-i18n="settings.language">Language</h2>
+        <div class="settings-list">
+          <button id="setLang" class="settings-row" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-globe"></use></svg>
+            <span class="label">
+              <strong data-i18n="settings.language">Language</strong>
+              <span data-i18n="settings.languageSub">Interface and exhibit text</span>
+            </span>
+            <span class="value" id="setLangValue"></span>
+            <span class="chev" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><use href="#i-chevron"></use></svg></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <h2 data-i18n="settings.display">Display</h2>
+        <div class="settings-list">
+          <button id="setMotion" class="settings-row" type="button" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-motion"></use></svg>
+            <span class="label">
+              <strong data-i18n="settings.motion">Reduce motion</strong>
+              <span data-i18n="settings.motionSub">Turn off the drifting dust and the slow fades</span>
+            </span>
+            <span class="switch" aria-hidden="true"></span>
+          </button>
+          <button id="setLog" class="settings-row" type="button" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bug"></use></svg>
+            <span class="label">
+              <strong data-i18n="settings.log">Debug log</strong>
+              <span data-i18n="settings.logSub">Show the bug button over the camera</span>
+            </span>
+            <span class="switch" aria-hidden="true"></span>
+          </button>
+        </div>
+      </div>
+
+      <p class="settings-about" id="settingsAbout"></p>
+    </section>
+
+    <!-- Map and Feedback. In the bar because the shape of the app is five
+         slots; honest about not being built because neither has what it needs
+         yet. js/shell.js fills this in for whichever one was tapped. -->
+    <section id="viewSoon" class="view">
+      <div class="soon-panel">
+        <div class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24"><use id="soonIcon" href="#i-map"></use></svg></div>
+        <h2 id="soonTitle"></h2>
+        <p id="soonText"></p>
+        <div class="needs" id="soonNeeds"></div>
+      </div>
+    </section>
+
+  </div>
+
+  <nav class="shell-nav" id="shellNav">
+    <button class="nav-item on" type="button" data-nav="explore">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-explore"></use></svg>
+      <span class="nav-label" data-i18n="nav.explore">Explore</span>
+    </button>
+    <button class="nav-item dimmed" type="button" data-nav="map">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-map"></use></svg>
+      <span class="nav-label" data-i18n="nav.map">Map</span>
+    </button>
+    <span class="nav-fab-slot">
+      <button id="navAr" class="nav-fab ibn-fab" type="button" data-i18n-label="nav.ar" aria-label="Start AR">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-ar"></use></svg>
+      </button>
+    </span>
+    <button class="nav-item dimmed" type="button" data-nav="feedback">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-feedback"></use></svg>
+      <span class="nav-label" data-i18n="nav.feedback">Feedback</span>
+    </button>
+    <button class="nav-item" type="button" data-nav="settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-gear"></use></svg>
+      <span class="nav-label" data-i18n="nav.settings">Settings</span>
+    </button>
+  </nav>
+
+  <p id="shellToast" class="shell-toast hidden" role="status"></p>
+</div>
+
 <script src="./js/capture.js"></script>
 <script src="./js/app.js"></script>
+<!-- The browse half. Reads the exhibits app.js has already loaded. -->
+<script src="./js/shell.js"></script>
 </body>
 </html>
