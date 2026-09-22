@@ -1,15 +1,21 @@
 # Target compiler
 
-Rebuilds `assets/targets/targets.mind` from a source image.
+Rebuilds `assets/content/targets.mind` from the source images.
+
+The portal's **⚙ Compile targets** does the same job in the browser and is the
+normal route; this is for a build server, or for a set too large to compile in
+a tab.
 
 ```bash
 npm install                                                   # one-off
-npm run compile                                               # the current target
-node compile-target.mjs ../path/to/image.png -o ../assets/targets/targets.mind
+node compile-target.mjs ../assets/content/*-target.png -o ../assets/content/targets.mind
 ```
 
-Accepts `.png`, `.jpg`. Multiple images can be compiled into one `.mind`
-(they become target index 0, 1, 2… in the order given).
+**The order of the images is the order of the exhibits in `content.json`.**
+`targetIndex` is a position, not a name, so compiling them in a different order
+leaves every exhibit tracking against the wrong one.
+
+Accepts `.png` and `.jpg`.
 
 MindAR's own offline compiler depends on `node-canvas`, a native module needing a
 C++ toolchain. It only uses canvas to turn the image into RGBA pixels, so this

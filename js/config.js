@@ -15,40 +15,79 @@
  */
 window.AR_CONFIG = {
 
-  // FALLBACK ONLY. Used when assets/content/content.json is missing, so a fresh
-  // checkout still runs. The portal writes real values into the bundle, and
-  // js/app.js sets MindAR's imageTargetSrc from that at start-up.
+  /**
+   * The languages a visitor can choose between, in the order the picker shows
+   * them. The FIRST one is the fallback: an exhibit must have its details
+   * written in that language, and every other language falls back to it when a
+   * translation is missing. English first is a decision, not a preference - it
+   * is the one language every exhibit is required to carry.
+   *
+   * Edit this list in the portal (the languages button), not here. The portal
+   * writes the real list into the bundle; this is only what a fresh checkout
+   * starts from.
+   */
+  languages: [
+    { code: 'en', name: 'English', native: 'English' },
+    { code: 'si', name: 'Sinhala', native: 'සිංහල' },
+    { code: 'ta', name: 'Tamil', native: 'தமிழ்' },
+  ],
+
+  // Where the compiled tracker lives. The portal writes this into the bundle
+  // too; this is the path used before any bundle has been exported.
   target: {
-    // Rebuilt by admin.html in the browser. The offline equivalent is
-    // `cd tools && npm install && npm run compile`.
-    mindSrc: './assets/targets/targets.mind',
-    // Source image, shown as a thumbnail on the start screen.
-    imageSrc: './assets/targets/target.png',
-    width: 552,
-    height: 566,
+    mindSrc: './assets/content/targets.mind',
+    // There is no built-in exhibit. An empty gallery says so on the start
+    // screen and sends you to the portal, which is more honest than shipping a
+    // demo painting that hangs in no museum.
+    imageSrc: null,
+    width: 1,
+    height: 1,
   },
 
   // Per-exhibit in the portal. These are the values a NEW exhibit starts with,
   // and the fallback exhibit's own settings.
-  video: {
-    src: './assets/video/video.mp4',
-    width: 704,
-    height: 704,
+  media: {
+    // What is projected onto the artwork. Exactly one per exhibit, and which
+    // it is follows from the file: an .mp4 makes it 'video', a .jpg or .png
+    // makes it 'image'. A still is worth having - an archival photograph of
+    // the piece before restoration, or a painting's underdrawing - and it
+    // costs a fraction of a video to deploy.
+    kind: 'video',
+    src: null,
+    width: 0,
+    height: 0,
 
-    // How the video is mapped onto the artwork:
-    //   'stretch' - fills the painting exactly, ignoring the video's own aspect ratio
-    //   'cover'   - fills the painting exactly, crops the video's overflowing edges
-    //   'contain' - shows the whole video inside the painting, may leave a gap
+    // How the media is mapped onto the artwork:
+    //   'stretch' - fills the painting exactly, ignoring the media's own aspect ratio
+    //   'cover'   - fills the painting exactly, crops the overflowing edges
+    //   'contain' - shows the whole thing inside the painting, may leave a gap
     fit: 'stretch',
 
     loop: true,
     // Restart from 0:00 every time the target is re-found (false = resume).
+    // Video only; a still has nothing to restart.
     restartOnFound: false,
     // Fine alignment, in target units. Use the debug panel's nudge buttons to
     // find values on-device, press "Log current values", then type them into
     // that exhibit's Settings in admin.html.
     scale: 1.0,
     offset: { x: 0, y: 0, z: 0.001 },
+  },
+
+  /**
+   * The written and spoken details behind the "More details" button.
+   *
+   * What they say is per exhibit and per language, in the portal. These are
+   * the only two things about the sheet that are the same for every exhibit.
+   */
+  details: {
+    // Open the sheet by itself as soon as the media has played, rather than
+    // waiting to be asked. Off: a panel that covers the artwork uninvited is
+    // the fastest way to annoy someone who came to look at the artwork.
+    autoOpen: false,
+    // Pause the projected video while the sheet is open. It is behind the
+    // sheet and unwatchable there, and its sound would fight the narration.
+    pauseMediaWhileOpen: true,
   },
 
   // Per-exhibit in the portal: each exhibit has its own model and its own

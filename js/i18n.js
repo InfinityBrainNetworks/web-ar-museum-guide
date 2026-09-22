@@ -1,0 +1,329 @@
+/**
+ * The app's own words, in every language it can speak.
+ *
+ * Two quite different things are translated in this project, and only one of
+ * them lives here:
+ *
+ *   the INTERFACE   "More details", "Listen", "Point at the artwork". Shipped
+ *                   with the app, the same in every museum. This file.
+ *
+ *   the EXHIBITS    what each label actually says. Written per exhibit in the
+ *                   admin portal and carried in content.json. Not here.
+ *
+ * A gallery may add a language the interface has never heard of — the portal
+ * lets it — and that is deliberately not an error. An unknown language shows
+ * its own exhibit text, written by the museum, inside an English interface,
+ * which is a great deal more useful than refusing to show it at all.
+ *
+ * Translations below are a starting point and should be read by a native
+ * speaker before the gallery opens. The keys, not the English, are the source
+ * of truth: nothing in the app compares against a displayed string.
+ */
+(function () {
+  'use strict';
+
+  var STORE_KEY = 'ar-museum-language';
+
+  /**
+   * The interface, key by key.
+   *
+   * `en` is complete by definition and every other language falls back to it
+   * key by key, so a half-finished translation shows the translated half
+   * rather than nothing.
+   */
+  var STRINGS = {
+    en: {
+      'app.name': 'Museum Guide',
+      'app.eyebrow': 'Web AR',
+
+      'lang.title': 'Choose your language',
+      'lang.sub': 'You can change this at any time.',
+      'lang.continue': 'Continue',
+      'lang.change': 'Language',
+
+      'intro.text': 'Point your camera at an artwork. It comes to life on the wall, and you can read or listen to its story.',
+      'intro.start': 'Start AR',
+      'intro.loading': 'Loading…',
+      'intro.unavailable': 'Unavailable',
+      'intro.hint': 'Camera access is required. Nothing is uploaded — everything runs on your device.',
+      'intro.empty.title': 'No exhibits yet',
+      'intro.empty.text': 'This gallery has no artworks loaded. Add them in the admin portal, compile the targets and export the bundle.',
+
+      'loading.camera': 'Starting camera…',
+      'scan.point': 'Point at the artwork',
+      'floor.point': 'Point your phone down at the floor and move it slowly',
+
+      'btn.details': 'More details',
+      'btn.ar': 'View in 3D',
+      'btn.place': 'Place on the floor',
+      'btn.back': 'Back to artwork',
+      'btn.move': 'Move',
+      'btn.remove': 'Remove',
+      'btn.close': 'Close',
+      'btn.photo': 'Take a photo',
+
+      'details.listen': 'Listen',
+      'details.pause': 'Pause',
+      'details.replay': 'Play again',
+      'details.empty': 'No details have been written for this exhibit yet.',
+      'details.fallback': 'Shown in {language} — this exhibit has no {wanted} translation yet.',
+      'details.readIn': 'Read in',
+
+      'photo.save': 'Save to photos',
+      'photo.back': 'Back to AR',
+
+      'status.searching': 'Searching…',
+      'status.tracking': 'Tracking',
+      'status.floor': 'Looking for the floor',
+      'status.floorReady': 'Floor ready',
+      'status.hold': 'Hold steady… {seconds}s',
+      'status.placed': 'Placed',
+    },
+
+    si: {
+      'app.name': 'කෞතුකාගාර මාර්ගෝපදේශය',
+      'app.eyebrow': 'වෙබ් AR',
+
+      'lang.title': 'ඔබේ භාෂාව තෝරන්න',
+      'lang.sub': 'ඔබට ඕනෑම වේලාවක මෙය වෙනස් කළ හැකිය.',
+      'lang.continue': 'ඉදිරියට',
+      'lang.change': 'භාෂාව',
+
+      'intro.text': 'කලා කෘතියක් දෙසට ඔබේ කැමරාව එල්ල කරන්න. එය බිත්තියේම දිවි ගෙන එන අතර, එහි කතාව කියවීමට හෝ ඇසීමට ඔබට හැකිය.',
+      'intro.start': 'AR ආරම්භ කරන්න',
+      'intro.loading': 'පූරණය වෙමින්…',
+      'intro.unavailable': 'නොමැත',
+      'intro.hint': 'කැමරා අවසරය අවශ්‍යයි. කිසිවක් උඩුගත නොවේ — සියල්ල ඔබේ උපාංගය තුළම ක්‍රියාත්මක වේ.',
+      'intro.empty.title': 'තවම ප්‍රදර්ශන නැත',
+      'intro.empty.text': 'මෙම ගැලරියට කලා කෘති එක් කර නැත. පරිපාලන පිවිසුමෙන් ඒවා එක් කරන්න.',
+
+      'loading.camera': 'කැමරාව ආරම්භ වෙමින්…',
+      'scan.point': 'කලා කෘතිය දෙසට එල්ල කරන්න',
+      'floor.point': 'දුරකථනය බිම දෙසට යොමු කර සෙමින් චලනය කරන්න',
+
+      'btn.details': 'වැඩි විස්තර',
+      'btn.ar': '3D ලෙස බලන්න',
+      'btn.place': 'බිම තබන්න',
+      'btn.back': 'කලා කෘතියට ආපසු',
+      'btn.move': 'ගෙන යන්න',
+      'btn.remove': 'ඉවත් කරන්න',
+      'btn.close': 'වසන්න',
+      'btn.photo': 'ඡායාරූපයක් ගන්න',
+
+      'details.listen': 'අසන්න',
+      'details.pause': 'විරාම කරන්න',
+      'details.replay': 'නැවත අසන්න',
+      'details.empty': 'මෙම ප්‍රදර්ශනය සඳහා තවම විස්තර ලියා නැත.',
+      'details.fallback': '{language} භාෂාවෙන් පෙන්වයි — මෙම ප්‍රදර්ශනයට තවම {wanted} පරිවර්තනයක් නැත.',
+      'details.readIn': 'කියවන්නේ',
+
+      'photo.save': 'ඡායාරූප වෙත සුරකින්න',
+      'photo.back': 'AR වෙත ආපසු',
+
+      'status.searching': 'සොයමින්…',
+      'status.tracking': 'හඳුනාගෙන ඇත',
+      'status.floor': 'බිම සොයමින්',
+      'status.floorReady': 'බිම සූදානම්',
+      'status.hold': 'ස්ථිරව තබාගෙන සිටින්… {seconds}s',
+      'status.placed': 'තබා ඇත',
+    },
+
+    ta: {
+      'app.name': 'அருங்காட்சியக வழிகாட்டி',
+      'app.eyebrow': 'வெப் AR',
+
+      'lang.title': 'உங்கள் மொழியைத் தேர்ந்தெடுக்கவும்',
+      'lang.sub': 'இதை நீங்கள் எப்போது வேண்டுமானாலும் மாற்றலாம்.',
+      'lang.continue': 'தொடரவும்',
+      'lang.change': 'மொழி',
+
+      'intro.text': 'ஒரு கலைப்படைப்பை நோக்கி உங்கள் கேமராவைக் காட்டுங்கள். அது சுவரிலேயே உயிர்பெறும்; அதன் கதையை நீங்கள் படிக்கவோ கேட்கவோ முடியும்.',
+      'intro.start': 'AR ஐத் தொடங்கு',
+      'intro.loading': 'ஏற்றுகிறது…',
+      'intro.unavailable': 'கிடைக்கவில்லை',
+      'intro.hint': 'கேமரா அனுமதி தேவை. எதுவும் பதிவேற்றப்படவில்லை — அனைத்தும் உங்கள் சாதனத்திலேயே இயங்குகிறது.',
+      'intro.empty.title': 'இன்னும் காட்சிப்பொருட்கள் இல்லை',
+      'intro.empty.text': 'இந்தக் கேலரியில் கலைப்படைப்புகள் ஏற்றப்படவில்லை. நிர்வாகப் பக்கத்தில் அவற்றைச் சேர்க்கவும்.',
+
+      'loading.camera': 'கேமரா தொடங்குகிறது…',
+      'scan.point': 'கலைப்படைப்பை நோக்கிக் காட்டவும்',
+      'floor.point': 'உங்கள் தொலைபேசியைத் தரையை நோக்கித் திருப்பி மெதுவாக நகர்த்தவும்',
+
+      'btn.details': 'மேலும் விவரங்கள்',
+      'btn.ar': '3D இல் பார்க்க',
+      'btn.place': 'தரையில் வைக்கவும்',
+      'btn.back': 'கலைப்படைப்புக்குத் திரும்பு',
+      'btn.move': 'நகர்த்து',
+      'btn.remove': 'அகற்று',
+      'btn.close': 'மூடு',
+      'btn.photo': 'படம் எடுக்க',
+
+      'details.listen': 'கேட்க',
+      'details.pause': 'இடைநிறுத்து',
+      'details.replay': 'மீண்டும் கேட்க',
+      'details.empty': 'இந்தக் காட்சிப்பொருளுக்கு இன்னும் விவரங்கள் எழுதப்படவில்லை.',
+      'details.fallback': '{language} மொழியில் காட்டப்படுகிறது — இதற்கு இன்னும் {wanted} மொழிபெயர்ப்பு இல்லை.',
+      'details.readIn': 'படிக்கும் மொழி',
+
+      'photo.save': 'படங்களில் சேமி',
+      'photo.back': 'AR க்குத் திரும்பு',
+
+      'status.searching': 'தேடுகிறது…',
+      'status.tracking': 'கண்டறியப்பட்டது',
+      'status.floor': 'தரையைத் தேடுகிறது',
+      'status.floorReady': 'தரை தயார்',
+      'status.hold': 'அசையாமல் பிடிக்கவும்… {seconds}s',
+      'status.placed': 'வைக்கப்பட்டது',
+    },
+  };
+
+  var available = [];        // what this bundle offers, in the portal's order
+  var current = 'en';
+  var picked = false;        // has a human chosen, or is this just a guess?
+  var listeners = [];
+
+  function read(key) {
+    try { return window.localStorage.getItem(key); } catch (e) { return null; }
+  }
+  function write(key, value) {
+    try { window.localStorage.setItem(key, value); } catch (e) { /* private mode: not worth a warning */ }
+  }
+
+  function has(code) {
+    for (var i = 0; i < available.length; i++) if (available[i].code === code) return true;
+    return false;
+  }
+
+  function entry(code) {
+    for (var i = 0; i < available.length; i++) if (available[i].code === code) return available[i];
+    return null;
+  }
+
+  /**
+   * The language to start on before anyone has chosen.
+   *
+   * Only a highlight in the picker, never a decision — the picker is still
+   * shown. A phone set to Sinhala landing on a Sinhala-first screen is a nice
+   * touch; a phone set to Sinhala being given no choice is not.
+   */
+  function guess() {
+    var wanted = [];
+    if (navigator.languages) wanted = wanted.concat(navigator.languages);
+    if (navigator.language) wanted.push(navigator.language);
+    for (var i = 0; i < wanted.length; i++) {
+      var code = String(wanted[i]).toLowerCase();
+      if (has(code)) return code;
+      var base = code.split('-')[0];
+      if (has(base)) return base;
+    }
+    return available.length ? available[0].code : 'en';
+  }
+
+  /**
+   * One string.
+   *
+   * Falls back key by key rather than language by language, so a translation
+   * that is 80% done shows 80% translated instead of nothing. {placeholders}
+   * are filled from `vars`.
+   */
+  function t(key, vars) {
+    var table = STRINGS[current] || {};
+    var text = table[key];
+    if (text === undefined) text = STRINGS.en[key];
+    if (text === undefined) return key;          // a typo'd key shows itself, loudly
+    if (!vars) return text;
+    return text.replace(/\{(\w+)\}/g, function (whole, name) {
+      return vars[name] === undefined ? whole : vars[name];
+    });
+  }
+
+  /** The name of a language in its own script, for the picker and the sheet. */
+  function nameOf(code) {
+    var l = entry(code);
+    if (l) return l.native || l.name;
+    return code;
+  }
+
+  function notify() {
+    listeners.forEach(function (fn) {
+      try { fn(current); } catch (e) { /* one bad listener must not stop the rest */ }
+    });
+  }
+
+  function set(code, byHuman) {
+    if (!has(code)) return false;
+    var changed = code !== current;
+    current = code;
+    if (byHuman) {
+      picked = true;
+      write(STORE_KEY, code);
+    }
+    document.documentElement.setAttribute('lang', code);
+    apply(document);
+    if (changed || byHuman) notify();
+    return true;
+  }
+
+  /**
+   * Fill every element that names a string key.
+   *
+   *   data-i18n        its text
+   *   data-i18n-label  its aria-label, for the icon-only buttons
+   *   data-i18n-title  its tooltip
+   *
+   * Markup carries the key, not the English, so a screen added later is
+   * translated by naming a key and nothing else.
+   */
+  function apply(root) {
+    var scope = root || document;
+    var nodes = scope.querySelectorAll('[data-i18n]');
+    for (var i = 0; i < nodes.length; i++) nodes[i].textContent = t(nodes[i].getAttribute('data-i18n'));
+    nodes = scope.querySelectorAll('[data-i18n-label]');
+    for (i = 0; i < nodes.length; i++) nodes[i].setAttribute('aria-label', t(nodes[i].getAttribute('data-i18n-label')));
+    nodes = scope.querySelectorAll('[data-i18n-title]');
+    for (i = 0; i < nodes.length; i++) nodes[i].setAttribute('title', t(nodes[i].getAttribute('data-i18n-title')));
+  }
+
+  /**
+   * Adopt the bundle's language list.
+   *
+   * Called once the content has loaded, because which languages exist is the
+   * museum's decision and travels with the exhibits. A stored choice survives
+   * only if the gallery still offers it — a language deleted in the portal
+   * must not strand the visitor who last used it.
+   */
+  function init(languages) {
+    available = (languages || []).map(function (l) {
+      return { code: l.code, name: l.name, native: l.native || l.name };
+    });
+    if (!available.length) available = [{ code: 'en', name: 'English', native: 'English' }];
+
+    var stored = read(STORE_KEY);
+    if (stored && has(stored)) {
+      picked = true;
+      current = stored;
+    } else {
+      picked = false;
+      current = guess();
+    }
+    document.documentElement.setAttribute('lang', current);
+    apply(document);
+    return current;
+  }
+
+  window.ARI18n = {
+    init: init,
+    apply: apply,
+    t: t,
+    set: set,
+    nameOf: nameOf,
+    code: function () { return current; },
+    languages: function () { return available.slice(); },
+    /** Has a human chosen? False means the picker has not been answered yet. */
+    chosen: function () { return picked; },
+    /** Is this language one the interface itself is translated into? */
+    translated: function (code) { return !!STRINGS[code]; },
+    onChange: function (fn) { listeners.push(fn); },
+    STORE_KEY: STORE_KEY,
+  };
+})();

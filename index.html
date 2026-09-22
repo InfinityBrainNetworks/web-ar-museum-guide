@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0b0d12">
-<meta name="description" content="Web AR museum guide - scans a painting, plays a video over it, then places a related 3D object on the floor.">
+<meta name="description" content="Web AR museum guide - scans an artwork, plays its video or picture over it, reads out its label in your language, then places a related 3D object on the floor.">
 <title>Web AR Museum Guide</title>
 
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>">
@@ -17,6 +17,8 @@
 <!-- Resolves which exhibits this page shows: the admin portal's draft when
      opened as ?preview=1, otherwise the deployed bundle, otherwise config.js. -->
 <script src="./js/content.js"></script>
+<!-- The interface's own words. The exhibits' words travel with the exhibits. -->
+<script src="./js/i18n.js"></script>
 
 <script src="https://cdn.jsdelivr.net/npm/aframe@1.5.0/dist/aframe-master.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -79,22 +81,37 @@
 <!-- One wrapper, because WebXR's dom-overlay can only promote a single element. -->
 <div id="overlay">
 
+<!-- 0. Language. Shown before anything else, because every word after this
+        depends on the answer. Skipped on later visits - the choice is
+        remembered - and the globe in the action bar reopens it. -->
+<section id="langScreen" class="screen hidden">
+  <div class="intro-card lang-card">
+    <p class="eyebrow" data-i18n="app.eyebrow">Web AR</p>
+    <h1 data-i18n="app.name">Museum Guide</h1>
+    <p class="lang-title" data-i18n="lang.title">Choose your language</p>
+    <div id="langList" class="lang-list"></div>
+    <button id="langGo" class="btn btn-primary btn-lg" type="button" data-i18n="lang.continue">Continue</button>
+    <p class="intro-hint" data-i18n="lang.sub">You can change this at any time.</p>
+  </div>
+</section>
+
 <!-- 1. Start screen (also the user gesture that unlocks camera + video on iOS) -->
-<section id="introScreen" class="screen">
+<section id="introScreen" class="screen hidden">
   <div class="intro-card">
-    <p class="eyebrow">Web AR</p>
-    <h1>Museum Guide</h1>
+    <p class="eyebrow" data-i18n="app.eyebrow">Web AR</p>
+    <h1 data-i18n="app.name">Museum Guide</h1>
     <div id="introThumbs" class="intro-thumbs"></div>
-    <p class="intro-text">Point your camera at the artwork above. The video plays right on top of it, then you can place a 3D figure on the floor.</p>
+    <p class="intro-text" data-i18n="intro.text">Point your camera at an artwork.</p>
     <button id="startBtn" class="btn btn-primary btn-lg" type="button">Start AR</button>
-    <p class="intro-hint" id="introHint">Camera access is required. Nothing is uploaded — everything runs on your device.</p>
+    <p class="intro-hint" id="introHint" data-i18n="intro.hint">Camera access is required.</p>
+    <button id="introLang" class="link-btn" type="button" data-i18n="lang.change">Language</button>
   </div>
 </section>
 
 <!-- 2. Loading -->
 <section id="loadingScreen" class="screen hidden">
   <div class="spinner" aria-hidden="true"></div>
-  <p id="loadingText">Starting camera…</p>
+  <p id="loadingText" data-i18n="loading.camera">Starting camera…</p>
 </section>
 
 <!-- 3. Scene 1 hint: looking for the painting -->
@@ -103,12 +120,12 @@
     <span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span>
     <div class="scan-line"></div>
   </div>
-  <p class="scan-text">Point at the painting</p>
+  <p class="scan-text" data-i18n="scan.point">Point at the artwork</p>
 </section>
 
 <!-- 4. Scene 2 hint: looking for the floor -->
 <section id="floorScreen" class="overlay overlay-bottom hidden">
-  <p class="scan-text" id="floorText">Point your phone down at the floor and move it slowly</p>
+  <p class="scan-text" id="floorText" data-i18n="floor.point">Point your phone down at the floor and move it slowly</p>
 </section>
 
 <!-- 5. Logo strip. Decoration only - the same row is drawn into every
@@ -121,18 +138,25 @@
 <!-- 7. Bottom action bar. Which buttons show is entirely a function of the
         current scene — see applyModeUI() in js/app.js. -->
 <div id="actionBar" class="action-bar hidden">
-  <button id="backBtn" class="btn btn-ghost btn-sm hidden" type="button">↩ Painting</button>
-  <button id="arBtn" class="btn btn-primary btn-wide hidden" type="button">
-    <span class="btn-icon">🧊</span><span>View in 3D</span>
+  <button id="backBtn" class="btn btn-ghost btn-sm hidden" type="button">
+    <span aria-hidden="true">↩</span><span data-i18n="btn.back">Back to artwork</span>
+  </button>
+  <!-- Details is the primary action once an artwork has been recognised: it is
+       what the visitor came for, and the only one every exhibit has. -->
+  <button id="detailsBtn" class="btn btn-primary btn-wide hidden" type="button">
+    <span class="btn-icon" aria-hidden="true">📖</span><span data-i18n="btn.details">More details</span>
+  </button>
+  <button id="arBtn" class="btn btn-ghost btn-wide hidden" type="button">
+    <span class="btn-icon" aria-hidden="true">🧊</span><span data-i18n="btn.ar">View in 3D</span>
   </button>
   <button id="placeBtn" class="btn btn-primary btn-wide hidden" type="button">
-    <span class="btn-icon">🗿</span><span id="placeBtnLabel">Place AR figure on the floor</span>
+    <span class="btn-icon" aria-hidden="true">🗿</span><span id="placeBtnLabel" data-i18n="btn.place">Place on the floor</span>
   </button>
-  <button id="moveBtn" class="btn btn-ghost btn-sm hidden" type="button">Move</button>
-  <button id="shotBtn" class="shutter hidden" type="button" aria-label="Take a photo">
+  <button id="moveBtn" class="btn btn-ghost btn-sm hidden" type="button" data-i18n="btn.move">Move</button>
+  <button id="shotBtn" class="shutter hidden" type="button" data-i18n-label="btn.photo" aria-label="Take a photo">
     <span class="shutter-ring"></span>
   </button>
-  <button id="removeBtn" class="btn btn-ghost btn-sm hidden" type="button">Remove</button>
+  <button id="removeBtn" class="btn btn-ghost btn-sm hidden" type="button" data-i18n="btn.remove">Remove</button>
 </div>
 
 <!-- 8. Shutter flash, and the picture that came out of it -->
@@ -143,9 +167,39 @@
     <img id="photoPreview" alt="The picture you just took">
     <p id="photoHint" class="photo-hint"></p>
     <div class="photo-actions">
-      <button id="photoSave" class="btn btn-primary" type="button">Save to photos</button>
-      <button id="photoClose" class="btn btn-ghost" type="button">Back to AR</button>
+      <button id="photoSave" class="btn btn-primary" type="button" data-i18n="photo.save">Save to photos</button>
+      <button id="photoClose" class="btn btn-ghost" type="button" data-i18n="photo.back">Back to AR</button>
     </div>
+  </div>
+</section>
+
+<!-- 8b. The label. Everything the museum wrote about this exhibit, in the
+         visitor's language, with the recording of it if one exists. The body is
+         written in the portal and sanitised twice - once on the way in, once
+         here - because it is rendered as HTML. -->
+<section id="detailsSheet" class="details-sheet hidden" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="details-card">
+    <header class="details-head">
+      <div class="details-grab" aria-hidden="true"></div>
+      <h2 id="detailsTitle"></h2>
+      <button id="detailsClose" class="btn btn-sm btn-ghost details-x" type="button" data-i18n-label="btn.close" aria-label="Close">✕</button>
+    </header>
+
+    <!-- Language lives inside the sheet as well as on the start screen: this is
+         where a visitor discovers the text is not in their language, so this is
+         where the fix belongs. -->
+    <nav id="detailsLangs" class="details-langs" aria-label="Language"></nav>
+    <p id="detailsFallback" class="details-fallback hidden"></p>
+
+    <div id="detailsBody" class="details-body"></div>
+
+    <footer class="details-foot">
+      <button id="detailsPlay" class="btn btn-primary details-play hidden" type="button">
+        <span class="btn-icon" aria-hidden="true">▶</span><span id="detailsPlayLabel" data-i18n="details.listen">Listen</span>
+      </button>
+      <div id="detailsProgress" class="details-progress hidden"><div id="detailsProgressFill"></div></div>
+      <audio id="detailsAudio" preload="none"></audio>
+    </footer>
   </div>
 </section>
 

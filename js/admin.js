@@ -1,8 +1,9 @@
 /**
  * AR Content Portal.
  *
- * Authoring for the AR page: add exhibits (target image + video + 3D model),
- * compile the image tracker, export a bundle you commit and push.
+ * Authoring for the AR page: add exhibits (target image, the video or still
+ * projected onto it, what the label says in each language, and optionally a 3D
+ * object), compile the image tracker, export a bundle you commit and push.
  *
  * Everything happens in this browser. Files live in IndexedDB, and the .mind
  * tracker is built by MindAR's own compiler — the very same one the AR page
@@ -14,6 +15,12 @@
  * invalidates the compiled tracker. That is what the staleness banner watches,
  * because a stale tracker fails in the nastiest possible way — every exhibit
  * still tracks, just against the wrong video.
+ *
+ * LANGUAGES are a property of the whole gallery, not of one exhibit: the list
+ * lives on the draft, ships in the bundle, and the FIRST one is the fallback
+ * every exhibit must be written in. Editing the list never deletes anybody's
+ * translation — removing a language hides its text, and putting the language
+ * back brings the words with it.
  */
 (function () {
   'use strict';
@@ -24,11 +31,56 @@
   // Below this, a target is too flat or repetitive to track reliably.
   var GOOD_FEATURE_POINTS = 400;
 
-  var draft = { version: 1, exhibits: [], compiled: null };
+  var draft = { version: 2, languages: null, exhibits: [], compiled: null };
   var urls = new Map();     // file key -> object URL, so re-renders do not churn
   var pending = null;       // which {exhibit, kind} a file picker was opened for
 
   var $ = function (id) { return document.getElementById(id); };
+
+  /** The gallery's languages, first one first. Never empty. */
+  function languages() {
+    return ARContent.languageList(draft.languages);
+  }
+
+  /** The one every exhibit must be written in, and everything falls back to. */
+  function baseLang() { return languages()[0]; }
+
+  /**
+   * Bring an older draft up to date, in place.
+   *
+   * Two things changed when stills and languages arrived: `video` became
+   * `media` (because it may now be a picture), and the draft gained a language
+   * list. Both are done here rather than scattered through the readers, so
+   * there is one place that knows what an old draft looked like.
+   */
+  function migrateDraft() {
+    var moved = 0;
+    if (!draft.languages) draft.languages = languages();
+    (draft.exhibits || []).forEach(function (ex) {
+      if (!ex.media && ex.video) { ex.media = ex.video; delete ex.video; moved++; }
+      if (ex.media && !ex.media.kind) {
+        ex.media.kind = /^image\//.test(ex.media.type || '') ? 'image' : 'video';
+      }
+      ex.details = ARContent.normalizeDetails(ex.details, draft.languages);
+    });
+    draft.version = 2;
+    if (!moved) return Promise.resolve(false);
+
+    // The file moved too: its key carries the kind, so an untouched 'vid:' blob
+    // would be invisible to everything that now looks for 'med:'.
+    return Promise.all((draft.exhibits || []).map(function (ex) {
+      var from = ARStore.fileKey(ex.id, 'vid');
+      var to = ARStore.fileKey(ex.id, 'med');
+      return ARStore.getFile(from).then(function (blob) {
+        if (!blob) return null;
+        return ARStore.putFile(to, blob).then(function () { return ARStore.delFile(from); });
+      });
+    })).then(function () {
+      toast('Updated ' + moved + ' exhibit' + (moved === 1 ? '' : 's') +
+            ' to the new projection format.');
+      return true;
+    });
+  }
 
   // ------------------------------------------------------------------ utils
   function bytes(n) {
@@ -111,8 +163,34 @@
     return ARStore.setDraft(draft).then(function () { renderHeader(); });
   }
 
+  /**
+   * Ready to export?
+   *
+   * The label in the fallback language counts as required, on purpose: an
+   * exhibit with no words is a video on a wall, and the sheet behind "More
+   * details" would open empty. The other languages are genuinely optional.
+   */
   function isComplete(ex) {
-    return !!(ex.image && ex.image.stamp && ex.video && ex.video.stamp);
+    return !!(ex.image && ex.image.stamp && ex.media && ex.media.stamp && hasBaseDetails(ex));
+  }
+
+  function hasBaseDetails(ex) {
+    return ARContent.hasDetail((ex.details || {})[baseLang().code]);
+  }
+
+  /** Why this exhibit is not ready, in the order a person would fix it. */
+  function whatIsMissing(ex) {
+    var missing = [];
+    if (!(ex.image && ex.image.stamp)) missing.push('a target image');
+    if (!(ex.media && ex.media.stamp)) missing.push('a video or picture to project');
+    if (!hasBaseDetails(ex)) missing.push('its details in ' + baseLang().name);
+    return missing;
+  }
+
+  /** "a", "a and b", "a, b and c" — three items read badly joined by "and". */
+  function listPhrase(items) {
+    if (items.length < 3) return items.join(' and ');
+    return items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1];
   }
 
   /**
@@ -185,6 +263,27 @@
     });
   }
 
+  function probeAudio(blob) {
+    return new Promise(function (resolve, reject) {
+      var audio = document.createElement('audio');
+      var url = URL.createObjectURL(blob);
+      var done = function (result, error) {
+        URL.revokeObjectURL(url);
+        audio.removeAttribute('src');
+        if (error) reject(error); else resolve(result);
+      };
+      audio.preload = 'metadata';
+      audio.onloadedmetadata = function () {
+        done({ duration: isFinite(audio.duration) ? audio.duration : 0 });
+      };
+      audio.onerror = function () {
+        done(null, new Error('this browser cannot decode that audio — MP3 or M4A is the safe choice'));
+      };
+      setTimeout(function () { done(null, new Error('the audio did not report its length within 15s')); }, 15000);
+      audio.src = url;
+    });
+  }
+
   /** GLB starts with the ASCII magic "glTF"; a .gltf is JSON. Catch a wrong file early. */
   function probeModel(blob, name) {
     return blob.slice(0, 4).arrayBuffer().then(function (head) {
@@ -202,15 +301,25 @@
     });
   }
 
+  /** Is this file key one of the per-language narrations? */
+  function audioCode(kind) {
+    return /^aud-/.test(kind) ? kind.slice(4) : null;
+  }
+
   function setFile(ex, kind, file) {
     if (!file) return Promise.resolve();
 
     var key = ARStore.fileKey(ex.id, kind);
     var stamp = file.size + ':' + (file.lastModified || 0) + ':' + file.name;
+    var code = audioCode(kind);
+    // The projection is whichever kind of file was dropped on it. There is no
+    // mode to choose first, and therefore no way to choose it wrongly.
+    var isStill = kind === 'med' && /^image\//.test(file.type);
 
     var probe;
     if (kind === 'img') probe = probeImage(file);
-    else if (kind === 'vid') probe = probeVideo(file);
+    else if (kind === 'med') probe = isStill ? probeImage(file) : probeVideo(file);
+    else if (code) probe = probeAudio(file);
     else probe = probeModel(file, file.name);
 
     return probe.then(function (info) {
@@ -221,15 +330,23 @@
           // Any previous quality report belongs to the old file.
           featurePoints: null, keyframes: null,
         };
-      } else if (kind === 'vid') {
-        ex.video = ex.video || ARContent.videoDefaults();
-        ex.video.stamp = stamp;
-        ex.video.fileName = file.name;
-        ex.video.type = file.type;
-        ex.video.size = file.size;
-        ex.video.width = info.width;
-        ex.video.height = info.height;
-        ex.video.duration = info.duration;
+      } else if (kind === 'med') {
+        ex.media = ex.media || ARContent.mediaDefaults();
+        ex.media.kind = isStill ? 'image' : 'video';
+        ex.media.stamp = stamp;
+        ex.media.fileName = file.name;
+        ex.media.type = file.type;
+        ex.media.size = file.size;
+        ex.media.width = info.width;
+        ex.media.height = info.height;
+        ex.media.duration = info.duration || 0;
+      } else if (code) {
+        ex.details = ex.details || {};
+        ex.details[code] = ex.details[code] || ARContent.blankDetail();
+        ex.details[code].audio = {
+          stamp: stamp, fileName: file.name, type: file.type,
+          size: file.size, duration: info.duration || 0,
+        };
       } else {
         ex.model = ex.model || ARContent.modelDefaults();
         ex.model.stamp = stamp;
@@ -246,6 +363,7 @@
     }).then(function () {
       render();
       if (kind === 'img') toast('Target image set — remember to compile before exporting.');
+      if (kind === 'med') toast('Projection set: ' + (isStill ? 'a still image' : 'a video') + '.');
     }).catch(function (err) {
       toast(err.message || String(err), 'err');
     });
@@ -253,11 +371,17 @@
 
   function clearFile(ex, kind) {
     var key = ARStore.fileKey(ex.id, kind);
+    var code = audioCode(kind);
     dropUrl(key);
     return ARStore.delFile(key).then(function () {
       if (kind === 'img') ex.image = { stamp: null };
-      else if (kind === 'vid') { ex.video.stamp = null; ex.video.fileName = null; ex.video.size = 0; }
-      else ex.model = ARContent.modelDefaults();
+      else if (kind === 'med') {
+        ex.media.stamp = null; ex.media.fileName = null; ex.media.size = 0;
+        ex.media.width = 0; ex.media.height = 0;
+      } else if (code) {
+        // The words stay; only the recording of them goes.
+        if (ex.details && ex.details[code]) ex.details[code].audio = { stamp: null };
+      } else ex.model = ARContent.modelDefaults();
       return save();
     }).then(render);
   }
@@ -379,9 +503,12 @@
   // ------------------------------------------------------------------ export
   function contentJson(fileNames) {
     return {
-      version: 1,
+      version: 2,
       generated: new Date().toISOString(),
       mindSrc: './assets/content/targets.mind',
+      // The gallery's languages travel with its exhibits: the viewer's picker
+      // offers exactly what was authored here, on whatever device opens it.
+      languages: languages(),
       exhibits: draft.exhibits.map(function (ex, i) {
         var names = fileNames[ex.id];
         return {
@@ -393,22 +520,53 @@
             width: ex.image.width,
             height: ex.image.height,
           },
-          video: {
-            src: './assets/content/' + names.vid,
-            width: ex.video.width,
-            height: ex.video.height,
-            fit: ex.video.fit,
-            loop: ex.video.loop,
-            restartOnFound: ex.video.restartOnFound,
-            scale: ex.video.scale,
-            offset: ex.video.offset,
+          media: {
+            kind: ex.media.kind === 'image' ? 'image' : 'video',
+            src: './assets/content/' + names.med,
+            width: ex.media.width,
+            height: ex.media.height,
+            fit: ex.media.fit,
+            loop: ex.media.loop,
+            restartOnFound: ex.media.restartOnFound,
+            scale: ex.media.scale,
+            offset: ex.media.offset,
           },
+          details: detailsJson(ex, names.aud),
           // The sizing and look settings ship even without a model file, so
           // they still shape the placeholder and survive adding a .glb later.
           model: modelJson(ex, names.mdl),
         };
       }),
     };
+  }
+
+  /**
+   * One exhibit's label, per language.
+   *
+   * Sanitised HERE as well as in the editor, because this is the text that ends
+   * up in a repo — and a file in a repo can be edited by hand, by a script, or
+   * by a merge nobody read.
+   *
+   * A language with nothing in it is left out rather than exported as empty
+   * keys: the viewer treats "absent" and "blank" identically, and leaving it
+   * out keeps content.json readable.
+   */
+  function detailsJson(ex, audioNames) {
+    var out = {};
+    languages().forEach(function (l) {
+      var detail = (ex.details || {})[l.code];
+      if (!detail) return;
+      var title = String(detail.title || '').trim();
+      var html = ARContent.sanitizeRichText(detail.html);
+      var audio = (audioNames || {})[l.code];
+      if (!title && !html && !audio) return;
+      out[l.code] = {
+        title: title,
+        html: html,
+        audio: audio ? { src: './assets/content/' + audio } : null,
+      };
+    });
+    return out;
   }
 
   function modelJson(ex, fileName) {
@@ -453,7 +611,8 @@
 
     var incomplete = draft.exhibits.filter(function (ex) { return !isComplete(ex); });
     if (incomplete.length) {
-      toast('"' + incomplete[0].name + '" is missing its image or video.', 'err');
+      toast('"' + incomplete[0].name + '" still needs ' +
+            listPhrase(whatIsMissing(incomplete[0])) + '.', 'err');
       return Promise.resolve();
     }
     var state = compileState();
@@ -474,20 +633,36 @@
         if (used[base] > 1) base += '-' + used[base];
         names[ex.id] = {};
 
+        var langs = languages();
         return Promise.all([
           ARStore.getFile(ARStore.fileKey(ex.id, 'img')),
-          ARStore.getFile(ARStore.fileKey(ex.id, 'vid')),
+          ARStore.getFile(ARStore.fileKey(ex.id, 'med')),
           ARStore.getFile(ARStore.fileKey(ex.id, 'mdl')),
-        ]).then(function (files) {
-          var img = files[0], vid = files[1], mdl = files[2];
+        ].concat(langs.map(function (l) {
+          return ARStore.getFile(ARStore.fileKey(ex.id, ARStore.audioKind(l.code)));
+        }))).then(function (files) {
+          var img = files[0], med = files[1], mdl = files[2];
+          var still = ex.media.kind === 'image';
           names[ex.id].img = base + '-target.' + extOf(ex.image.fileName, 'png');
-          names[ex.id].vid = base + '-video.' + extOf(ex.video.fileName, 'mp4');
+          names[ex.id].med = base + (still ? '-still.' : '-video.') +
+                             extOf(ex.media.fileName, still ? 'jpg' : 'mp4');
           entries.push({ name: 'assets/content/' + names[ex.id].img, blob: img });
-          entries.push({ name: 'assets/content/' + names[ex.id].vid, blob: vid });
+          entries.push({ name: 'assets/content/' + names[ex.id].med, blob: med });
           if (mdl) {
             names[ex.id].mdl = base + '-model.' + extOf(ex.model.fileName, 'glb');
             entries.push({ name: 'assets/content/' + names[ex.id].mdl, blob: mdl });
           }
+          // The language code is in the file name so the bundle stays readable
+          // to a human unzipping it: mona-lisa-ta.mp3 needs no manifest.
+          names[ex.id].aud = {};
+          langs.forEach(function (l, li) {
+            var blob = files[3 + li];
+            if (!blob) return;
+            var detail = (ex.details || {})[l.code] || {};
+            var file = base + '-' + l.code + '.' + extOf((detail.audio || {}).fileName, 'mp3');
+            names[ex.id].aud[l.code] = file;
+            entries.push({ name: 'assets/content/' + file, blob: blob });
+          });
         });
       });
     }, Promise.resolve());
@@ -535,6 +710,8 @@
       return manifest.text().then(function (text) {
         var data = JSON.parse(text);
         if (!data.exhibits || !data.exhibits.length) throw new Error('that bundle has no exhibits in it');
+        // The bundle's own language list wins: its exhibits are written in it.
+        var bundleLangs = ARContent.languageList(data.languages);
 
         progress(0.15, 'Replacing the current draft…');
         return ARStore.clear().then(function () {
@@ -548,19 +725,22 @@
             return previous.then(function () {
               progress(0.15 + step * i, 'Importing ' + (raw.name || 'exhibit ' + (i + 1)) + '…');
 
-              var ex = ARContent.normalize(raw, i);
+              var ex = ARContent.normalize(raw, i, bundleLangs);
               // Paths in content.json are site-relative; zip entries are not.
               var pick = function (src) { return src ? byName[String(src).replace(/^\.\//, '')] : null; };
+              var rawMedia = raw.media || raw.video || {};
               var img = pick(raw.image && raw.image.src);
-              var vid = pick(raw.video && raw.video.src);
+              var med = pick(rawMedia.src);
               var mdl = pick(raw.model && raw.model.src);
 
               var record = {
                 id: ex.id, name: ex.name,
-                image: { stamp: null }, video: ARContent.videoDefaults(), model: ARContent.modelDefaults(),
+                image: { stamp: null }, media: ARContent.mediaDefaults(),
+                details: ARContent.normalizeDetails(raw.details, bundleLangs),
+                model: ARContent.modelDefaults(),
               };
-              ['fit', 'loop', 'restartOnFound', 'scale', 'offset', 'width', 'height'].forEach(function (k) {
-                if (ex.video[k] !== undefined) record.video[k] = ex.video[k];
+              ['kind', 'fit', 'loop', 'restartOnFound', 'scale', 'offset', 'width', 'height'].forEach(function (k) {
+                if (ex.media[k] !== undefined) record.media[k] = ex.media[k];
               });
               ARContent.MODEL_FIELDS.forEach(function (k) {
                 if (ex.model && ex.model[k] !== undefined) record.model[k] = ex.model[k];
@@ -575,12 +755,23 @@
                 };
                 writes.push(ARStore.putFile(ARStore.fileKey(ex.id, 'img'), img));
               }
-              if (vid) {
-                record.video.stamp = 'bundle:' + vid.size;
-                record.video.fileName = basename(raw.video.src);
-                record.video.size = vid.size;
-                writes.push(ARStore.putFile(ARStore.fileKey(ex.id, 'vid'), vid));
+              if (med) {
+                record.media.stamp = 'bundle:' + med.size;
+                record.media.fileName = basename(rawMedia.src);
+                record.media.size = med.size;
+                writes.push(ARStore.putFile(ARStore.fileKey(ex.id, 'med'), med));
               }
+              bundleLangs.forEach(function (l) {
+                var detail = (raw.details || {})[l.code];
+                var src = detail && detail.audio && detail.audio.src;
+                var blob = pick(src);
+                if (!blob) return;
+                record.details[l.code].audio = {
+                  stamp: 'bundle:' + blob.size, fileName: basename(src),
+                  type: blob.type, size: blob.size, duration: 0,
+                };
+                writes.push(ARStore.putFile(ARStore.fileKey(ex.id, ARStore.audioKind(l.code)), blob));
+              });
               if (mdl) {
                 record.model.stamp = 'bundle:' + mdl.size;
                 record.model.fileName = basename(raw.model.src);
@@ -595,7 +786,7 @@
 
           return chain.then(function () {
             var mind = byName['assets/content/targets.mind'];
-            draft = { version: 1, exhibits: exhibits, compiled: null };
+            draft = { version: 2, languages: bundleLangs, exhibits: exhibits, compiled: null };
             if (!mind) return null;
             return ARStore.putFile(ARStore.MIND_FILE, mind).then(function () {
               // The bundle's tracker matches the bundle's exhibits by
@@ -648,7 +839,7 @@
     }
 
     var settings = data && data.settings;
-    if (!settings || (!settings.model && !settings.video)) {
+    if (!settings || (!settings.model && !settings.media && !settings.video)) {
       toast('No settings in that block.', 'err');
       return;
     }
@@ -664,7 +855,9 @@
     }
 
     if (settings.model) { target.model = deepInto(target.model || {}, settings.model); }
-    if (settings.video) { target.video = deepInto(target.video || {}, settings.video); }
+    // `video` is what the Adjust panel called it before stills could be projected.
+    var media = settings.media || settings.video;
+    if (media) { target.media = deepInto(target.media || {}, media); }
 
     save().then(function () {
       render();
@@ -710,10 +903,14 @@
         return bundle.exhibits.reduce(function (previous, ex, i) {
           return previous.then(function () {
             progress(0.1 + step * i, 'Fetching ' + ex.name + '…');
+            var langs = bundle.languages;
             return Promise.all([
-              grab(ex.image.src), grab(ex.video.src), grab(ex.model && ex.model.src),
-            ]).then(function (files) {
-              var img = files[0], vid = files[1], mdl = files[2];
+              grab(ex.image.src), grab(ex.media.src), grab(ex.model && ex.model.src),
+            ].concat(langs.map(function (l) {
+              var detail = ex.details[l.code];
+              return grab(detail && detail.audio && detail.audio.src);
+            }))).then(function (files) {
+              var img = files[0], med = files[1], mdl = files[2];
               var record = {
                 id: ex.id, name: ex.name,
                 image: img ? {
@@ -721,27 +918,38 @@
                   size: img.size, width: ex.image.width, height: ex.image.height,
                   featurePoints: null, keyframes: null,
                 } : { stamp: null },
-                video: ex.video, model: ex.model || ARContent.modelDefaults(),
+                media: ex.media, details: ex.details,
+                model: ex.model || ARContent.modelDefaults(),
               };
-              record.video.stamp = vid ? 'deployed:' + vid.size : null;
-              record.video.fileName = basename(ex.video.src);
-              record.video.size = vid ? vid.size : 0;
+              record.media.stamp = med ? 'deployed:' + med.size : null;
+              record.media.fileName = basename(ex.media.src);
+              record.media.size = med ? med.size : 0;
               record.model.stamp = mdl ? 'deployed:' + mdl.size : null;
               record.model.fileName = mdl ? basename(ex.model.src) : null;
               record.model.size = mdl ? mdl.size : 0;
-              delete record.image.src; delete record.video.src; delete record.model.src;
+              delete record.image.src; delete record.media.src; delete record.model.src;
 
               var writes = [];
               if (img) writes.push(ARStore.putFile(ARStore.fileKey(ex.id, 'img'), img));
-              if (vid) writes.push(ARStore.putFile(ARStore.fileKey(ex.id, 'vid'), vid));
+              if (med) writes.push(ARStore.putFile(ARStore.fileKey(ex.id, 'med'), med));
               if (mdl) writes.push(ARStore.putFile(ARStore.fileKey(ex.id, 'mdl'), mdl));
+              langs.forEach(function (l, li) {
+                var blob = files[3 + li];
+                var detail = record.details[l.code];
+                if (!blob || !detail) { if (detail) detail.audio = { stamp: null }; return; }
+                detail.audio = {
+                  stamp: 'deployed:' + blob.size, fileName: basename(ex.details[l.code].audio.src),
+                  type: blob.type, size: blob.size, duration: 0,
+                };
+                writes.push(ARStore.putFile(ARStore.fileKey(ex.id, ARStore.audioKind(l.code)), blob));
+              });
               exhibits.push(record);
               return Promise.all(writes);
             });
           });
         }, Promise.resolve()).then(function () {
           progress(0.95, 'Fetching the compiled tracker…');
-          draft = { version: 1, exhibits: exhibits, compiled: null };
+          draft = { version: 2, languages: bundle.languages, exhibits: exhibits, compiled: null };
           return grab(bundle.mindSrc).then(function (mind) {
             if (!mind) return;
             return ARStore.putFile(ARStore.MIND_FILE, mind).then(function () {
@@ -765,6 +973,403 @@
     }).catch(function (err) {
       idle();
       toast('Could not load the deployed content: ' + (err.message || err), 'err');
+    });
+  }
+
+  // ------------------------------------------------------------------ details
+  /*
+   * The label editor: a title, a small rich text field, and a recording, for
+   * each language the gallery offers.
+   *
+   * The formatting is done with document.execCommand. It is deprecated and it
+   * is also the only thing every browser here actually implements for a
+   * contenteditable; the replacement everyone points at does not exist yet.
+   * What protects us is not the editor but js/content.js, which rebuilds the
+   * markup from a whitelist on the way in and again on the way out — so
+   * whatever execCommand produces, only the eleven allowed tags survive.
+   */
+
+  /** Which language tab each card is showing, so a re-render does not lose it. */
+  var ui = {};
+
+  function uiFor(id) {
+    ui[id] = ui[id] || { lang: baseLang().code };
+    return ui[id];
+  }
+
+  function exec(command, value) {
+    try { document.execCommand(command, false, value || null); } catch (e) { /* nothing to do */ }
+  }
+
+  var RICH_COMMANDS = [
+    { label: 'H', title: 'Heading', run: function () { exec('formatBlock', '<h2>'); } },
+    { label: 'h', title: 'Sub-heading', run: function () { exec('formatBlock', '<h3>'); } },
+    { label: '¶', title: 'Body text', run: function () { exec('formatBlock', '<p>'); } },
+    { label: 'B', title: 'Bold (Ctrl+B)', cls: 'rb', run: function () { exec('bold'); } },
+    { label: 'I', title: 'Italic (Ctrl+I)', cls: 'ri', run: function () { exec('italic'); } },
+    { label: 'U', title: 'Underline (Ctrl+U)', cls: 'ru', run: function () { exec('underline'); } },
+    { label: '•', title: 'Bullet points', run: function () { exec('insertUnorderedList'); } },
+    { label: '1.', title: 'Numbered list', run: function () { exec('insertOrderedList'); } },
+    { label: '✕', title: 'Remove formatting', run: function () { exec('removeFormat'); } },
+  ];
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>]/g, function (c) {
+      return c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;';
+    });
+  }
+
+  function renderDetailsBlock(card, ex) {
+    var block = card.querySelector('.details-block');
+    if (!block) return;
+    var tabs = block.querySelector('.lang-tabs');
+    var pane = block.querySelector('.lang-pane');
+    var state = block.querySelector('.details-state');
+    var seat = uiFor(ex.id);
+
+    ex.details = ARContent.normalizeDetails(ex.details, languages());
+    if (!ex.details[seat.lang]) seat.lang = baseLang().code;
+
+    var summarise = function () {
+      var written = languages().filter(function (l) {
+        return ARContent.hasDetail(ex.details[l.code]);
+      }).map(function (l) { return l.code; });
+      var spoken = languages().filter(function (l) {
+        return !!(ex.details[l.code].audio && ex.details[l.code].audio.stamp);
+      }).map(function (l) { return l.code; });
+      state.textContent = 'text: ' + (written.join(', ') || 'none yet') +
+                          ' · audio: ' + (spoken.join(', ') || 'none');
+      state.className = 'details-state' + (hasBaseDetails(ex) ? ' ok' : ' warn');
+      paintMissing(card, ex);
+    };
+
+    var paintTabs = function () {
+      tabs.textContent = '';
+      languages().forEach(function (l) {
+        var written = ARContent.hasDetail(ex.details[l.code]);
+        var tab = document.createElement('button');
+        tab.type = 'button';
+        tab.className = 'lang-tab' + (l.code === seat.lang ? ' on' : '') + (written ? ' written' : '');
+        tab.title = l.name + (l.code === baseLang().code ? ' — required' : '');
+        tab.setAttribute('lang', l.code);
+        tab.textContent = (l.native || l.name) + (written ? ' ✓' : '');
+        tab.addEventListener('click', function () {
+          seat.lang = l.code;
+          paintTabs();
+          paintPane();
+        });
+        tabs.appendChild(tab);
+      });
+    };
+
+    var paintPane = function () { renderDetailPane(pane, ex, seat.lang, summarise); };
+
+    paintTabs();
+    paintPane();
+    summarise();
+
+    // The tabs carry a written/not-written mark, so they follow the typing.
+    block.addEventListener('detailschanged', function () { paintTabs(); summarise(); });
+  }
+
+  function renderDetailPane(pane, ex, code, summarise) {
+    pane.textContent = '';
+
+    var lang = languages().filter(function (l) { return l.code === code; })[0] || baseLang();
+    var required = code === baseLang().code;
+    var detail = ex.details[code];
+
+    var announce = function () {
+      pane.dispatchEvent(new CustomEvent('detailschanged', { bubbles: true }));
+    };
+    var touch = debounceSave(function () { announce(); if (summarise) summarise(); });
+
+    // --- title
+    var title = document.createElement('input');
+    title.type = 'text';
+    title.className = 'detail-title';
+    title.maxLength = 200;
+    title.setAttribute('lang', code);
+    title.placeholder = required
+      ? 'Title in ' + lang.name + ' — shown at the top of the sheet (required)'
+      : 'Title in ' + lang.name + ' (optional)';
+    title.value = detail.title || '';
+    title.addEventListener('input', function () { detail.title = title.value; touch(); });
+    pane.appendChild(title);
+
+    // --- toolbar
+    var bar = document.createElement('div');
+    bar.className = 'rich-bar';
+    RICH_COMMANDS.forEach(function (command) {
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'rich-btn' + (command.cls ? ' ' + command.cls : '');
+      button.title = command.title;
+      button.textContent = command.label;
+      // mousedown would move the caret out of the editor before the command
+      // ran, and execCommand works on the selection or on nothing at all.
+      button.addEventListener('mousedown', function (e) { e.preventDefault(); });
+      button.addEventListener('click', function () { command.run(); editor.focus(); touch(); });
+      bar.appendChild(button);
+    });
+    pane.appendChild(bar);
+
+    // --- the body
+    var editor = document.createElement('div');
+    editor.className = 'rich';
+    editor.contentEditable = 'true';
+    editor.spellcheck = true;
+    editor.setAttribute('lang', code);
+    editor.setAttribute('role', 'textbox');
+    editor.setAttribute('aria-multiline', 'true');
+    editor.setAttribute('data-placeholder',
+      'What the label says in ' + lang.name + '. Headings, bold, italic, underline and bullet points.');
+    editor.innerHTML = ARContent.sanitizeRichText(detail.html);
+
+    var count = document.createElement('p');
+    count.className = 'rich-count';
+    var recount = function () {
+      var words = ARContent.plainText(editor.innerHTML).split(/\s+/).filter(Boolean).length;
+      count.textContent = words ? words + (words === 1 ? ' word' : ' words') : 'empty';
+    };
+
+    editor.addEventListener('input', function () {
+      // Stored as typed and cleaned on blur: sanitising every keystroke would
+      // rebuild the DOM under the caret and throw it back to the top.
+      detail.html = editor.innerHTML;
+      recount();
+      touch();
+    });
+    editor.addEventListener('blur', function () {
+      var clean = ARContent.sanitizeRichText(editor.innerHTML);
+      if (clean !== editor.innerHTML) editor.innerHTML = clean;
+      detail.html = clean;
+      recount();
+      touch();
+    });
+    // Pasting from a word processor brings a page of markup with it. Keep the
+    // formatting that survives the whitelist and drop the rest.
+    editor.addEventListener('paste', function (e) {
+      if (!e.clipboardData) return;
+      e.preventDefault();
+      var html = e.clipboardData.getData('text/html');
+      var clean = html
+        ? ARContent.sanitizeRichText(html)
+        : escapeHtml(e.clipboardData.getData('text/plain')).replace(/\n/g, '<br>');
+      exec('insertHTML', clean);
+      detail.html = editor.innerHTML;
+      recount();
+      touch();
+    });
+
+    pane.appendChild(editor);
+    pane.appendChild(count);
+    recount();
+
+    // --- the recording
+    pane.appendChild(audioRow(ex, code, lang, touch));
+  }
+
+  /**
+   * The narration slot for one language.
+   *
+   * Optional in every language, including the first: a museum that has written
+   * its labels but not recorded them is the normal case, and the viewer simply
+   * does not show a Listen button.
+   */
+  function audioRow(ex, code, lang, touch) {
+    var row = document.createElement('div');
+    row.className = 'audio-row';
+    var kind = ARStore.audioKind(code);
+    var record = ex.details[code].audio || {};
+
+    var label = document.createElement('span');
+    label.className = 'audio-label';
+    label.textContent = '🔊 Read aloud';
+    row.appendChild(label);
+
+    var pick = document.createElement('button');
+    pick.type = 'button';
+    pick.className = 'btn btn-sm';
+    pick.textContent = record.stamp ? 'Replace…' : 'Add audio…';
+    pick.addEventListener('click', function () {
+      pending = { ex: ex, kind: kind };
+      $('pickAudio').click();
+    });
+    row.appendChild(pick);
+
+    var meta = document.createElement('span');
+    meta.className = 'audio-meta';
+    if (record.stamp) {
+      meta.textContent = record.fileName + ' · ' +
+        (record.duration ? Math.round(record.duration) + 's · ' : '') + bytes(record.size);
+    } else {
+      meta.textContent = 'none — the Listen button stays hidden in ' + lang.name;
+    }
+    row.appendChild(meta);
+
+    if (record.stamp) {
+      var play = document.createElement('audio');
+      play.controls = true;
+      play.preload = 'none';
+      play.className = 'audio-play';
+      ARStore.getFile(ARStore.fileKey(ex.id, kind)).then(function (blob) {
+        if (blob) play.src = urlFor(ARStore.fileKey(ex.id, kind), blob);
+      });
+      row.appendChild(play);
+
+      var drop = document.createElement('button');
+      drop.type = 'button';
+      drop.className = 'btn btn-sm btn-ghost danger';
+      drop.textContent = 'Remove';
+      drop.addEventListener('click', function () { clearFile(ex, kind); });
+      row.appendChild(drop);
+    }
+
+    return row;
+  }
+
+  /** One shared debounce, so typing saves once a second rather than per key. */
+  function debounceSave(after) {
+    var timer = null;
+    return function () {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function () {
+        timer = null;
+        save().then(function () { if (after) after(); });
+      }, 600);
+    };
+  }
+
+  // ------------------------------------------------------------------ languages
+  /**
+   * The gallery's language list.
+   *
+   * Removing one is not destructive: the text stays on every exhibit and comes
+   * back if the language does. That is deliberate — a mis-click here would
+   * otherwise throw away translation work that took weeks.
+   */
+  function showLanguages() {
+    var working = languages().map(function (l) {
+      return { code: l.code, name: l.name, native: l.native };
+    });
+
+    $('sheetTitle').textContent = 'Languages';
+    var body = $('sheetBody');
+
+    var paint = function () {
+      body.textContent = '';
+
+      var note = document.createElement('p');
+      note.className = 'sheet-note';
+      note.innerHTML = 'The <strong>first</strong> language is the one every exhibit must be ' +
+        'written in, and the one a visitor falls back to when a translation is missing. ' +
+        'Removing a language hides its text but never deletes it.';
+      body.appendChild(note);
+
+      var table = document.createElement('div');
+      table.className = 'lang-editor';
+      working.forEach(function (lang, i) {
+        var row = document.createElement('div');
+        row.className = 'lang-row';
+
+        var rank = document.createElement('span');
+        rank.className = 'lang-rank';
+        rank.textContent = i === 0 ? 'fallback' : String(i + 1);
+        row.appendChild(rank);
+
+        [['code', 'en', 8], ['name', 'English', 40], ['native', 'English', 40]].forEach(function (field) {
+          var input = document.createElement('input');
+          input.type = 'text';
+          input.className = 'lang-' + field[0];
+          input.placeholder = field[0] + ' (' + field[1] + ')';
+          input.maxLength = field[2];
+          input.value = lang[field[0]] || '';
+          input.addEventListener('input', function () { lang[field[0]] = input.value; });
+          row.appendChild(input);
+        });
+
+        var up = document.createElement('button');
+        up.type = 'button';
+        up.className = 'btn btn-sm btn-ghost';
+        up.textContent = '↑';
+        up.title = 'Move up';
+        up.disabled = i === 0;
+        up.addEventListener('click', function () {
+          working.splice(i - 1, 0, working.splice(i, 1)[0]);
+          paint();
+        });
+        row.appendChild(up);
+
+        var drop = document.createElement('button');
+        drop.type = 'button';
+        drop.className = 'btn btn-sm btn-ghost danger';
+        drop.textContent = '🗑';
+        drop.title = working.length < 2 ? 'The last language cannot be removed' : 'Remove';
+        drop.disabled = working.length < 2;
+        drop.addEventListener('click', function () { working.splice(i, 1); paint(); });
+        row.appendChild(drop);
+
+        table.appendChild(row);
+      });
+      body.appendChild(table);
+
+      var actions = document.createElement('div');
+      actions.className = 'sheet-actions';
+
+      var add = document.createElement('button');
+      add.type = 'button';
+      add.className = 'btn';
+      add.textContent = '+ Add a language';
+      add.addEventListener('click', function () {
+        working.push({ code: '', name: '', native: '' });
+        paint();
+      });
+      actions.appendChild(add);
+
+      var apply = document.createElement('button');
+      apply.type = 'button';
+      apply.className = 'btn btn-primary';
+      apply.textContent = 'Save languages';
+      apply.addEventListener('click', function () { saveLanguages(working); });
+      actions.appendChild(apply);
+
+      body.appendChild(actions);
+    };
+
+    paint();
+    $('sheet').classList.remove('hidden');
+  }
+
+  function saveLanguages(working) {
+    var cleaned = ARContent.languageList(working.filter(function (l) {
+      return String(l.code || '').trim();
+    }));
+    if (!cleaned.length) { toast('A gallery needs at least one language.', 'err'); return; }
+
+    var wanted = working.filter(function (l) { return String(l.code || '').trim(); }).length;
+    if (cleaned.length !== wanted) {
+      toast('Two languages had the same code — the later one was dropped.', 'err');
+    }
+
+    var gone = languages().filter(function (was) {
+      return !cleaned.some(function (is) { return is.code === was.code; });
+    });
+    if (gone.length && !confirm('Remove ' + gone.map(function (l) { return l.name; }).join(', ') +
+        '? Visitors will no longer be offered ' + (gone.length === 1 ? 'it' : 'them') +
+        '. The text already written stays in this browser and comes back if you add ' +
+        (gone.length === 1 ? 'it' : 'them') + ' again.')) return;
+
+    draft.languages = cleaned;
+    draft.exhibits.forEach(function (ex) {
+      ex.details = ARContent.normalizeDetails(ex.details, cleaned);
+    });
+    Object.keys(ui).forEach(function (id) { ui[id].lang = cleaned[0].code; });
+
+    save().then(function () {
+      render();
+      $('sheet').classList.add('hidden');
+      toast('Languages: ' + cleaned.map(function (l) { return l.code; }).join(', ') + '.', 'ok');
     });
   }
 
@@ -808,7 +1413,7 @@
 
   function renderSlot(card, ex, kind) {
     var slot = card.querySelector('.slot[data-kind="' + kind + '"]');
-    var record = kind === 'img' ? ex.image : kind === 'vid' ? ex.video : ex.model;
+    var record = kind === 'img' ? ex.image : kind === 'med' ? ex.media : ex.model;
     var filled = !!(record && record.stamp);
     var key = ARStore.fileKey(ex.id, kind);
 
@@ -831,12 +1436,19 @@
       slot.querySelector('.glb').classList.remove('hidden');
       meta.textContent = record.fileName + ' · ' + bytes(record.size);
     } else {
-      var node = slot.querySelector('.thumb');
+      // The projection slot holds two thumbnails and shows whichever suits the
+      // file that is in it.
+      var still = kind === 'med' && record.kind === 'image';
+      var node = still ? slot.querySelector('.thumb-img') : slot.querySelector('video.thumb, img.thumb:not(.thumb-img)');
+      if (kind === 'med') {
+        slot.querySelector('video.thumb').classList.toggle('hidden', still);
+        slot.querySelector('.thumb-img').classList.toggle('hidden', !still);
+      }
       node.classList.remove('hidden');
       ARStore.getFile(key).then(function (blob) {
         if (!blob) return;
         node.src = urlFor(key, blob);
-        if (kind === 'vid') {
+        if (kind === 'med' && !still) {
           // Without a nudge past zero most browsers show a black frame.
           node.onloadeddata = function () { try { node.currentTime = 0.1; } catch (e) {} };
         }
@@ -861,7 +1473,8 @@
             record.keyframes + ' keyframes — good.';
         }
       } else {
-        meta.textContent = record.fileName + ' · ' + record.width + '×' + record.height +
+        meta.textContent = (record.kind === 'image' ? '🖼 still · ' : '🎬 video · ') +
+          record.fileName + ' · ' + record.width + '×' + record.height +
           (record.duration ? ' · ' + record.duration.toFixed(1) + 's' : '') +
           ' · ' + bytes(record.size);
       }
@@ -882,7 +1495,15 @@
       save();
     });
 
-    ['img', 'vid', 'mdl'].forEach(function (kind) { renderSlot(card, ex, kind); });
+    ['img', 'med', 'mdl'].forEach(function (kind) { renderSlot(card, ex, kind); });
+
+    // What is still stopping this exhibit from being exported, in the order
+    // someone would fix it. Kept on the card rather than in a toast, because it
+    // is a property of the exhibit and not of a moment.
+    var missing = document.createElement('p');
+    missing.className = 'card-missing';
+    card.querySelector('.card-head').insertAdjacentElement('afterend', missing);
+    paintMissing(card, ex);
 
     // --- files: click to pick, drop to set, and a right-click to clear.
     card.querySelectorAll('.slot').forEach(function (slot) {
@@ -891,11 +1512,11 @@
 
       drop.addEventListener('click', function () {
         pending = { ex: ex, kind: kind };
-        $(kind === 'img' ? 'pickImage' : kind === 'vid' ? 'pickVideo' : 'pickModel').click();
+        $(kind === 'img' ? 'pickImage' : kind === 'med' ? 'pickMedia' : 'pickModel').click();
       });
       drop.addEventListener('contextmenu', function (e) {
         e.preventDefault();
-        var record = kind === 'img' ? ex.image : kind === 'vid' ? ex.video : ex.model;
+        var record = kind === 'img' ? ex.image : kind === 'med' ? ex.media : ex.model;
         if (record && record.stamp) clearFile(ex, kind);
       });
       ['dragenter', 'dragover'].forEach(function (type) {
@@ -942,11 +1563,14 @@
     });
     showShadows();
 
+    // --- the label, per language
+    renderDetailsBlock(card, ex);
+
     // --- settings, bound by path
     settings.querySelectorAll('[data-set]').forEach(function (input) {
       var path = input.dataset.set;
       var value = get(ex, path);
-      if (value === undefined) value = get({ video: ARContent.videoDefaults(), model: ARContent.modelDefaults() }, path);
+      if (value === undefined) value = get({ media: ARContent.mediaDefaults(), model: ARContent.modelDefaults() }, path);
 
       if (input.type === 'checkbox') input.checked = !!value;
       else input.value = value === undefined || value === null ? '' : value;
@@ -964,6 +1588,15 @@
     return card;
   }
 
+  function paintMissing(card, ex) {
+    var line = card.querySelector('.card-missing');
+    if (!line) return;
+    var missing = whatIsMissing(ex);
+    line.textContent = missing.length ? 'Still needs ' + listPhrase(missing) + '.' : '';
+    line.classList.toggle('hidden', !missing.length);
+    card.classList.toggle('incomplete', missing.length > 0);
+  }
+
   function render() {
     var list = $('list');
     list.textContent = '';
@@ -974,7 +1607,7 @@
 
   // ------------------------------------------------------------------ list ops
   function add() {
-    draft.exhibits.push(ARContent.blankExhibit(draft.exhibits.length));
+    draft.exhibits.push(ARContent.blankExhibit(draft.exhibits.length, languages()));
     save().then(function () {
       render();
       var cards = $('list').children;
@@ -999,7 +1632,9 @@
 
     // The copy needs its own files, not a second reference to the originals:
     // deleting the original would otherwise take the copy's assets with it.
-    var kinds = ['img', 'vid', 'mdl'];
+    var kinds = ['img', 'med', 'mdl'].concat(languages().map(function (l) {
+      return ARStore.audioKind(l.code);
+    }));
     Promise.all(kinds.map(function (kind) {
       return ARStore.getFile(ARStore.fileKey(ex.id, kind)).then(function (blob) {
         return blob ? ARStore.putFile(ARStore.fileKey(copy.id, kind), blob) : null;
@@ -1011,12 +1646,17 @@
   }
 
   function remove(ex, index) {
-    if (!confirm('Delete "' + ex.name + '"? Its image, video and model are deleted from this browser too.')) return;
-    Promise.all(['img', 'vid', 'mdl'].map(function (kind) {
+    if (!confirm('Delete "' + ex.name + '"? Its image, projection, model, text and ' +
+                 'recordings are deleted from this browser too.')) return;
+    var kinds = ['img', 'med', 'mdl'].concat(languages().map(function (l) {
+      return ARStore.audioKind(l.code);
+    }));
+    Promise.all(kinds.map(function (kind) {
       dropUrl(ARStore.fileKey(ex.id, kind));
       return ARStore.delFile(ARStore.fileKey(ex.id, kind));
     })).then(function () {
       draft.exhibits.splice(index, 1);
+      delete ui[ex.id];
       return save();
     }).then(render);
   }
@@ -1094,6 +1734,10 @@
           !confirm('This replaces everything in the portal with what the site is currently serving. Continue?')) return;
       adopt();
     });
+    $('langBtn').addEventListener('click', function () {
+      $('menu').classList.add('hidden');
+      showLanguages();
+    });
     $('pasteBtn').addEventListener('click', function () {
       $('menu').classList.add('hidden');
       var text = prompt('Paste the block from the viewer\u2019s Adjust \u2192 Copy:');
@@ -1109,7 +1753,8 @@
       ARStore.clear().then(function () {
         urls.forEach(function (url) { URL.revokeObjectURL(url); });
         urls.clear();
-        draft = { version: 1, exhibits: [], compiled: null };
+        draft = { version: 2, languages: languages(), exhibits: [], compiled: null };
+        ui = {};
         render();
         toast('Cleared.');
       });
@@ -1127,8 +1772,10 @@
       if (act === 'adopt') adopt();
     });
 
-    [['pickImage', 'img'], ['pickVideo', 'vid'], ['pickModel', 'mdl']].forEach(function (pair) {
-      $(pair[0]).addEventListener('change', function (e) {
+    // Every picker sets whatever `pending` asked for, so the audio inputs need
+    // no special case: the kind travels with the request, not with the input.
+    ['pickImage', 'pickMedia', 'pickModel', 'pickAudio'].forEach(function (id) {
+      $(id).addEventListener('change', function (e) {
         var file = e.target.files[0];
         e.target.value = '';
         if (file && pending && pending.ex) setFile(pending.ex, pending.kind, file);
@@ -1155,6 +1802,10 @@
     wire();
     ARStore.getDraft().then(function (saved) {
       if (saved && saved.exhibits) draft = saved;
+      return migrateDraft().then(function (changed) {
+        return changed ? save() : null;
+      });
+    }).then(function () {
       render();
       if (!draft.exhibits.length) $('empty').classList.remove('hidden');
     }).catch(function (err) {

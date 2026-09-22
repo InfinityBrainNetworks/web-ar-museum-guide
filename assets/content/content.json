@@ -1,41 +1,11 @@
 {
-  "version": 1,
-  "generated": "2026-09-18T13:16:45.772Z",
+  "version": 2,
+  "generated": null,
   "mindSrc": "./assets/content/targets.mind",
-  "exhibits": [
-    {
-      "id": "exhibit-mu6ueigv-8jvv",
-      "name": "Exhibit 1",
-      "targetIndex": 0,
-      "image": {
-        "src": "./assets/content/exhibit-1-target.jpg",
-        "width": 1024,
-        "height": 794
-      },
-      "video": {
-        "src": "./assets/content/exhibit-1-video.mp4",
-        "width": 1602,
-        "height": 980,
-        "fit": "stretch",
-        "loop": true,
-        "restartOnFound": false,
-        "scale": 1,
-        "offset": {
-          "x": 0,
-          "y": 0,
-          "z": 0.001
-        }
-      },
-      "model": {
-        "src": "./assets/content/exhibit-1-model.glb",
-        "heightMeters": 1,
-        "yawOffset": 0,
-        "scale": 1.00,
-        "spin": false,
-        "playClip": true,
-        "lighting": "baked",
-        "shadowOpacity": 0.5
-      }
-    }
-  ]
+  "languages": [
+    { "code": "en", "name": "English", "native": "English" },
+    { "code": "si", "name": "Sinhala", "native": "සිංහල" },
+    { "code": "ta", "name": "Tamil", "native": "தமிழ்" }
+  ],
+  "exhibits": []
 }

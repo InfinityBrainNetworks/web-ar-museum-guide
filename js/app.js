@@ -3,10 +3,11 @@
  *
  * Three scenes, deliberately independent:
  *
- *   1. SCAN   image tracking. MindAR finds the painting and the video plays
- *             mapped exactly onto it. Once playback is confirmed, "View in 3D"
- *             appears — and stays, whether or not the painting is still in
- *             frame, because it is a doorway, not a property of the target.
+ *   1. SCAN   image tracking. MindAR finds the artwork and the exhibit's media
+ *             — a video, or a still image — is mapped exactly onto it. Once it
+ *             is up, "More details" and (if the exhibit has a 3D object)
+ *             "View in 3D" appear, and they STAY, whether or not the artwork is
+ *             still in frame: they are doorways, not properties of the target.
  *
  *   2. FLOOR  floor mapping. Image tracking and the video are stopped. The user
  *             points the phone at the floor; when a surface has held still long
@@ -75,8 +76,17 @@
     started: false,
     arReady: false,
     targetFound: false,
-    videoConfirmed: false,
+    // The exhibit's media is up on the artwork: a video that has genuinely
+    // started, or a still whose texture has decoded. The gate on "More details"
+    // and "View in 3D", and it stays true once earned.
+    mediaReady: false,
     xrSupported: false,
+
+    // Has the visitor been asked what language they read? Answered before the
+    // start screen on a first visit, remembered afterwards.
+    langOpen: false,
+    detailsOpen: false,
+    empty: false,          // a deployment with no exhibits in it
 
     // Which exhibit is on screen, or was last seen. Scene 2 keeps using it
     // after the painting leaves the frame, which is the whole point of the door.
@@ -86,6 +96,7 @@
 
     // Seeded from the active exhibit each time one is found; the debug panel's
     // nudges then live here until another exhibit is scanned.
+    mediaKind: 'video',
     fit: 'stretch',
     videoScale: 1,
     videoOffset: { x: 0, y: 0, z: 0.001 },
@@ -139,6 +150,24 @@
   }
 
   /**
+   * Does this exhibit have a 3D object of its own?
+   *
+   * The gate on "View in 3D". A model record with no file means the exhibit was
+   * given settings but never a .glb, which is not something to offer a visitor
+   * — the placeholder figure is a development aid, not an exhibit.
+   */
+  function hasModel(exhibit) {
+    var ex = exhibit || EX();
+    return !!(ex && ex.model && ex.model.src);
+  }
+
+  /** The exhibit's media record — what is projected onto the artwork. */
+  function mediaCfg(exhibit) {
+    var ex = exhibit || EX();
+    return (ex && ex.media) || window.ARContent.mediaDefaults();
+  }
+
+  /**
    * A painting's height in target units.
    *
    * MindAR scales an anchor by its target's width, so the width is 1 by
@@ -173,7 +202,11 @@
     ['scene', 'floorScene', 'reticle', 'modelSlot', 'floorShadow',
      'arVideo', 'introScreen', 'introThumbs', 'introHint', 'startBtn', 'loadingScreen',
      'loadingText', 'scanScreen', 'floorScreen', 'floorText', 'statusChip', 'statusText',
-     'actionBar', 'arBtn', 'placeBtn', 'placeBtnLabel', 'moveBtn', 'removeBtn', 'backBtn',
+     'actionBar', 'arBtn', 'detailsBtn', 'placeBtn', 'placeBtnLabel', 'moveBtn',
+     'removeBtn', 'backBtn', 'langScreen', 'langList', 'langGo', 'introLang',
+     'detailsSheet', 'detailsTitle', 'detailsLangs', 'detailsFallback', 'detailsBody',
+     'detailsPlay', 'detailsPlayLabel', 'detailsProgress', 'detailsProgressFill',
+     'detailsAudio', 'detailsClose',
      'errorBanner', 'errorText', 'errorRetry', 'logToggle', 'logBadge', 'logPanel',
      'logList', 'logCount', 'logCopy', 'logDownload', 'logClear', 'logClose', 'logTools',
      'logToolsToggle', 'copyToast', 'dumpState', 'reloadBtn', 'overlay',
@@ -185,6 +218,9 @@
       el[id] = $(id);
       if (!el[id]) missing.push(id);
     });
+    // The one element with no id of its own: it is only ever addressed as
+    // "the footer of the sheet", so an id would be a second name for it.
+    el.detailsFoot = el.detailsSheet ? el.detailsSheet.querySelector('.details-foot') : null;
     return missing;
   }
 
@@ -336,8 +372,54 @@
     });
   }
 
-  // ---------------------------------------------------------------- video plane
-  /** Build the video texture and hang it on every exhibit's plane. */
+  // ---------------------------------------------------------------- media plane
+  /**
+   * Textures for the exhibits whose media is a still image, by exhibit id.
+   *
+   * A video is different: there is exactly ONE <video> element and therefore one
+   * video texture, because iOS grants playback to an element and swapping src
+   * is the only way to keep that grant. Images have no such constraint, so each
+   * gets its own texture and they can all be resident at once.
+   */
+  var imageTextures = {};
+
+  function imageTextureFor(ex) {
+    if (!ex || !ex.media.src) return null;
+    if (imageTextures[ex.id] && imageTextures[ex.id].__src === ex.media.src) {
+      return imageTextures[ex.id];
+    }
+    if (imageTextures[ex.id]) imageTextures[ex.id].dispose();
+
+    var texture = new THREE.TextureLoader().load(
+      ex.media.src,
+      function () {
+        log.ok('still image decoded for "' + ex.name + '"');
+        // Only now are its real dimensions known, and 'cover'/'contain' need them.
+        if (EX() === ex) { applyMediaFit(); confirmStill(ex.targetIndex); }
+      },
+      undefined,
+      function () {
+        log.error('still image failed to load for "' + ex.name + '": ' + shortSrc(ex.media.src));
+        showError('This exhibit\u2019s image could not be loaded.', false);
+      }
+    );
+    texture.__src = ex.media.src;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = false;
+    if ('colorSpace' in texture && THREE.SRGBColorSpace) texture.colorSpace = THREE.SRGBColorSpace;
+    else if (THREE.sRGBEncoding !== undefined) texture.encoding = THREE.sRGBEncoding;
+    imageTextures[ex.id] = texture;
+    return texture;
+  }
+
+  /** The texture an exhibit's plane should be drawing. */
+  function textureFor(ex) {
+    if (!ex) return null;
+    return ex.media.kind === 'image' ? imageTextureFor(ex) : videoTexture;
+  }
+
+  /** Build the media textures and hang one on every exhibit's plane. */
   function setupVideoPlanes() {
     // A MindAR restart fires arReady a second time; the texture is still good.
     if (!videoTexture) {
@@ -352,16 +434,20 @@
       }
     }
 
-    // Every plane draws the same <video>, because MindAR tracks one target at a
-    // time. They still need a material each: a material is the mesh's draw
-    // state, not just a texture reference.
+    // Every video exhibit draws the same <video>, because MindAR tracks one
+    // target at a time. They still need a material each: a material is the
+    // mesh's draw state, not just a texture reference.
     var attached = 0;
+    var stills = 0;
     exhibits.forEach(function (ex) {
       var mesh = ex.planeEl && ex.planeEl.getObject3D('mesh');
       if (!mesh) return;
-      if (!mesh.material || mesh.material.map !== videoTexture) {
+      var texture = textureFor(ex);
+      if (!texture) return;
+      if (ex.media.kind === 'image') stills++;
+      if (!mesh.material || mesh.material.map !== texture) {
         mesh.material = new THREE.MeshBasicMaterial({
-          map: videoTexture,
+          map: texture,
           toneMapped: false,
           side: THREE.DoubleSide,
         });
@@ -371,12 +457,13 @@
     });
 
     if (!attached) {
-      log.error('no exhibit planes are ready — cannot attach the video texture');
+      log.error('no exhibit planes are ready — cannot attach the media textures');
       return;
     }
-    applyVideoFit();
-    log.ok('video texture attached to ' + attached + ' exhibit plane' +
-           (attached === 1 ? '' : 's'));
+    applyMediaFit();
+    log.ok('media textures attached to ' + attached + ' exhibit plane' +
+           (attached === 1 ? '' : 's') +
+           (stills ? ' (' + stills + ' still image' + (stills === 1 ? '' : 's') + ')' : ''));
   }
 
   /**
@@ -386,15 +473,26 @@
    * 1 x (imageHeight / imageWidth) at the anchor origin covers the painting
    * exactly, at any distance or angle.
    */
-  function applyVideoFit() {
+  function applyMediaFit() {
     var ex = EX();
     if (!ex || !ex.planeEl) return;
 
-    var v = el.arVideo;
-    // The element's own numbers once it has metadata; the bundle's until then.
-    var videoAspect = (v.videoWidth && v.videoHeight)
-      ? v.videoWidth / v.videoHeight
-      : ((ex.video.width && ex.video.height) ? ex.video.width / ex.video.height : 1);
+    var texture = textureFor(ex);
+    var mediaAspect;
+    if (ex.media.kind === 'image') {
+      // The decoded image once it has arrived; the bundle's numbers until then.
+      var img = texture && texture.image;
+      mediaAspect = (img && img.width && img.height)
+        ? img.width / img.height
+        : ((ex.media.width && ex.media.height) ? ex.media.width / ex.media.height : 1);
+    } else {
+      var v = el.arVideo;
+      // The element's own numbers once it has metadata; the bundle's until then.
+      mediaAspect = (v.videoWidth && v.videoHeight)
+        ? v.videoWidth / v.videoHeight
+        : ((ex.media.width && ex.media.height) ? ex.media.width / ex.media.height : 1);
+    }
+    var videoAspect = mediaAspect;
 
     var ph = planeH(ex);
     var imageAspect = 1 / ph;
@@ -419,15 +517,16 @@
       x: S.videoOffset.x, y: S.videoOffset.y, z: S.videoOffset.z,
     });
 
-    // repeat/offset live on the texture, which every plane shares — safe only
-    // because MindAR tracks one target at a time, so one plane is ever visible.
-    if (videoTexture) {
-      videoTexture.repeat.set(rx, ry);
-      videoTexture.offset.set(ox, oy);
-      videoTexture.needsUpdate = true;
+    // repeat/offset live on the texture. For video that texture is shared by
+    // every exhibit — safe only because MindAR tracks one target at a time, so
+    // one plane is ever visible. A still has its own, so the crop is its own too.
+    if (texture) {
+      texture.repeat.set(rx, ry);
+      texture.offset.set(ox, oy);
+      texture.needsUpdate = true;
     }
 
-    log.debug('video fit=' + S.fit + ' plane=' + w.toFixed(3) + 'x' + h.toFixed(3) +
+    log.debug(ex.media.kind + ' fit=' + S.fit + ' plane=' + w.toFixed(3) + 'x' + h.toFixed(3) +
               ' ("' + ex.name + '" is 1.000 x ' + ph.toFixed(3) + ')' +
               ' crop=' + rx.toFixed(3) + 'x' + ry.toFixed(3));
   }
@@ -439,26 +538,36 @@
    * element unlocked by the Start tap is reused for every exhibit. Swapping src
    * keeps that permission; a second element would not have it.
    */
-  function loadExhibitVideo(index) {
+  function loadExhibitMedia(index) {
     var ex = exhibits[index];
-    if (!ex || !ex.video.src) return false;
-    if (S.loadedVideo === index) return true;
+    if (!ex || !ex.media.src) return false;
 
+    if (ex.media.kind === 'image') {
+      // Nothing to hand the <video>; the texture is built on demand and the
+      // element is left holding whatever it had, ready for the next video
+      // exhibit without losing its playback grant.
+      imageTextureFor(ex);
+      log.info('still source —> "' + ex.name + '" (' + shortSrc(ex.media.src) + ')');
+      return true;
+    }
+
+    if (S.loadedVideo === index) return true;
     var v = el.arVideo;
     S.loadedVideo = index;
-    v.loop = ex.video.loop !== false;
-    v.src = ex.video.src;
+    v.loop = ex.media.loop !== false;
+    v.src = ex.media.src;
     v.load();
-    log.info('video source —> "' + ex.name + '" (' + shortSrc(ex.video.src) + ')');
+    log.info('video source —> "' + ex.name + '" (' + shortSrc(ex.media.src) + ')');
     return true;
   }
 
   /** Re-seed the live tunables from an exhibit and load its video. */
   function adoptExhibit(ex) {
     if (!ex) return;
-    S.fit = ex.video.fit;
-    S.videoScale = ex.video.scale;
-    S.videoOffset = { x: ex.video.offset.x, y: ex.video.offset.y, z: ex.video.offset.z };
+    S.mediaKind = ex.media.kind === 'image' ? 'image' : 'video';
+    S.fit = ex.media.fit;
+    S.videoScale = ex.media.scale;
+    S.videoOffset = { x: ex.media.offset.x, y: ex.media.offset.y, z: ex.media.offset.z };
     S.modelScale = ex.model.scale;
     S.modelRot = { x: ex.model.rotation.x, y: ex.model.rotation.y, z: ex.model.rotation.z };
     S.modelOffset = { x: ex.model.offset.x, y: ex.model.offset.y, z: ex.model.offset.z };
@@ -470,14 +579,14 @@
     S.lighting = ex.model.lighting === 'lit' ? 'lit' : 'baked';
     S.shadowOpacity = typeof ex.model.shadowOpacity === 'number' ? ex.model.shadowOpacity : 0.5;
 
-    loadExhibitVideo(ex.targetIndex);
-    applyVideoFit();
+    loadExhibitMedia(ex.targetIndex);
+    applyMediaFit();
 
     var fitBtn = el.logTools && el.logTools.querySelector('[data-tool="fit"]');
     if (fitBtn) fitBtn.textContent = S.fit;
   }
 
-  // ---------------------------------------------------------------- video playback
+  // ---------------------------------------------------------------- media playback
   /** Called from the Start tap, which is the gesture iOS needs to allow playback. */
   function primeVideo() {
     var p = el.arVideo.play();
@@ -492,10 +601,12 @@
     }
   }
 
-  function playVideo() {
-    var v = el.arVideo;
+  function playMedia() {
     var ex = EX();
-    if (ex && ex.video.restartOnFound) v.currentTime = 0;
+    if (ex && ex.media.kind === 'image') { confirmStill(S.activeIndex); return; }
+
+    var v = el.arVideo;
+    if (ex && ex.media.restartOnFound) v.currentTime = 0;
     var p = v.play();
     if (p && p.catch) {
       p.catch(function (err) {
@@ -504,6 +615,26 @@
       });
     }
     confirmPlayback(S.activeIndex);
+  }
+
+  /**
+   * The same gate as confirmPlayback, for an exhibit whose media is a still.
+   *
+   * There is no playback to wait for — only the decode, which is what
+   * texture.image being set means. Until then the plane would draw nothing and
+   * the buttons would sit over a blank rectangle.
+   */
+  function confirmStill(index) {
+    var ex = exhibits[index];
+    if (!ex || ex.media.kind !== 'image') return;
+    var texture = imageTextures[ex.id];
+    if (!texture || !texture.image) return;
+    if (S.mediaReady) return;
+
+    S.mediaReady = true;
+    log.ok('still image shown for "' + ex.name + '" — unlocking the details');
+    applyModeUI();
+    maybeAutoOpenDetails();
   }
 
   /**
@@ -524,12 +655,12 @@
       if (S.loadedVideo !== index) return;
 
       if (v.readyState >= 2 && !v.paused && v.currentTime > startTime + 0.05) {
-        var first = !S.videoConfirmed;
-        S.videoConfirmed = true;
+        var first = !S.mediaReady;
+        S.mediaReady = true;
         log.ok('playback confirmed for "' + name + '" at t=' + v.currentTime.toFixed(2) + 's' +
-               (first ? ' — unlocking "View in 3D"' : ''));
+               (first ? ' — unlocking the details' : ''));
         // Once unlocked the door stays open, so only the first one moves the UI.
-        if (first) applyModeUI();
+        if (first) { applyModeUI(); maybeAutoOpenDetails(); }
         return;
       }
       if (performance.now() > deadline) {
@@ -552,14 +683,19 @@
   function applyModeUI() {
     var m = S.mode;
 
-    toggle(el.introScreen, m === MODE.BOOT);
+    toggle(el.introScreen, m === MODE.BOOT && !S.langOpen);
+    toggle(el.langScreen, m === MODE.BOOT && S.langOpen);
     toggle(el.scanScreen, m === MODE.SCAN && !S.targetFound);
     toggle(el.floorScreen, m === MODE.FLOOR && !S.floorStable);
     toggle(el.statusChip, m !== MODE.BOOT);
 
-    // "View in 3D" survives losing the painting on purpose: once the video has
-    // played, moving on is always available. Scene 2 does not need the target.
-    toggle(el.arBtn, m === MODE.SCAN && S.videoConfirmed);
+    // These survive losing the artwork on purpose: once its media is up, moving
+    // on is always available, and scene 2 does not need the target. They are
+    // hidden behind the details sheet only because the sheet covers them.
+    var ready = m === MODE.SCAN && S.mediaReady && !S.detailsOpen;
+    toggle(el.detailsBtn, ready);
+    // Only an exhibit that actually has a 3D object offers to show one.
+    toggle(el.arBtn, ready && hasModel());
     toggle(el.placeBtn, m === MODE.FLOOR && S.floorStable);
     toggle(el.moveBtn, m === MODE.PLACED);
     toggle(el.removeBtn, m === MODE.PLACED);
@@ -583,18 +719,19 @@
     if (!onFloor) hide(el.photoSheet);
 
     // Adjust is for an exhibit that is actually on screen.
-    var canAdjust = m !== MODE.BOOT && !!el.adjustToggle;
+    var canAdjust = m !== MODE.BOOT && !S.detailsOpen && !!el.adjustToggle;
     toggle(el.adjustToggle, canAdjust);
     if (!canAdjust && el.adjustToggle) {
       hide(el.adjustPanel);
       el.adjustToggle.classList.remove('on');
     }
 
-    var anyButton = (m === MODE.SCAN && S.videoConfirmed) ||
+    var anyButton = (m === MODE.SCAN && S.mediaReady) ||
                     (m === MODE.FLOOR) || (m === MODE.PLACED);
-    // The Adjust sheet covers the bottom of the screen; the bar underneath it
-    // would only be half-visible and unreachable.
+    // The Adjust sheet and the details sheet both cover the bottom of the
+    // screen; the bar underneath would only be half-visible and unreachable.
     if (el.adjustPanel && !el.adjustPanel.classList.contains('hidden')) anyButton = false;
+    if (S.detailsOpen) anyButton = false;
     toggle(el.actionBar, anyButton);
     if (anyButton) requestAnimationFrame(function () { el.actionBar.classList.add('up'); });
     else el.actionBar.classList.remove('up');
@@ -633,7 +770,7 @@
     S.targetFound = false;
 
     setMode(MODE.FLOOR);
-    setStatus('Looking for the floor', 'warn');
+    setStatus(ARI18n.t('status.floor'), 'warn');
     resetFloorSearch();
 
     var useXr = cfg.floor.useWebXR && S.xrSupported;
@@ -684,7 +821,7 @@
     engine.stop();
 
     setMode(MODE.SCAN);
-    setStatus('Searching…', 'warn');
+    setStatus(ARI18n.t('status.searching'), 'warn');
 
     engine.resumeScanning();
   }
@@ -1151,7 +1288,7 @@
           if (!found) {
             stability.reset();
             if (S.floorStable) { S.floorStable = false; applyModeUI(); }
-            setStatus('Looking for the floor', 'warn');
+            setStatus(ARI18n.t('status.floor'), 'warn');
           }
         }
         if (!found) return;
@@ -1171,12 +1308,12 @@
             log.ok('floor locked by the ' + engine.name + ' engine — steady for ' +
                    cfg.floor.stableSeconds + 's, ' + d.toFixed(2) + 'm away. ' +
                    '"Place AR figure on the floor" is now available.');
-            setStatus('Floor ready', 'ok');
+            setStatus(ARI18n.t('status.floorReady'), 'ok');
           } else {
-            setStatus('Looking for the floor', 'warn');
+            setStatus(ARI18n.t('status.floor'), 'warn');
           }
         } else if (!stable) {
-          setStatus('Hold steady… ' + stability.heldFor().toFixed(1) + 's', 'warn');
+          setStatus(ARI18n.t('status.hold', { seconds: stability.heldFor().toFixed(1) }), 'warn');
         }
       },
     });
@@ -1305,7 +1442,7 @@
     applyFigureTransform();
     setMode(MODE.PLACED);
     updateFloorShadow();     // after setMode: it only draws in the placed scene
-    setStatus('Figure placed', 'ok');
+    setStatus(ARI18n.t('status.placed'), 'ok');
     log.event('AR figure placed on the floor at ' +
               (p.length() / engine.unitsPerMetre).toFixed(2) + 'm, ' +
               'using the ' + engine.name + ' engine');
@@ -1443,7 +1580,7 @@
     removeModel();
     resetFloorSearch();
     setMode(MODE.FLOOR);
-    setStatus('Looking for the floor', 'warn');
+    setStatus(ARI18n.t('status.floor'), 'warn');
     log.event('figure picked up — looking for a new spot');
   }
 
@@ -1910,9 +2047,9 @@
     }
 
     S.targetFound = true;
-    setStatus(exhibits.length > 1 ? ex.name : 'Target locked', 'ok');
+    setStatus(exhibits.length > 1 ? ex.name : ARI18n.t('status.tracking'), 'ok');
     applyModeUI();
-    playVideo();
+    playMedia();
     log.event('targetFound: "' + ex.name + '" (+' +
               ((performance.now() - S.tStart) / 1000).toFixed(2) + 's)');
   }
@@ -1923,11 +2060,11 @@
 
     S.targetFound = false;
     el.arVideo.pause();
-    setStatus('Searching…', 'warn');
+    setStatus(ARI18n.t('status.searching'), 'warn');
     applyModeUI();
     log.event('targetLost: "' + (exhibits[index] ? exhibits[index].name : index) + '"' +
-              (S.videoConfirmed
-                ? ' ("View in 3D" stays available — scene 2 does not need the painting)' : ''));
+              (S.mediaReady
+                ? ' (the details stay available — they do not need the artwork)' : ''));
   }
 
   // ---------------------------------------------------------------- the photo
@@ -2057,6 +2194,316 @@
       log.error('saving the photo failed: ' + err);
       el.photoHint.textContent = 'That could not be saved. Press and hold the ' +
                                  'picture instead.';
+    });
+  }
+
+  // ---------------------------------------------------------------- language
+  /*
+   * Which language the visitor reads. Asked once, before the start screen,
+   * because every word after that point depends on the answer — and asked at
+   * all because a museum cannot know who walked in.
+   *
+   * Two separate things move when it changes: the INTERFACE (js/i18n.js) and
+   * the EXHIBIT TEXT (written per language in the portal). The first is always
+   * available; the second may not be, and the sheet says so rather than
+   * pretending.
+   */
+  function renderLanguages() {
+    var host = el.langList;
+    if (!host) return;
+
+    host.textContent = '';
+    ARI18n.languages().forEach(function (lang) {
+      var native = lang.native || lang.name;
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'lang-option' + (lang.code === ARI18n.code() ? ' on' : '');
+      // Marked up in its own language, so the browser picks the right font and
+      // a screen reader the right voice.
+      button.setAttribute('lang', lang.code);
+
+      var names = document.createElement('span');
+      var nativeEl = document.createElement('span');
+      nativeEl.className = 'native';
+      nativeEl.textContent = native;
+      names.appendChild(nativeEl);
+      // The English name only when it says something the native one does not.
+      if (native !== lang.name) {
+        var latin = document.createElement('span');
+        latin.className = 'latin';
+        latin.textContent = lang.name;
+        names.appendChild(document.createElement('br'));
+        names.appendChild(latin);
+      }
+      button.appendChild(names);
+
+      var tick = document.createElement('span');
+      tick.className = 'tick';
+      tick.textContent = '✓';
+      button.appendChild(tick);
+
+      button.addEventListener('click', function () { ARI18n.set(lang.code, true); });
+      host.appendChild(button);
+    });
+  }
+
+  function openLanguagePicker(open) {
+    S.langOpen = !!open;
+    if (open) renderLanguages();
+    applyModeUI();
+  }
+
+  /**
+   * Everything that has to be redrawn when the language changes.
+   *
+   * ARI18n.apply() has already refilled every element carrying a key; this is
+   * for the text the app builds itself, which no attribute can reach.
+   */
+  function refreshChrome() {
+    setStartLabel(startLabelText(), !S.empty && boot.ready);
+    renderLanguages();
+    if (S.detailsOpen) renderDetails();
+    log.info('language: ' + ARI18n.code() +
+             (ARI18n.translated(ARI18n.code()) ? '' :
+              ' (the interface has no translation for this one — showing English ' +
+              'around the museum’s own words)'));
+  }
+
+  function startLabelText() {
+    if (!boot.ready) return ARI18n.t('intro.loading');
+    if (S.empty) return ARI18n.t('intro.empty.title');
+    return ARI18n.t('intro.start');
+  }
+
+  /** A deployment with no exhibits in it. Not an error — just nothing to scan. */
+  function showEmptyGallery() {
+    S.empty = true;
+    // The keys are swapped rather than the words, so the empty state stays
+    // translated when the language changes behind it.
+    var text = el.introScreen && el.introScreen.querySelector('.intro-text');
+    if (text) text.setAttribute('data-i18n', 'intro.empty.text');
+    // "Camera access is required" is not the useful thing to say to someone
+    // looking at a gallery with nothing in it.
+    if (el.introHint) hide(el.introHint);
+    ARI18n.apply(document);
+    setStartLabel(ARI18n.t('intro.empty.title'), false);
+    log.warn('this deployment has no exhibits — add them in admin.html, compile ' +
+             'the targets and export the bundle');
+  }
+
+  // ---------------------------------------------------------------- details
+  /*
+   * The label: what the museum wrote about this exhibit, and the recording of
+   * it. A bottom sheet rather than a page, so the artwork stays visible above
+   * it — reading it here rather than at home is the entire point.
+   *
+   * The body is authored HTML. It is sanitised in the portal on the way in AND
+   * again here on the way out, because content.json is a file in a repo and
+   * the second pass is the one that cannot be skipped by hand-editing it.
+   */
+  function detailsOf(exhibit) {
+    var ex = exhibit || EX();
+    if (!ex) return null;
+    return window.ARContent.detailsFor(ex, ARI18n.code(), bundle && bundle.languages);
+  }
+
+  function openDetails(open) {
+    var wanted = !!open && !!EX();
+    if (wanted === S.detailsOpen) return;
+    S.detailsOpen = wanted;
+
+    toggle(el.detailsSheet, wanted);
+    if (el.detailsSheet) el.detailsSheet.setAttribute('aria-hidden', wanted ? 'false' : 'true');
+
+    if (wanted) renderDetails();
+    else stopNarration();
+
+    // The video is behind the sheet and unwatchable there, and its sound would
+    // fight the narration. A still has nothing to pause.
+    if ((cfg.details || {}).pauseMediaWhileOpen !== false && S.mediaKind === 'video') {
+      if (wanted) el.arVideo.pause();
+      else if (S.mode === MODE.SCAN && S.targetFound) playMedia();
+    }
+
+    applyModeUI();
+    log.event('details ' + (wanted ? 'opened' : 'closed') +
+              (wanted ? ' for "' + EX().name + '" in ' + ARI18n.code() : ''));
+  }
+
+  function maybeAutoOpenDetails() {
+    if (!(cfg.details || {}).autoOpen) return;
+    var picked = detailsOf();
+    if (picked && window.ARContent.hasDetail(picked.detail)) openDetails(true);
+  }
+
+  function renderDetails() {
+    var ex = EX();
+    var picked = detailsOf(ex);
+    if (!ex || !picked || !el.detailsBody) return;
+    var detail = picked.detail;
+
+    el.detailsTitle.textContent = detail.title || ex.name;
+    el.detailsTitle.setAttribute('lang', picked.code);
+
+    renderDetailLangs(ex, picked.code);
+
+    // Say which language this actually is whenever it is not the one asked
+    // for. Silently showing English would read as a bug in the translation.
+    if (picked.fellBack) {
+      el.detailsFallback.textContent = ARI18n.t('details.fallback', {
+        language: ARI18n.nameOf(picked.code),
+        wanted: ARI18n.nameOf(ARI18n.code()),
+      });
+      show(el.detailsFallback);
+    } else {
+      hide(el.detailsFallback);
+    }
+
+    var html = window.ARContent.sanitizeRichText(detail.html);
+    el.detailsBody.textContent = '';
+    if (html) {
+      el.detailsBody.innerHTML = html;
+    } else {
+      var note = document.createElement('p');
+      note.className = 'empty-note';
+      note.textContent = ARI18n.t('details.empty');
+      el.detailsBody.appendChild(note);
+    }
+    el.detailsBody.setAttribute('lang', picked.code);
+    el.detailsBody.scrollTop = 0;
+
+    setNarration(detail.audio && detail.audio.src, picked.code);
+  }
+
+  /**
+   * The language chips inside the sheet.
+   *
+   * Only languages this exhibit is actually written in, so a chip can never
+   * lead to an empty sheet, and only when there is more than one — a single
+   * chip is a label pretending to be a control.
+   */
+  function renderDetailLangs(ex, activeCode) {
+    var host = el.detailsLangs;
+    if (!host) return;
+    host.textContent = '';
+
+    var written = (bundle ? bundle.languages : []).filter(function (l) {
+      return window.ARContent.hasDetail(ex.details[l.code]);
+    });
+    if (written.length < 2) return;
+
+    written.forEach(function (l) {
+      var chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'details-lang' + (l.code === activeCode ? ' on' : '');
+      chip.setAttribute('lang', l.code);
+      chip.textContent = l.native || l.name;
+      // Switching here switches the whole app, not just this sheet: someone who
+      // reaches for Tamil once wants Tamil at the next artwork too.
+      chip.addEventListener('click', function () { ARI18n.set(l.code, true); });
+      host.appendChild(chip);
+    });
+  }
+
+  // ---------------------------------------------------- the spoken label
+  /**
+   * Narration is an uploaded recording or nothing at all.
+   *
+   * Deliberately not the browser's speech synthesis: on the phones this gallery
+   * will actually meet, Sinhala and Tamil voices are missing or poor, so a
+   * Listen button backed by speech synthesis would work in English and fail in
+   * exactly the two languages it was added for. A silent exhibit is honest; a
+   * button that reads nothing aloud is not.
+   */
+  function setNarration(src, code) {
+    var has = !!src;
+    if (el.detailsFoot) el.detailsFoot.classList.toggle('has-audio', has);
+    toggle(el.detailsPlay, has);
+    toggle(el.detailsProgress, has);
+
+    var a = el.detailsAudio;
+    if (!a) return;
+    if (!has) { stopNarration(); a.removeAttribute('src'); return; }
+
+    if (a.getAttribute('src') !== src) {
+      stopNarration();
+      a.setAttribute('src', src);
+      a.setAttribute('lang', code || ARI18n.code());
+      a.load();
+    }
+    narrationUI();
+  }
+
+  function toggleNarration() {
+    var a = el.detailsAudio;
+    if (!a || !a.getAttribute('src')) return;
+
+    if (a.paused) {
+      var p = a.play();
+      if (p && p.catch) {
+        p.catch(function (err) {
+          log.error('narration play() rejected: ' + err);
+          adjustNoteSafe('The recording could not be played.');
+        });
+      }
+      log.event('narration: playing ' + shortSrc(a.getAttribute('src')));
+    } else {
+      a.pause();
+    }
+    narrationUI();
+  }
+
+  function stopNarration() {
+    var a = el.detailsAudio;
+    if (!a) return;
+    if (!a.paused) a.pause();
+    a.currentTime = 0;
+    narrationUI();
+  }
+
+  function narrationUI() {
+    var a = el.detailsAudio;
+    if (!a || !el.detailsPlayLabel) return;
+
+    var playing = !a.paused && !a.ended;
+    var finished = a.ended || (a.duration && a.currentTime >= a.duration - 0.05);
+    el.detailsPlayLabel.textContent =
+      ARI18n.t(playing ? 'details.pause' : (finished ? 'details.replay' : 'details.listen'));
+
+    var icon = el.detailsPlay && el.detailsPlay.querySelector('.btn-icon');
+    if (icon) icon.textContent = playing ? '⏸' : '▶';
+
+    if (el.detailsProgressFill) {
+      var fraction = (a.duration && isFinite(a.duration)) ? (a.currentTime / a.duration) : 0;
+      el.detailsProgressFill.style.width = (Math.max(0, Math.min(1, fraction)) * 100).toFixed(1) + '%';
+    }
+  }
+
+  /** The adjust panel's note line, when it happens to be on screen. */
+  function adjustNoteSafe(text) {
+    if (el.adjustPanel && !el.adjustPanel.classList.contains('hidden')) adjustNote(text, 'err');
+  }
+
+  function wireDetails() {
+    on(el.detailsBtn, 'click', function () { openDetails(true); });
+    on(el.detailsClose, 'click', function () { openDetails(false); });
+
+    // Tapping the dimmed area above the card closes it, the way every other
+    // bottom sheet on a phone behaves.
+    on(el.detailsSheet, 'click', function (e) {
+      if (e.target === el.detailsSheet) openDetails(false);
+    });
+
+    on(el.detailsPlay, 'click', toggleNarration);
+    on(el.detailsAudio, 'timeupdate', narrationUI);
+    on(el.detailsAudio, 'play', narrationUI);
+    on(el.detailsAudio, 'pause', narrationUI);
+    on(el.detailsAudio, 'ended', narrationUI);
+    on(el.detailsAudio, 'error', function () {
+      var a = el.detailsAudio;
+      var e = a.error || {};
+      log.error('narration failed to load: code=' + e.code + ' src=' + shortSrc(a.currentSrc));
+      setNarration(null);
     });
   }
 
@@ -2194,10 +2641,10 @@
         },
       },
       {
-        id: 'video',
-        label: 'Video',
-        hint: 'How the video sits on the painting in scene 1. Nudge is in target ' +
-              'units, where 1 is the full width of the artwork.',
+        id: 'media',
+        label: 'Media',
+        hint: 'How the video or still sits on the artwork in scene 1. Nudge is in ' +
+              'target units, where 1 is the full width of the artwork.',
         rows: [
           { label: 'Fit', choice: [['stretch', 'Stretch'], ['cover', 'Cover'],
                                    ['contain', 'Contain']],
@@ -2221,7 +2668,7 @@
 
   /** Push a row's new value into the scene, as cheaply as that row allows. */
   function applyRow(row) {
-    if (row.video) { applyVideoFit(); return; }
+    if (row.video) { applyMediaFit(); return; }
     if (row.shadow) { updateFloorShadow(); return; }
     if (row.rebuild) { rebuildFigure(); return; }
     refreshFigure();
@@ -2544,7 +2991,7 @@
         spin: !!S.spin,
         playClip: S.playClip !== false,
       },
-      video: {
+      media: {
         fit: S.fit,
         scale: roundToStep(S.videoScale, 0.01),
         offset: {
@@ -2582,7 +3029,7 @@
       // Keep the running copy in step, so leaving and re-entering the floor
       // scene does not snap back to the old numbers.
       assignInto(ex.model, patch.model);
-      assignInto(ex.video, patch.video);
+      assignInto(ex.media, patch.media);
       adjustNote('Saved to "' + name + '" in the portal draft. Open admin.html ' +
                  'and press Export to get it into the repo.', 'ok');
       log.ok('adjust: saved "' + name + '" into the portal draft \u2014 ' +
@@ -2662,7 +3109,7 @@
       var modes = ['stretch', 'cover', 'contain'];
       S.fit = modes[(modes.indexOf(S.fit) + 1) % modes.length];
       fitBtn.textContent = S.fit;
-      applyVideoFit();
+      applyMediaFit();
     });
 
     // Jump straight between the scenes without waiting for the real triggers.
@@ -2681,7 +3128,7 @@
         if (what === 'video') {
           if (axis === 's') S.videoScale = Math.max(0.1, S.videoScale + dir * cfg.ui.scaleStep);
           else S.videoOffset[axis] += dir * cfg.ui.nudgeStep;
-          applyVideoFit();
+          applyMediaFit();
         } else if (what === 'floor') {
           S.cameraHeight = clamp(S.cameraHeight + dir * 0.05, 0.4, 2.5);
           stability.reset();
@@ -2743,7 +3190,7 @@
       ' gyro=' + gyro.active +
       ' floorFound=' + S.floorFound + ' floorStable=' + S.floorStable + '\n' +
       '  scene 1: arReady=' + S.arReady + ' targetFound=' + S.targetFound +
-      ' videoConfirmed=' + S.videoConfirmed +
+      ' mediaReady=' + S.mediaReady + ' mediaKind=' + S.mediaKind +
       ' videoTime=' + v.currentTime.toFixed(2) + '/' +
       (isFinite(v.duration) ? v.duration.toFixed(2) : '?') + 's'
     );
@@ -2754,7 +3201,7 @@
     var v = el.arVideo;
     v.muted = true; // required for autoplay on both platforms
     v.setAttribute('playsinline', '');
-    // The src is set per exhibit by loadExhibitVideo(); adoptExhibit() has
+    // The src is set per exhibit by loadExhibitMedia(); adoptExhibit() has
     // already pointed this at the first one.
 
     ['loadedmetadata', 'loadeddata', 'canplay', 'playing', 'pause', 'waiting',
@@ -2770,7 +3217,7 @@
         if (name === 'loadedmetadata') {
           log.ok('video metadata: ' + v.videoWidth + 'x' + v.videoHeight + ', ' +
                  (isFinite(v.duration) ? v.duration.toFixed(2) + 's' : 'unknown duration'));
-          applyVideoFit();
+          applyMediaFit();
           return;
         }
         log.debug('video event: ' + name + ' (t=' + v.currentTime.toFixed(2) +
@@ -2790,7 +3237,7 @@
       // the floor scene they are standing in.
       if (S.mode === MODE.BOOT || S.mode === MODE.SCAN) {
         setMode(MODE.SCAN);
-        setStatus('Searching…', 'warn');
+        setStatus(ARI18n.t('status.searching'), 'warn');
       }
       applyModeUI();
       log.ok('AR ready (+' + ((performance.now() - S.tStart) / 1000).toFixed(2) + 's)');
@@ -2822,12 +3269,21 @@
 
   function wireUI() {
     renderIntroThumbs();
+    renderLanguages();
+    wireDetails();
+
+    // The interface redraws itself; the sheet and the start button have to be
+    // told, because their words are built rather than declared.
+    ARI18n.onChange(refreshChrome);
+
+    on(el.langGo, 'click', function () { openLanguagePicker(false); });
+    on(el.introLang, 'click', function () { openLanguagePicker(true); });
 
     el.startBtn.addEventListener('click', startAR);
     el.errorRetry.addEventListener('click', function () {
       hide(el.errorBanner);
       if (!S.arReady) { S.started = false; startAR(); }
-      else if (S.mode === MODE.SCAN) playVideo();
+      else if (S.mode === MODE.SCAN) playMedia();
     });
 
     el.arBtn.addEventListener('click', enterFloorScene);
@@ -2837,7 +3293,7 @@
       removeModel();
       resetFloorSearch();
       setMode(MODE.FLOOR);
-      setStatus('Looking for the floor', 'warn');
+      setStatus(ARI18n.t('status.floor'), 'warn');
       log.event('figure removed');
     });
     el.backBtn.addEventListener('click', leaveFloorScene);
@@ -2860,7 +3316,7 @@
     document.addEventListener('visibilitychange', function () {
       log.debug('visibility: ' + document.visibilityState);
       if (document.visibilityState === 'visible' && S.mode === MODE.SCAN && S.targetFound) {
-        playVideo();
+        playMedia();
       }
     });
   }
@@ -2978,14 +3434,23 @@
            ' from ' + describeSource(loaded));
     log.info('tracker: ' + shortSrc(loaded.mindSrc));
 
+    var langs = (loaded.languages || []).map(function (l) { return l.code; });
+    log.info('languages: ' + (langs.join(', ') || 'none') + ' (first is the fallback)');
+
     exhibits.forEach(function (ex, i) {
+      var written = (loaded.languages || []).filter(function (l) {
+        return window.ARContent.hasDetail(ex.details[l.code]);
+      }).map(function (l) { return l.code; });
+      var spoken = window.ARContent.audioLanguages(ex);
       log.info('  target ' + i + ' "' + ex.name + '": image ' +
                ex.image.width + 'x' + ex.image.height +
-               ' (plane 1 x ' + planeH(ex).toFixed(4) + '), video ' +
-               (ex.video.width || '?') + 'x' + (ex.video.height || '?') +
-               ' fit=' + ex.video.fit + ', model ' +
-               (ex.model.src ? shortSrc(ex.model.src) : 'placeholder') +
+               ' (plane 1 x ' + planeH(ex).toFixed(4) + '), ' + ex.media.kind + ' ' +
+               (ex.media.width || '?') + 'x' + (ex.media.height || '?') +
+               ' fit=' + ex.media.fit + ', model ' +
+               (ex.model.src ? shortSrc(ex.model.src) : 'none') +
                ' at ' + ex.model.heightMeters + 'm');
+      log.info('      details: ' + (written.join(', ') || 'NONE — the sheet will be empty') +
+               '; audio: ' + (spoken.join(', ') || 'none'));
     });
   }
 
@@ -2999,11 +3464,11 @@
                'refresh, or clear the site data. Anything needing those is off.');
     }
 
-    setStartLabel('Loading…', false);
+    setStartLabel(ARI18n.t('intro.loading'), false);
     bootWatchdog();
 
     if (!preflight()) {
-      setStartLabel('Unavailable', false);
+      setStartLabel(ARI18n.t('intro.unavailable'), false);
       // preflight has already put the real reason on screen; the watchdog would
       // only talk over it.
       boot.ready = true;
@@ -3045,6 +3510,9 @@
       boot.content = true;
       bundle = loaded;
       exhibits = loaded.exhibits;
+      // Which languages exist is the museum's decision and travels with the
+      // exhibits, so the interface can only be set up once they have landed.
+      ARI18n.init(loaded.languages);
       logContent(loaded);
 
       whenSceneReady(function () {
@@ -3053,6 +3521,9 @@
           S.activeIndex = 0;
           adoptExhibit(exhibits[0]);
           renderIntroThumbs();
+          // Ask before the start screen, but only on a first visit and only
+          // when there is genuinely a choice to make.
+          S.langOpen = !ARI18n.chosen() && ARI18n.languages().length > 1;
 
           wireVideoElement();
           wireUI();
@@ -3069,7 +3540,9 @@
         // extra is not a reason to lock anyone out of the AR, and this used to
         // be reported as "no exhibits could be loaded", which it never was.
         boot.ready = true;
-        setStartLabel('Start AR', true);
+        if (!exhibits.length) showEmptyGallery();
+        else setStartLabel(ARI18n.t('intro.start'), true);
+        applyModeUI();
         log.ok('app ready — waiting for the Start button');
       });
     }).catch(function (err) {
@@ -3079,7 +3552,7 @@
       // Still let them in. The camera and the log are worth more than a button
       // that does nothing, and the banner above already says what is wrong.
       boot.ready = true;
-      setStartLabel('Start AR', true);
+      setStartLabel(ARI18n.t('intro.start'), true);
     });
   }
 

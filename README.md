@@ -2,22 +2,31 @@
 
 Web AR that runs in the phone browser — no app install, no QR marker.
 
-Three separate scenes, in order:
+A visitor picks their language, points the camera at an artwork, and the
+artwork answers.
 
-1. **Painting** — the camera finds the artwork and a video plays mapped exactly
-   onto it. Once playback is confirmed, **View in 3D** appears.
-2. **Floor** — image tracking and the video stop. Point the phone at the floor;
-   when a surface holds still, **Place AR figure on the floor** appears.
-3. **Placed** — the figure stands where you put it, and the shutter button
+1. **Language** — asked once, before anything else, and remembered. English,
+   Sinhala and Tamil out of the box; the list is editable in the portal.
+2. **Artwork** — the camera finds the piece and its media plays mapped exactly
+   onto it: a video, or a still such as an archival photograph. Once it is up,
+   **More details** appears, and **View in 3D** too if that exhibit has a 3D
+   object.
+3. **Details** — the museum's own label, in the visitor's language, with a
+   **Listen** button when a recording exists. It slides up over the artwork
+   rather than replacing it.
+4. **Floor** — image tracking and the video stop. Point the phone at the floor;
+   when a surface holds still, **Place on the floor** appears.
+5. **Placed** — the object stands where you put it, and the shutter button
    takes a photo of the whole scene for the visitor to keep.
 
-They are deliberately independent. Nothing in scenes 2 and 3 needs the painting,
-so you can walk away from it, and **View in 3D** stays on screen once earned
+Scenes 4 and 5 are deliberately independent of the artwork: nothing in them
+needs it, so you can walk away, and the buttons stay on screen once earned
 rather than vanishing the moment the artwork leaves the frame.
 
-The page can carry **any number of exhibits**. An exhibit is one set — a target
-image, the video mapped onto it, and the 3D model that follows it onto the floor
-— and you add them through the admin portal rather than by editing code.
+The page can carry **any number of exhibits**. An exhibit is one artwork —
+a target image, the video or picture projected onto it, what the label says in
+each language with the recording of it, and optionally a 3D object — and you add
+them through the admin portal rather than by editing code.
 
 Built on [A-Frame](https://aframe.io) 1.5.0 + [MindAR](https://hiukim.github.io/mind-ar-js-doc/) 1.2.5.
 Works on Android (Chrome) and iOS (Safari 11.3+).
@@ -25,15 +34,22 @@ Works on Android (Chrome) and iOS (Safari 11.3+).
 **Live:** https://infinitybrainnetworks.github.io/web-ar-museum-guide/
 **Portal:** add `/admin.html` to that URL
 
-Open it on the phone, tap **Start AR**, allow the camera, and point at one of the
-artworks shown on the start screen.
+Open it on the phone, choose a language, tap **Start AR**, allow the camera, and
+point at one of the artworks shown on the start screen.
 
 ## Adding exhibits — the admin portal
 
 Open **`admin.html`** on a desktop browser. It runs entirely in that browser:
 nothing is uploaded, there is no server and no account.
 
-1. **+ Add exhibit**, then drop in a target image, a video, and optionally a `.glb`.
+1. **+ Add exhibit**, then fill the four parts of the card:
+   1. **Target image** — what visitors point the phone at.
+   2. **Projection** — the video *or* the still picture mapped onto it. Which
+      one it is follows from the file you drop; there is no mode to choose.
+   3. **3D object** — optional `.glb`.
+   4. **Details** — the label, one tab per language. English (or whichever
+      language is first in the list) is required; the rest are optional and
+      fall back to it. Each tab also takes a recording.
 2. **⚙ Compile targets** — builds `targets.mind` from every target image, on your
    machine, using MindAR's own compiler. Each card then reports its feature
    point count, which is the honest answer to "will this track well".
@@ -61,6 +77,64 @@ The portal watches for this. A banner at the top tells you when the tracker is
 out of date, and **Export is blocked until you recompile**, so the broken
 combination cannot reach the repo.
 
+### The label — what "More details" opens
+
+Each exhibit carries a **title** and a **body** per language, plus an optional
+**recording** of it. The body is rich text: headings, **bold**, *italic*,
+underline, and bulleted or numbered lists. That list is the whole of it, and
+deliberately so — see *What the sanitiser allows* below.
+
+- **The first language is the fallback.** An exhibit must be written in it, and
+  a visitor who picked a language with no translation gets that text with a line
+  saying which language they are reading. Silently showing English would read as
+  a bug in the translation.
+- **The language chips inside the sheet** only offer languages that exhibit is
+  actually written in, so a chip can never open an empty sheet. Tapping one
+  changes the whole app, not just that sheet — someone who reaches for Tamil
+  once wants Tamil at the next artwork too.
+- **Listen appears only when a recording was uploaded**, per language. There is
+  no text-to-speech fallback: on the phones this gallery will actually meet,
+  Sinhala and Tamil voices are missing or poor, so a Listen button backed by
+  speech synthesis would work in English and fail in exactly the two languages
+  it was added for. A silent exhibit is honest; a button that reads nothing
+  aloud is not.
+- MP3 or M4A for the recordings. They are deployed as files in the repo, same as
+  the video, so keep an eye on the size.
+
+### Languages — ⋯ → 🌐 Languages…
+
+The list belongs to the gallery, not to an exhibit: it lives on the draft, ships
+inside `content.json`, and the viewer's picker offers exactly what was authored.
+Each entry is a **code** (`en`, `si`, `ta`, `pt-br`), a **name** in English, and
+a **native** name — the picker shows the native one, because someone who reads
+only Tamil cannot be expected to find themselves in a list written in English.
+
+- **The first is the fallback.** Reorder to change which one that is.
+- **Removing a language never deletes text.** It stops being offered; the words
+  stay on every exhibit and come back if the language does.
+- **Adding a language the interface has not been translated into is fine.** The
+  museum's own words appear in it, wrapped in an English interface. The three
+  shipped interface translations are in `js/i18n.js`, keyed by string, and
+  falling back key by key — so a half-finished translation shows the half that
+  is done.
+
+The Sinhala and Tamil interface strings in `js/i18n.js` were written to get the
+app running end to end and **should be read by a native speaker before the
+gallery opens**. Nothing in the code compares against a displayed string, so
+editing them is safe.
+
+### What the sanitiser allows
+
+The label is authored as HTML and rendered with `innerHTML`, so `js/content.js`
+rebuilds it from a whitelist — `h2 h3 p strong em u ul ol li br`, and **no
+attributes at all**. Everything else is unwrapped and its words kept; `script`,
+`style`, `iframe` and friends are dropped contents and all.
+
+It runs **twice**: once in the portal as you type, and again in the viewer
+before the sheet is filled. The second pass is the one that matters —
+`content.json` is a file in a repo, and a file in a repo can be edited by hand,
+by a script, or by a merge nobody read.
+
 ### Things worth knowing
 
 - **Preview is this browser only.** Browser storage never leaves the device it
@@ -85,8 +159,9 @@ combination cannot reach the repo.
 |---|---|
 | `index.html` | The AR page: scene + overlay UI |
 | `admin.html` | The authoring portal |
-| `js/content.js` | Resolves which exhibits to show, and the shared IndexedDB store |
-| `js/app.js` | The three-scene machine, video mapping, both floor engines, debug tools |
+| `js/content.js` | Resolves which exhibits to show, the rich-text sanitiser, the language rules, and the shared IndexedDB store |
+| `js/i18n.js` | The interface's own words, in each language, and the remembered choice |
+| `js/app.js` | The scene machine, media mapping, the details sheet, both floor engines, debug tools |
 | `js/capture.js` | The photo: composing camera feed + figure + logo strip, and saving it |
 | `js/app.js` → *adjust panel* | The gear sheet: one spec builds every slider, tab and toggle |
 | `js/admin.js` | The portal: editing, compiling, export, import |
@@ -96,7 +171,6 @@ combination cannot reach the repo.
 | `css/style.css`, `css/admin.css` | Overlay UI, portal UI |
 | `assets/content/content.json` | **What the AR page reads** — every exhibit, in target order |
 | `assets/content/targets.mind` | Compiled tracking data, written by the portal |
-| `assets/targets/`, `assets/video/` | The original single exhibit, still referenced by `content.json` |
 | `assets/logos/` | Drop the logo strip's artwork in here |
 | `tools/` | Offline compiler, the command-line equivalent of the portal's Compile |
 
@@ -108,7 +182,8 @@ combination cannot reach the repo.
 |---|---|
 | **preview** | `index.html?preview=1` — the portal's draft, from IndexedDB |
 | **bundle** | `assets/content/content.json` — what visitors get |
-| **legacy** | `js/config.js` — a checkout that has never had a bundle exported |
+| **legacy** | `js/config.js` — only if it names a target image; the shipped one does not |
+| **empty** | Nothing is deployed. The start screen says so instead of inventing an exhibit. |
 
 ## Running it
 
@@ -443,7 +518,14 @@ native build to fight with. The official
 | Symptom | Cause |
 |---|---|
 | Right artwork, **wrong video** | The tracker and `content.json` are out of step. Re-export from the portal. |
-| "No exhibits could be loaded" | No `assets/content/content.json` is deployed. Export a bundle from the portal. |
+| "No exhibits yet" on the start screen | Nothing is deployed. Add exhibits in the portal, compile, export, push. |
+| **More details** opens an empty sheet | That exhibit has no text in the fallback language. The portal marks the card incomplete and blocks Export, so this means a hand-edited `content.json`. |
+| Sheet says "Shown in English" | That exhibit has no translation in the chosen language yet. Fill its tab in the portal. |
+| **Listen** never appears | No recording was uploaded for that language. There is no text-to-speech fallback, on purpose. |
+| The language picker never appears | It is asked once and remembered. Tap **Language** under the Start button, or clear the site data. |
+| A language is missing from the picker | It is not in ⋯ → 🌐 Languages, or the deployed bundle predates it. Re-export. |
+| Formatting vanished after pasting from Word | Only `h2 h3 p strong em u ul ol li br` survive the sanitiser, by design. |
+| Export says an exhibit "still needs…" | The card says exactly what: a target image, a projection, or its details in the fallback language. |
 | Portal is empty after it worked | Browser site data was cleared. Import your last exported zip. |
 | An artwork will not track | Too few feature points. Compile and read the count on its card. |
 | Figure goes dark down one side as you walk around | Its lighting is baked into the texture and the scene light is shading it again. Set *Shading* to **baked**. |

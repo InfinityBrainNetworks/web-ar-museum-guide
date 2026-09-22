@@ -4,9 +4,6 @@
   "private": true,
   "type": "module",
   "description": "Offline build tools for the Web AR museum guide (MindAR target compiler).",
-  "scripts": {
-    "compile": "node compile-target.mjs ../assets/targets/target.png -o ../assets/targets/targets.mind"
-  },
   "dependencies": {
     "jpeg-js": "^0.4.4",
     "mind-ar": "1.2.5",
