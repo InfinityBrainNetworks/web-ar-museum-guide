@@ -394,7 +394,17 @@
 
     var a = el.exhibitAudio;
     if (!a) return;
-    if (!has) { stopAudio(); a.removeAttribute('src'); return; }
+    if (!has) {
+      if (!a.getAttribute('src')) return;
+      stopAudio();
+      // load() after removing src is what empties the element. Without it
+      // Chrome abandons the fetch it was in the middle of and reports that as
+      // a network error - a red 🐞 badge every time someone switched from a
+      // language with a recording to one without.
+      a.removeAttribute('src');
+      a.load();
+      return;
+    }
 
     if (a.getAttribute('src') !== src) {
       stopAudio();

@@ -5,8 +5,9 @@ Web AR that runs in the phone browser — no app install, no QR marker.
 A visitor picks their language, browses the gallery, and points the camera at
 an artwork to make it answer.
 
-1. **Language** — asked once, before anything else, and remembered. English,
-   Sinhala and Tamil out of the box; the list is editable in the portal.
+1. **Language** — asked once, before anything else, and remembered. The
+   deployed gallery offers English, Sinhala, Tamil, Korean, Chinese and
+   Japanese; the list is editable in the portal.
 2. **Explore** — every artwork in the gallery as a grid of cards, with a bottom
    bar: Explore · Map · **AR** · Feedback · Settings. Tapping a card opens its
    full label — photograph, title in each language, what it carries, the
@@ -136,6 +137,63 @@ It is skipped on a reload in the same session and on the portal's
 Settings ends with **About**: the product card, the team, and the IBN card
 linking to ibnxr.com. The IBN mark is one `#ibn-mark` symbol in the sprite at
 the bottom of `index.html`, drawn from the same paths as My Smart Store's.
+
+## The deployed gallery — nine Sigiriya paintings
+
+`assets/content/` ships nine exhibits: museum panels 4, 5, 6, 7, 8, 9, 10 and
+13 (the apsaras of Sigiriya, 5th century) and 41 (the lion flag of Lankatilaka
+Vihara, Kandy, 14th century), in that order — which is also their order in
+`targets.mind`. Files are named `exNN-<title>-{target.jpg,video.mp4,en.mp3}`,
+so the folder sorts in target order. No exhibit has a 3D object yet.
+
+**Where it came from.** The sources live in `Updates/` on the authoring
+machine and are never committed (`.gitignore`): full-size PNG photographs
+(366 MB), 2–4K renders of the animations (62 MB), and
+`Sigiriya_Exhibit_Text_6_Languages_Corrected.docx`.
+
+- **The label text and the museum heading** of every language are copied
+  verbatim out of that document. The body of each label is that heading (as an
+  `<h3>`) followed by the panel's text.
+- **The titles are not in the document** — every panel of the same subject
+  carries the same heading ("APSARAS"), which cannot tell a visitor one card
+  from the next. Each title is drawn from that panel's own words, in each
+  language. The Sinhala and Tamil ones should be read by a native speaker, like
+  the rest of the interface strings.
+- **Narration is English only**, generated locally with Supertonic's F5 voice
+  and levelled to about −18 LUFS. The other five languages show no Listen
+  button until a recording is added, by design.
+
+**The renders did not line up with the photographs.** The animations were made
+from different crops of the paintings than the target photos — 3–11% shifted,
+up to 0.9° rotated, and one was letterboxed inside a white frame. Projected as
+they were, every one would have slid off its painting. So each render was
+registered against its photograph (SIFT features, a RANSAC similarity fit,
+the median over five frames), and both were cut to the piece of painting they
+share: the photograph cropped to it, the video warped onto it. What remains is
+the animation's own sub-1% wobble, and the default **stretch** fit is exact.
+Exhibit 41's render also jumps ~4% in its first and last 0.3 s, so it is
+trimmed to 4.33 s and the loop never shows the jump.
+
+**Weight on the wire, about 18 MB in all:**
+
+| | Each | All nine |
+|---|---|---|
+| Target photo — 1024 px long edge, progressive JPEG q84 | 115–205 KB | 1.5 MB |
+| Video — 960 px long edge, H.264 CRF 24, no audio track, faststart | 0.75–1.25 MB | 8.2 MB |
+| English narration — MP3 | 110–285 KB | 1.7 MB |
+| `targets.mind` | | 7.0 MB |
+
+A visitor downloads the grid's photos, then `targets.mind` when AR starts, and
+only the video of the painting they actually point at. The tracker is compiled
+at the portal's own 1024 px so a later recompile from `admin.html` gives the
+same result; at 512 px it would be 4.7 MB with less detail to lock onto up
+close. Every target reports 3,280–4,240 feature points, far above the ~400
+where tracking gets unreliable.
+
+To edit any of it, open `admin.html` → ⋯ → **Load what is currently
+deployed**. The tracker comes along as already compiled, so adding a `.glb`
+to an exhibit and exporting needs no recompile.
+
 ## Adding exhibits — the admin portal
 
 Open **`admin.html`** on a desktop browser. It runs entirely in that browser:

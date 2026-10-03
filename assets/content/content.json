@@ -1,11 +1,579 @@
 {
   "version": 2,
-  "generated": null,
+  "generated": "2026-10-03T10:23:43.000Z",
   "mindSrc": "./assets/content/targets.mind",
   "languages": [
-    { "code": "en", "name": "English", "native": "English" },
-    { "code": "si", "name": "Sinhala", "native": "සිංහල" },
-    { "code": "ta", "name": "Tamil", "native": "தமிழ்" }
+    {
+      "code": "en",
+      "name": "English",
+      "native": "English"
+    },
+    {
+      "code": "si",
+      "name": "Sinhala",
+      "native": "සිංහල"
+    },
+    {
+      "code": "ta",
+      "name": "Tamil",
+      "native": "தமிழ்"
+    },
+    {
+      "code": "ko",
+      "name": "Korean",
+      "native": "한국어"
+    },
+    {
+      "code": "zh",
+      "name": "Chinese (Simplified)",
+      "native": "中文"
+    },
+    {
+      "code": "ja",
+      "name": "Japanese",
+      "native": "日本語"
+    }
   ],
-  "exhibits": []
+  "exhibits": [
+    {
+      "id": "sigiriya-ex04",
+      "name": "Exhibit 4 · Two Apsaras Among the Clouds",
+      "targetIndex": 0,
+      "image": {
+        "src": "./assets/content/ex04-two-apsaras-among-the-clouds-target.jpg",
+        "width": 1024,
+        "height": 468
+      },
+      "media": {
+        "kind": "video",
+        "src": "./assets/content/ex04-two-apsaras-among-the-clouds-video.mp4",
+        "width": 960,
+        "height": 440,
+        "fit": "stretch",
+        "loop": true,
+        "restartOnFound": false,
+        "scale": 1,
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0.001
+        }
+      },
+      "details": {
+        "en": {
+          "title": "Two Apsaras Among the Clouds",
+          "html": "<h3>Apsaras · Sigiriya, 5th Century AC</h3><p>Two apsaras floating among clouds, the golden one dropping flowers, while the one in front possibly indicating the path to the shrine.</p>",
+          "audio": {
+            "src": "./assets/content/ex04-two-apsaras-among-the-clouds-en.mp3"
+          }
+        },
+        "si": {
+          "title": "වලාකුළු අතර අප්සරාවන්",
+          "html": "<h3>අප්සරාවන් (ක්‍රි.ව. 5 වන සියවස, සීගිරිය)</h3><p>වලාකුළු අතර සැරිසරන අප්සරාවන් දෙදෙනෙකි. රන්වන් පැහැගත් අප්සරාවිය මල් බිමට හෙළන අතර ඉදිරියෙන් සිටින තැනැත්තිය විහාරයට යන මග පෙන්වන අයුරු දිස්වෙයි.</p>",
+          "audio": null
+        },
+        "ta": {
+          "title": "மேகங்களிடையில் தேவ கன்னிகைகள்",
+          "html": "<h3>தேவகன்னிகைகள் (கி.பி. 5 ஆம் நூற்றாண்டு - சீகிரியா)</h3><p>மேகங்களிடையில் நடமாடும் இரு தேவ கன்னிகைகள். பொன் நிற முடைய தேவ கன்னிகை பூக்களை கீழே போடுவதோடு, முன்னால் உள்ள தேவ கன்னிகை விகாரைக்கு போகும் வழியைக் காட்டும் விதமாக வரையப்பட்டுள்ளது.</p>",
+          "audio": null
+        },
+        "ko": {
+          "title": "구름 사이의 두 압사라스",
+          "html": "<h3>압사라스 (시기리야, 서기 5세기)</h3><p>구름 사이를 떠다니는 두 압사라스입니다. 황금빛 압사라스는 꽃을 아래로 떨어뜨리고 있고, 앞쪽에 있는 압사라스는 사당으로 가는 길을 가리키고 있는 것으로 보입니다.</p>",
+          "audio": null
+        },
+        "zh": {
+          "title": "云间的两位天女",
+          "html": "<h3>天女（阿卜娑罗）（锡吉里耶，公元5世纪）</h3><p>两位飘游于云间的天女。金色肌肤的天女正在散花，而前方的一位似乎在指示通往圣殿的道路。</p>",
+          "audio": null
+        },
+        "ja": {
+          "title": "雲間の二人のアプサラス",
+          "html": "<h3>アプサラス（シギリヤ、5世紀）</h3><p>雲の間を漂う2人のアプサラスです。黄金色のアプサラスは花を散らし、前方のアプサラスは聖所へ向かう道を指し示しているものと思われます。</p>",
+          "audio": null
+        }
+      },
+      "model": null
+    },
+    {
+      "id": "sigiriya-ex05",
+      "name": "Exhibit 5 · The Apsara with the Red Lily",
+      "targetIndex": 1,
+      "image": {
+        "src": "./assets/content/ex05-the-apsara-with-the-red-lily-target.jpg",
+        "width": 1024,
+        "height": 745
+      },
+      "media": {
+        "kind": "video",
+        "src": "./assets/content/ex05-the-apsara-with-the-red-lily-video.mp4",
+        "width": 960,
+        "height": 698,
+        "fit": "stretch",
+        "loop": true,
+        "restartOnFound": false,
+        "scale": 1,
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0.001
+        }
+      },
+      "details": {
+        "en": {
+          "title": "The Apsara with the Red Lily",
+          "html": "<h3>Apsaras · Sigiriya, 5th Century AC</h3><p>One of the best portrayals of the apsaras. The golden one in front shown in profile is in the act of blooming a large red lily, while the dark maid from behind carries a basket of flowers. The beautiful form of the golden lady with large and round breasts, graceful hair-do and proportionate arms, displays rare optimal classical features of a woman.</p>",
+          "audio": {
+            "src": "./assets/content/ex05-the-apsara-with-the-red-lily-en.mp3"
+          }
+        },
+        "si": {
+          "title": "රතු මහනෙල් මල පුබුදුවන අප්සරාව",
+          "html": "<h3>අප්සරාවන් (ක්‍රි.ව. 5 වන සියවස, සීගිරිය)</h3><p>අප්සරාවන් නිරූපිත විශිෂ්ට ආලේඛ්‍ය චිත්‍රයකි. රන්වන් පැහැගත් තැනැත්තිය රතු මහනෙල් මලක් පුබුදුවන අයුරු දක්වයි. නිල්වන් පැහැගත් කත මල් බඳුනක් රැගෙන පසුපසින් සිටී. සම්භාව්‍ය සිතුවම්හි එන කාන්තා නිරූපණයෙහි ලා දැක්වෙන පූර්ණ පයෝධර, විසිතුරු ශීර්ෂ සැරසිලි හා සමානුපාතික ශරීරාංග දැක්වෙන විශිෂ්ට කෘතියකි.</p>",
+          "audio": null
+        },
+        "ta": {
+          "title": "செந்தாமரை ஏந்திய தேவ கன்னிகை",
+          "html": "<h3>தேவகன்னிகைகள் (கி.பி. 5 ஆம் நூற்றாண்டு - சீகிரியா)</h3><p>தேவ கன்னிகைகளை சிறப்பாக தோற்றப்படுகின்ற ஓவியமொன்று. பொன் நிற மேனியுடைய தேவ கன்னிகை செந்தாமரைப் பூவொன்றை மலர்விப்பதைக் காட்டப்பட்டுள்ளது. நீல நிற மேனியுடைய ஏனைய தேவ கன்னிகை பூக் கிண்ணமொன்றைக் கையில் கொண்டு பின்புறமாக உள்ளனர். தனிச் சிறப்புடைய ஓவியங்களில் வரும் பெண் உருவங்களில் தோற்றப்படுகின்ற நிறைந்த மார்புகள், விசித்திரமான நகையலங்காரங்கள் மற்றும் ஒன்றுக் கொன்று பொருந்தும் வகையிலான உடல் உறுப்புக்கள் என்பதைத் தோற்றுவிக்கும் சிறந்த ஓவியமொன்று.</p>",
+          "audio": null
+        },
+        "ko": {
+          "title": "붉은 백합을 피우는 압사라",
+          "html": "<h3>압사라스 (시기리야, 서기 5세기)</h3><p>압사라스를 가장 훌륭하게 표현한 작품 중 하나입니다. 앞쪽의 황금빛 여인은 옆모습으로 그려져 있으며, 커다란 붉은 백합을 피우고 있습니다. 뒤쪽의 피부가 검은 시녀는 꽃바구니를 들고 있습니다. 크고 둥근 가슴, 우아한 머리 모양, 균형 잡힌 팔을 지닌 황금빛 여인의 아름다운 자태는 여성의 보기 드문 고전적 이상미를 보여 줍니다.</p>",
+          "audio": null
+        },
+        "zh": {
+          "title": "绽放红百合的天女",
+          "html": "<h3>天女（阿卜娑罗）（锡吉里耶，公元5世纪）</h3><p>这是表现天女最出色的作品之一。前方金色肌肤的女子以侧面示人，正使一朵硕大的红色百合花绽放；其后肤色较深的侍女则捧着一篮鲜花。金色女子丰满圆润的胸部、优雅的发髻与比例匀称的双臂，展现出女性罕见的古典之美。</p>",
+          "audio": null
+        },
+        "ja": {
+          "title": "赤いユリを咲かせるアプサラ",
+          "html": "<h3>アプサラス（シギリヤ、5世紀）</h3><p>アプサラスを描いた作品の中でも最も優れたものの一つです。前方の黄金色の女性は横顔で描かれ、大きな赤いユリの花を咲かせています。後方の肌の色の濃い侍女は花籠を持っています。大きく丸い胸、優雅な髪型、均整の取れた腕を持つ黄金色の女性の美しい姿は、女性の稀有な古典的理想美を示しています。</p>",
+          "audio": null
+        }
+      },
+      "model": null
+    },
+    {
+      "id": "sigiriya-ex06",
+      "name": "Exhibit 6 · Flowers Falling from the Clouds",
+      "targetIndex": 2,
+      "image": {
+        "src": "./assets/content/ex06-flowers-falling-from-the-clouds-target.jpg",
+        "width": 1024,
+        "height": 702
+      },
+      "media": {
+        "kind": "video",
+        "src": "./assets/content/ex06-flowers-falling-from-the-clouds-video.mp4",
+        "width": 960,
+        "height": 658,
+        "fit": "stretch",
+        "loop": true,
+        "restartOnFound": false,
+        "scale": 1,
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0.001
+        }
+      },
+      "details": {
+        "en": {
+          "title": "Flowers Falling from the Clouds",
+          "html": "<h3>Apsaras · Sigiriya, 5th Century AC</h3><p>The bare-breasted gold complexioned lady in three-quarter view among the clouds is seen dropping down flowers, while the dark-hued one covering her chest with a red blouse, also shown in three-quarter view, holds a flower basket in front.</p>",
+          "audio": {
+            "src": "./assets/content/ex06-flowers-falling-from-the-clouds-en.mp3"
+          }
+        },
+        "si": {
+          "title": "මල් හෙළන අප්සරාවන්",
+          "html": "<h3>අප්සරාවන් (ක්‍රි.ව. 5 වන සියවස, සීගිරිය)</h3><p>නග්න පයෝධර මැනවින් දිස්වන විසිතුරු අභරණින් සැරසීගත් රන්වන් පැහැගත් කත වලාකුළු අතරින් මල් බිමට හෙළන්නීය. රතු සැට්ටයකින් උඩුකය වැසූ නිල්වන් පැහැගත් තැනැත්තිය මල් බඳුනක් අත දරමින් ඉදිරියෙන් සිටී.</p>",
+          "audio": null
+        },
+        "ta": {
+          "title": "பூத்தெளிக்கும் தேவ கன்னிகைகள்",
+          "html": "<h3>தேவகன்னிகைகள் (கி.பி. 5 ஆம் நூற்றாண்டு - சீகிரியா)</h3><p>தெளிவாகத் தென்படுகின்ற உடையற்ற மார்புகள், விசித்திரமான நகைகளால் அலங்கரிக்கப்பட்டுள்ள இப் பொன் நிற மேனியைக் கொண்டுள்ள பெண், மேகங்கள் மீதிலிருந்து பூக்களை கீழே தெளிக்கின்றார். செம் மார்புக்கச்சை அணிந்து நெஞ்சை மறைத்திருக்கும் நீல நிற மேனியுடைய பெண், பூக் கிண்ணம் ஒன்றை தனது கரங்களால் தாங்கியவாறு முன்னால் இருக்கின்றார்.</p>",
+          "audio": null
+        },
+        "ko": {
+          "title": "구름 사이로 떨어지는 꽃",
+          "html": "<h3>압사라스 (시기리야, 서기 5세기)</h3><p>구름 사이에 4분의 3 측면으로 그려진, 상반신을 드러낸 황금빛 피부의 여인이 꽃을 아래로 떨어뜨리고 있습니다. 붉은 블라우스로 가슴을 가린 피부가 검은 여인 역시 4분의 3 측면으로 그려져 있으며, 앞쪽에서 꽃바구니를 들고 있습니다.</p>",
+          "audio": null
+        },
+        "zh": {
+          "title": "云间落花",
+          "html": "<h3>天女（阿卜娑罗）（锡吉里耶，公元5世纪）</h3><p>云间以四分之三侧面描绘的金色肌肤女子袒露上身，正向下散花；另一位肤色较深的女子身着红色上衣遮住胸部，同样以四分之三侧面呈现，在前方捧着花篮。</p>",
+          "audio": null
+        },
+        "ja": {
+          "title": "雲間から降る花",
+          "html": "<h3>アプサラス（シギリヤ、5世紀）</h3><p>雲の間に四分の三の角度で描かれた、上半身を露わにした黄金色の肌の女性が花を落としています。赤いブラウスで胸を覆った肌の色の濃い女性も同じく四分の三の角度で描かれ、前方で花籠を持っています。</p>",
+          "audio": null
+        }
+      },
+      "model": null
+    },
+    {
+      "id": "sigiriya-ex07",
+      "name": "Exhibit 7 · Two Ladies of Kasyapa's Court",
+      "targetIndex": 3,
+      "image": {
+        "src": "./assets/content/ex07-two-ladies-of-kasyapas-court-target.jpg",
+        "width": 1024,
+        "height": 812
+      },
+      "media": {
+        "kind": "video",
+        "src": "./assets/content/ex07-two-ladies-of-kasyapas-court-video.mp4",
+        "width": 960,
+        "height": 762,
+        "fit": "stretch",
+        "loop": true,
+        "restartOnFound": false,
+        "scale": 1,
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0.001
+        }
+      },
+      "details": {
+        "en": {
+          "title": "Two Ladies of Kasyapa's Court",
+          "html": "<h3>Apsaras · Sigiriya, 5th Century AC</h3><p>Two heavenly ladies possibly of the court of Kasyapa. The golden lady holds a cluster of sapu (campaka) flowers, while the darker one behind holds a basket of flowers.</p>",
+          "audio": {
+            "src": "./assets/content/ex07-two-ladies-of-kasyapas-court-en.mp3"
+          }
+        },
+        "si": {
+          "title": "කාශ්‍යප රජ භවනේ කතුන්",
+          "html": "<h3>අප්සරාවන් (ක්‍රි.ව. 5 වන සියවස, සීගිරිය)</h3><p>කාශ්‍යප රජ භවනට අයත් වූ දිව්‍යමය ස්වභාවය ගත් කතුන් දෙදෙනෙකු විය හැකිය. රන්වන් පැහැගත් කත සපු මලක් අතැතිව සිටී. පසුපසින් සිටින නිල් පැහැගත් කාන්තාව බඳුනක් දරා සිටී.</p>",
+          "audio": null
+        },
+        "ta": {
+          "title": "காசியப்பன் அரச பவனத்தின் இரு பெண்கள்",
+          "html": "<h3>தேவகன்னிகைகள் (கி.பி. 5 ஆம் நூற்றாண்டு - சீகிரியா)</h3><p>காசியப்பன் அரச பவனத்தைச் சார்ந்த தெய்வீக தன்மையினை அடைந்துள்ள இரு பெண்களாக இருக்கலாம். பொன் நிறமுடைய பெண் சென்பகப் பூவை கையில் கொண்டுள்ளதுடன், பிற்புறமாக இருக்கின்ற நீல நிறத்துடைய பெண் கையில் ஒரு பாத்திரத்தை வைத்துள்ளார்.</p>",
+          "audio": null
+        },
+        "ko": {
+          "title": "카샤파 왕 궁정의 두 여인",
+          "html": "<h3>압사라스 (시기리야, 서기 5세기)</h3><p>카샤파 왕의 궁정에 속했던 것으로 추정되는 두 천상의 여인입니다. 황금빛 여인은 사푸(참파카) 꽃송이를 들고 있으며, 그 뒤에 있는 피부가 더 검은 여인은 꽃바구니를 들고 있습니다.</p>",
+          "audio": null
+        },
+        "zh": {
+          "title": "迦叶波王宫廷的两位女子",
+          "html": "<h3>天女（阿卜娑罗）（锡吉里耶，公元5世纪）</h3><p>可能是迦叶波王宫廷中的两位天女。金色肌肤的女子手持一束沙普（黄玉兰）花，身后肤色较深的女子则捧着一篮鲜花。</p>",
+          "audio": null
+        },
+        "ja": {
+          "title": "カッサパ王の宮廷の二人の女性",
+          "html": "<h3>アプサラス（シギリヤ、5世紀）</h3><p>カッサパ王の宮廷の女性と思われる二人の天女です。黄金色の女性はサプ（チャンパカ）の花房を持ち、その後ろにいる肌の色の濃い女性は花籠を持っています。</p>",
+          "audio": null
+        }
+      },
+      "model": null
+    },
+    {
+      "id": "sigiriya-ex08",
+      "name": "Exhibit 8 · The Queen of Kasyapa",
+      "targetIndex": 4,
+      "image": {
+        "src": "./assets/content/ex08-the-queen-of-kasyapa-target.jpg",
+        "width": 904,
+        "height": 1024
+      },
+      "media": {
+        "kind": "video",
+        "src": "./assets/content/ex08-the-queen-of-kasyapa-video.mp4",
+        "width": 848,
+        "height": 960,
+        "fit": "stretch",
+        "loop": true,
+        "restartOnFound": false,
+        "scale": 1,
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0.001
+        }
+      },
+      "details": {
+        "en": {
+          "title": "The Queen of Kasyapa",
+          "html": "<h3>Apsara · Sigiriya, 5th Century AC</h3><p>“The queen of Kasyapa” assuming the forms of apsara, floating through clouds possibly to the shrine at Pidurangala. She holds a sapu flower by the right hand and a lotus by the left.</p>",
+          "audio": {
+            "src": "./assets/content/ex08-the-queen-of-kasyapa-en.mp3"
+          }
+        },
+        "si": {
+          "title": "කාශ්‍යප රජ බිසව",
+          "html": "<h3>අප්සරාව (ක්‍රි.ව. 5 වන සියවස, සීගිරිය)</h3><p>දකුණත සපුමලක් හා වමත දිග නටුවක් සහිත පියුමක් දරමින් දිව්‍යමය ස්වාභාවයෙන් වලාකුළු අතර සැරිසරමින් පිදුරංගල විහාරයට යන රන්වන් පැහැගත් “කාශ්‍යප රජ බිසව”.</p>",
+          "audio": null
+        },
+        "ta": {
+          "title": "காசியப்பன் அரசி",
+          "html": "<h3>தேவகன்னிகை (கி.பி. 5 ஆம் நூற்றாண்டு - சீகிரியா)</h3><p>செண்பகப் பூவை வலது கையிலும், நீண்ட தாம்புடன் கூடிய தாமரையை இடது கையிலும் கொண்டு தெய்வீகமாக மேகங்களிடையில் நடமாடிக்கொண்டு பிதுரங்கலை விகாரைக்கு போகும் பொன் நிறமுடைய “காசியப்பன் அரசி”.</p>",
+          "audio": null
+        },
+        "ko": {
+          "title": "카샤파 왕의 왕비",
+          "html": "<h3>압사라 (시기리야, 서기 5세기)</h3><p>압사라의 모습을 취한 “카샤파 왕의 왕비”가 구름 사이를 떠다니며, 아마도 피두랑갈라의 사당으로 향하고 있습니다. 오른손에는 사푸 꽃을, 왼손에는 연꽃을 들고 있습니다.</p>",
+          "audio": null
+        },
+        "zh": {
+          "title": "迦叶波王之王后",
+          "html": "<h3>天女（阿卜娑罗）（锡吉里耶，公元5世纪）</h3><p>化身为天女的“迦叶波王之王后”，正飘游于云间，或许是前往皮杜兰加拉的圣殿。她右手持沙普花，左手持莲花。</p>",
+          "audio": null
+        },
+        "ja": {
+          "title": "カッサパ王の王妃",
+          "html": "<h3>アプサラ（シギリヤ、5世紀）</h3><p>アプサラの姿をとった「カッサパ王の王妃」が、雲の間を漂いながら、おそらくピドゥランガラの聖所へ向かっています。右手にサプの花を、左手に蓮の花を持っています。</p>",
+          "audio": null
+        }
+      },
+      "model": null
+    },
+    {
+      "id": "sigiriya-ex09",
+      "name": "Exhibit 9 · The Apsara in the White Blouse",
+      "targetIndex": 5,
+      "image": {
+        "src": "./assets/content/ex09-the-apsara-in-the-white-blouse-target.jpg",
+        "width": 921,
+        "height": 1024
+      },
+      "media": {
+        "kind": "video",
+        "src": "./assets/content/ex09-the-apsara-in-the-white-blouse-video.mp4",
+        "width": 864,
+        "height": 960,
+        "fit": "stretch",
+        "loop": true,
+        "restartOnFound": false,
+        "scale": 1,
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0.001
+        }
+      },
+      "details": {
+        "en": {
+          "title": "The Apsara in the White Blouse",
+          "html": "<h3>Apsara · Sigiriya, 5th Century AC</h3><p>One of the single figures of Apsaras showing a fair one dropping flowers from the sky. The white blouse worn is unusually prominent, while the golden ones are normally either bare-bodied or wear transparent blouses. The coiffure adorned with flowers is quite characteristic.</p>",
+          "audio": {
+            "src": "./assets/content/ex09-the-apsara-in-the-white-blouse-en.mp3"
+          }
+        },
+        "si": {
+          "title": "සුදු සැට්ටයක් හැඳි අප්සරාව",
+          "html": "<h3>අප්සරාව (ක්‍රි.ව. 5 වන සියවස, සීගිරිය)</h3><p>ආකාශයේ සිට බිමට මල් හෙළන රන්වන් පැහැගත් අප්සරා රුවකි. නිරුවත්ව හෝ දුහුල් උඩුකය වස්ත්‍රය දැක්වීම වෙනුවට ස්වේත වර්ණ සැට්ටයකින් සැරසීම අසාමාන්‍ය වූවකි. මලින් ගැවසුනු ධම්මිල්ලයද සුවිශේෂ වූවකි.</p>",
+          "audio": null
+        },
+        "ta": {
+          "title": "வெள்ளை நிற சட்டை அணிந்த தேவ கன்னிகை",
+          "html": "<h3>தேவகன்னிகை (கி.பி. 5 ஆம் நூற்றாண்டு - சீகிரியா)</h3><p>ஆகாயத்தில் இருந்து பூத்தெளிக்கும் பொன் நிறமுடைய தேவகன்னிகை உருவமொன்று. மார்புப்பகுதி துகில் உடை கொண்டதாகவோ அல்லது நிர்வாணமாகவோ காட்டுவதற்குப் பதிலாக வெள்ளை நிற சட்டை அணிந்திருப்பதைத் தோற்றுவது பொதுவான நிலையல்ல. பூக்கள் நிறைந்த பாத்திரமும் விசேஷமானது.</p>",
+          "audio": null
+        },
+        "ko": {
+          "title": "흰 블라우스를 입은 압사라",
+          "html": "<h3>압사라 (시기리야, 서기 5세기)</h3><p>하늘에서 꽃을 떨어뜨리는 살결이 흰 여인을 그린 단독 압사라 상 중 하나입니다. 흰 블라우스를 입은 모습이 유난히 두드러지는데, 황금빛 압사라는 대개 상반신을 드러내거나 비치는 블라우스를 입고 있습니다. 꽃으로 장식한 머리 모양 또한 매우 특징적입니다.</p>",
+          "audio": null
+        },
+        "zh": {
+          "title": "身穿白衣的天女",
+          "html": "<h3>天女（阿卜娑罗）（锡吉里耶，公元5世纪）</h3><p>单独描绘的天女形象之一，表现一位肤色白皙的女子自天空散花。她所穿的白色上衣格外醒目，而金色肌肤的天女通常袒露上身或身着透明的薄衣。以鲜花装饰的发髻也极具特色。</p>",
+          "audio": null
+        },
+        "ja": {
+          "title": "白いブラウスのアプサラ",
+          "html": "<h3>アプサラ（シギリヤ、5世紀）</h3><p>アプサラスを単独で描いた像の一つで、空から花をまく色白の女性を表しています。白いブラウスを身につけた姿がひときわ目立ちますが、黄金色の肌のアプサラスは通常、上半身を露わにするか、透けるブラウスを着ています。花で飾られた髪型もまた非常に特徴的です。</p>",
+          "audio": null
+        }
+      },
+      "model": null
+    },
+    {
+      "id": "sigiriya-ex10",
+      "name": "Exhibit 10 · A Golden Apsara",
+      "targetIndex": 6,
+      "image": {
+        "src": "./assets/content/ex10-a-golden-apsara-target.jpg",
+        "width": 776,
+        "height": 1024
+      },
+      "media": {
+        "kind": "video",
+        "src": "./assets/content/ex10-a-golden-apsara-video.mp4",
+        "width": 728,
+        "height": 960,
+        "fit": "stretch",
+        "loop": true,
+        "restartOnFound": false,
+        "scale": 1,
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0.001
+        }
+      },
+      "details": {
+        "en": {
+          "title": "A Golden Apsara",
+          "html": "<h3>Apsara · Sigiriya, 5th Century AC</h3><p>One of the golden Apsaras seen dropping flowers from the sky quite similar to the others in style and pose.</p>",
+          "audio": {
+            "src": "./assets/content/ex10-a-golden-apsara-en.mp3"
+          }
+        },
+        "si": {
+          "title": "රන්වන් පැහැගත් අප්සරාව",
+          "html": "<h3>අප්සරාව (ක්‍රි.ව. 5 වන සියවස, සීගිරිය)</h3><p>සෙසු සිතුවම්වල දැක්වෙන රන්වන් පැහැගත් අප්සරාවියනට බෙහෙවින් සමාන ලෙස චිත්‍රිත මැය ආකාශයේ සිට බිමට මල් හෙළන අවස්ථාව නිරූපණය කරන්නීය.</p>",
+          "audio": null
+        },
+        "ta": {
+          "title": "பொன் நிறமுடைய தேவ கன்னிகை",
+          "html": "<h3>தேவகன்னிகை (கி.பி. 5 ஆம் நூற்றாண்டு - சீகிரியா)</h3><p>ஏனைய ஓவியங்களில் பொன் நிறமுடைய தேவ கன்னிகைகளுக்கு மிக ஒத்ததாக வரைந்துள்ள இத் தேவ கன்னிகை, ஆகாயத்தில் இருந்து பூமியின் மீது பூத்தெளிக்கும் சந்தர்ப்பத்தை தோற்றுவைக்கின்றார்.</p>",
+          "audio": null
+        },
+        "ko": {
+          "title": "황금빛 압사라",
+          "html": "<h3>압사라 (시기리야, 서기 5세기)</h3><p>하늘에서 꽃을 떨어뜨리는 황금빛 압사라 중 하나로, 양식과 자세가 다른 압사라들과 매우 비슷합니다.</p>",
+          "audio": null
+        },
+        "zh": {
+          "title": "金色天女",
+          "html": "<h3>天女（阿卜娑罗）（锡吉里耶，公元5世纪）</h3><p>自天空散花的金色天女之一，其样式与姿态与其他天女十分相似。</p>",
+          "audio": null
+        },
+        "ja": {
+          "title": "黄金色のアプサラ",
+          "html": "<h3>アプサラ（シギリヤ、5世紀）</h3><p>空から花をまく黄金色のアプサラスの一人で、様式と姿勢が他の像と非常によく似ています。</p>",
+          "audio": null
+        }
+      },
+      "model": null
+    },
+    {
+      "id": "sigiriya-ex13",
+      "name": "Exhibit 13 · The Queen and Her Maid",
+      "targetIndex": 7,
+      "image": {
+        "src": "./assets/content/ex13-the-queen-and-her-maid-target.jpg",
+        "width": 1024,
+        "height": 696
+      },
+      "media": {
+        "kind": "video",
+        "src": "./assets/content/ex13-the-queen-and-her-maid-video.mp4",
+        "width": 960,
+        "height": 652,
+        "fit": "stretch",
+        "loop": true,
+        "restartOnFound": false,
+        "scale": 1,
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0.001
+        }
+      },
+      "details": {
+        "en": {
+          "title": "The Queen and Her Maid",
+          "html": "<h3>Apsaras · Sigiriya, 5th Century AC</h3><p>Ladies of the court of Kasyapa, queen and maid, assuming the forms of apsaras, floating through clouds possibly to the shrine at Pidurangala. The gold complexioned queen carries sapu (campaka) flowers, the dark-complexioned maid, dressed in red blouse, carries a box perhaps filled with ritual objects.</p>",
+          "audio": {
+            "src": "./assets/content/ex13-the-queen-and-her-maid-en.mp3"
+          }
+        },
+        "si": {
+          "title": "බිසව සහ සේවිකාව",
+          "html": "<h3>අප්සරාවන් (ක්‍රි.ව. 5 වන සියවස, සීගිරිය)</h3><p>දිව්‍යමය වේශය ගෙන වලාකුළු අතරින් පිදුරංගල විහාරයට යන කාශ්‍යප රජුගේ “බිසව” සහ “සේවිකාව”. රන්වන් පැහැගත්තී සපුමල් ගෙන සිටින්නීය. රතු පැහැති සැට්ටයකින් සැරසුණු නිල් පැහැගත් කත රැගෙන යන්නේ පූජා භාණ්ඩ සහිත මංජුසාවක් විය හැකිය.</p>",
+          "audio": null
+        },
+        "ta": {
+          "title": "அரசி மற்றும் பணிப்பெண்",
+          "html": "<h3>தேவகன்னிகைகள் (கி.பி. 5 ஆம் நூற்றாண்டு - சீகிரியா)</h3><p>தெய்வீக வேசத்தைக் கொண்டு மேகங்களிடையால் பிதுரங்கல விகாரைக்கு போகின்ற காச்சியப்பன் மன்னரின் அரசி மற்றும் பணிப்பெண். பொன் நிறமான பெண் சென்பகப் பூக்களை கொண்டிருப்பதுடன், சிவப்பு நிற மார்புக்கச்சை அணிந்து மார்பை மறைத்திருக்கும் பெண் பூசைப் பொருட்கள் அடங்கிய பெட்டியை கையில் கொண்டுள்ளார்.</p>",
+          "audio": null
+        },
+        "ko": {
+          "title": "왕비와 시녀",
+          "html": "<h3>압사라스 (시기리야, 서기 5세기)</h3><p>압사라스의 모습을 취한 카샤파 왕 궁정의 여인들, 곧 왕비와 시녀가 구름 사이를 떠다니며 아마도 피두랑갈라의 사당으로 향하고 있습니다. 황금빛 피부의 왕비는 사푸(참파카) 꽃을 들고 있으며, 붉은 블라우스를 입은 피부가 검은 시녀는 의례용 물품이 들어 있을 것으로 보이는 상자를 들고 있습니다.</p>",
+          "audio": null
+        },
+        "zh": {
+          "title": "王后与侍女",
+          "html": "<h3>天女（阿卜娑罗）（锡吉里耶，公元5世纪）</h3><p>迦叶波王宫廷中的女子——王后与侍女——化身为天女，飘游于云间，或许正前往皮杜兰加拉的圣殿。金色肌肤的王后手持沙普（黄玉兰）花；肤色较深的侍女身着红色上衣，捧着一只可能盛放祭祀用品的匣子。</p>",
+          "audio": null
+        },
+        "ja": {
+          "title": "王妃と侍女",
+          "html": "<h3>アプサラス（シギリヤ、5世紀）</h3><p>アプサラスの姿をとったカッサパ王の宮廷の女性たち、すなわち王妃と侍女が、雲の間を漂いながら、おそらくピドゥランガラの聖所へ向かっています。黄金色の肌の王妃はサプ（チャンパカ）の花を持ち、赤いブラウスを着た肌の色の濃い侍女は、儀礼用の品々が入っていると思われる箱を持っています。</p>",
+          "audio": null
+        }
+      },
+      "model": null
+    },
+    {
+      "id": "sigiriya-ex41",
+      "name": "Exhibit 41 · The Lion Flag",
+      "targetIndex": 8,
+      "image": {
+        "src": "./assets/content/ex41-the-lion-flag-target.jpg",
+        "width": 1024,
+        "height": 626
+      },
+      "media": {
+        "kind": "video",
+        "src": "./assets/content/ex41-the-lion-flag-video.mp4",
+        "width": 960,
+        "height": 588,
+        "fit": "stretch",
+        "loop": true,
+        "restartOnFound": false,
+        "scale": 1,
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0.001
+        }
+      },
+      "details": {
+        "en": {
+          "title": "The Lion Flag",
+          "html": "<h3>Lion · Lankatilaka Vihara, Kandy, 14th Century AC</h3><p>The large figure of lion in a flag discovered recently from an inner layer of plaster by the Central Cultural Fund. The painting is a significant sample of the painting tradition of the 14th century.</p>",
+          "audio": {
+            "src": "./assets/content/ex41-the-lion-flag-en.mp3"
+          }
+        },
+        "si": {
+          "title": "සිංහ ධ්වජය",
+          "html": "<h3>සිංහ රූපය (ලංකාතිලක විහාරය, මහනුවර, ක්‍රි.ව. 14 වන සියවස)</h3><p>මෑතදී මධ්‍යම සංස්කෘතික අරමුදල මගින් විහාර මණ්ඩප බිත්තිය පිහිටි තලයකින් පාදා තහවුරු කළ ධ්වජයක චිත්‍රයකි. තුදුස්වන සියවසෙහි පැවති බිතුසිතුවම් සම්ප්‍රදායය පිළිබඳ වැදගත් නිදසුනකි.</p>",
+          "audio": null
+        },
+        "ta": {
+          "title": "சிங்கக் கொடி",
+          "html": "<h3>சிங்க உருவம் (லங்காதிலக விகாரை, கண்டி, கி.பி. 14 ஆம் நூற்றாண்டு)</h3><p>அண்மைக்காலத்தில், மத்திய கலாசார நிதியத்தினால், விகாரை மண்டப சுவர் சாந்துக் கலவை தலமொன்றினுள் இருந்து வெளிப்படுத்தி நிலைப்படுத்திய ஒரு சிங்கக் கொடியின் ஓவியம். 14ஆம் நூற்றாண்டில் நிலவிய ஓவிய நடை பற்றிய முக்கியமான ஒரு எடுத்துக்காட்டாகும்.</p>",
+          "audio": null
+        },
+        "ko": {
+          "title": "사자 깃발",
+          "html": "<h3>사자 (란카틸라카 비하라, 캔디, 서기 14세기)</h3><p>중앙문화기금이 최근 회벽의 안쪽 층에서 발견한, 깃발에 그려진 커다란 사자상입니다. 이 그림은 14세기의 회화 전통을 보여 주는 중요한 사례입니다.</p>",
+          "audio": null
+        },
+        "zh": {
+          "title": "狮子旗",
+          "html": "<h3>狮子（兰卡蒂拉卡寺，康提，公元14世纪）</h3><p>中央文化基金近期于灰泥内层发现的旗帜上的巨幅狮子图像。此画是14世纪绘画传统的重要例证。</p>",
+          "audio": null
+        },
+        "ja": {
+          "title": "獅子の旗",
+          "html": "<h3>獅子（ランカティラカ寺院、キャンディ、14世紀）</h3><p>中央文化基金によって近年、漆喰の内層から発見された旗に描かれた大きな獅子の図像です。この絵画は14世紀の絵画の伝統を示す重要な作例です。</p>",
+          "audio": null
+        }
+      },
+      "model": null
+    }
+  ]
 }
