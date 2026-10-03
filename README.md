@@ -223,9 +223,24 @@ from its geometry's bounds, and quantized bounds are the −1…1 storage box,
 not the figure: the queen came out at 80% and floating 0.8 m off the floor.
 The lion, which has no skin, is quantized and measures true.
 
-The apsaras' own animation lifts their feet up to 8 cm as they move, and the
-pose they hold at the end is 7.7 cm up. That is the clip as authored;
-Adjust → **Offset** y lowers it if it reads as floating.
+**The apsaras' animation tipped them over, and is corrected.** As exported,
+both clips rotate the pelvis about 25° further forward than the rest pose.
+Legs and torso hang off the pelvis, so the whole figure leaned like a plank
+— 22–23° on average, 25–27° in the pose it holds at the end — with her feet
+up to 8 cm off the floor. (Blender shows the same; it is in the file.) Every
+pelvis rotation key is tipped back by one constant angle, so the dance's own
+±2° sway survives, and the pelvis keys are shifted to put the feet back on
+the floor and under the placement point:
+
+| | Pelvis pitch | Lift | Forward | Lean after: mean · held | Feet after |
+|---|---|---|---|---|---|
+| Exhibit 8 | −25° | +1 cm | +8 cm | 0.3° · 2.5° | −2 to +4 cm while dancing, 0 at the end |
+| Exhibit 13 | −24° | 0 | +8.9 cm | 0.2° · 2.1° | −2 to +4 cm while dancing, 0 at the end |
+
+Lean is measured on the posed mesh — head centroid over feet centroid, from
+the side — not on the bone, since the spine and legs move as well. A new
+export of either model from Unreal needs the same correction, or the fix made
+at the source (the root motion / pelvis rotation of the clip).
 
 ## Adding exhibits — the admin portal
 
