@@ -348,6 +348,8 @@
       scale: typeof m.scale === 'number' ? m.scale : 1,
       spin: !!m.spin,
       playClip: m.playClip !== false,
+      // Play the clip once and hold the last pose, unless asked to repeat.
+      loopClip: !!m.loopClip,
       // 'baked' renders the texture exactly as authored (right for scans and
       // anything with baked AO); 'lit' shades it with the scene lights.
       lighting: m.lighting === 'lit' ? 'lit' : 'baked',
@@ -409,7 +411,7 @@
 
   /** Everything an exhibit may override on top of the model defaults. */
   var MODEL_FIELDS = ['heightMeters', 'rotation', 'offset', 'scale', 'spin',
-                      'playClip', 'lighting', 'shadowOpacity', 'shadows',
+                      'playClip', 'loopClip', 'lighting', 'shadowOpacity', 'shadows',
                       'shadowFollow', 'shadowScale'];
 
   /** Of those, the ones that are {x,y,z} and must be merged, not replaced. */

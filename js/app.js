@@ -119,6 +119,7 @@
     shadowScale: 1,        // the figure scale they were drawn at
     spin: false,
     playClip: true,
+    loopClip: false,       // false = play the clip once and hold the last pose
     faceYaw: 0,            // radians, set at placement so the figure faces you
     placedAt: null,        // where it was put down, in floor-scene units
     // Live transform, seeded per exhibit and edited by the Adjust panel.
@@ -579,6 +580,7 @@
     S.modelOffset = { x: ex.model.offset.x, y: ex.model.offset.y, z: ex.model.offset.z };
     S.spin = !!ex.model.spin;
     S.playClip = ex.model.playClip !== false;
+    S.loopClip = !!ex.model.loopClip;
     S.shadows = copyShadows(ex.model.shadows);
     S.shadowFollow = !!ex.model.shadowFollow;
     S.shadowScale = ex.model.shadowScale > 0 ? ex.model.shadowScale : ex.model.scale;
@@ -1581,6 +1583,7 @@
     S.modelOffset = { x: model.offset.x, y: model.offset.y, z: model.offset.z };
     S.spin = !!model.spin;
     S.playClip = model.playClip !== false;
+    S.loopClip = !!model.loopClip;
     S.shadows = copyShadows(model.shadows);
     S.shadowFollow = !!model.shadowFollow;
     S.shadowScale = model.shadowScale > 0 ? model.shadowScale : model.scale;
@@ -1954,10 +1957,20 @@
           return;
         }
         this.mixer = new THREE.AnimationMixer(model);
+        // Once, by default: the figure performs after it is placed and then
+        // holds its last pose. clampWhenFinished is what holds it - without
+        // it a finished action snaps the figure back to its bind pose.
+        var loop = !!S.loopClip;
         model.animations.forEach(function (clip) {
-          this.mixer.clipAction(clip).play();
+          var action = this.mixer.clipAction(clip);
+          if (!loop) {
+            action.setLoop(THREE.LoopOnce, 1);
+            action.clampWhenFinished = true;
+          }
+          action.play();
         }, this);
-        log.ok('playing ' + model.animations.length + ' animation clip(s)');
+        log.ok('playing ' + model.animations.length + ' animation clip(s) ' +
+               (loop ? 'on a loop' : 'once, then holding the last pose'));
       },
       tick: function (time, delta) {
         if (this.mixer) this.mixer.update(delta / 1000);
@@ -2627,9 +2640,9 @@
           { label: 'Spin', choice: [[false, 'Off'], [true, 'On']],
             get: function () { return !!S.spin; },
             set: function (v) { S.spin = v; }, rebuild: true },
-          { label: 'Animation', choice: [[true, 'Play'], [false, 'Hold']],
-            get: function () { return S.playClip !== false; },
-            set: function (v) { S.playClip = v; }, rebuild: true },
+          { label: 'Animation', choice: [['once', 'Once'], ['loop', 'Loop'], ['hold', 'Hold']],
+            get: function () { return S.playClip === false ? 'hold' : (S.loopClip ? 'loop' : 'once'); },
+            set: function (v) { S.playClip = v !== 'hold'; S.loopClip = v === 'loop'; }, rebuild: true },
         ],
       },
       {
@@ -3034,6 +3047,7 @@
         }),
         spin: !!S.spin,
         playClip: S.playClip !== false,
+        loopClip: !!S.loopClip,
       },
       media: {
         fit: S.fit,

@@ -125,6 +125,9 @@ window.AR_CONFIG = {
     // Slow turntable spin, and play the glTF's own animation clip if it has one.
     spin: false,
     playClip: true,
+    // Once (false): the clip plays through after the figure is placed and holds
+    // its last pose - a performance, not a screensaver. true repeats it.
+    loopClip: false,
 
     // How the figure is shaded. Per exhibit in the portal.
     //   'baked' - render the texture exactly as authored, unlit. Correct for

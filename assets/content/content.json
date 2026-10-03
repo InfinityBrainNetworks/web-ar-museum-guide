@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "generated": "2026-10-03T10:23:43.000Z",
+  "generated": "2026-10-03T10:37:22.000Z",
   "mindSrc": "./assets/content/targets.mind",
   "languages": [
     {
@@ -333,7 +333,13 @@
           "audio": null
         }
       },
-      "model": null
+      "model": {
+        "src": "./assets/content/ex08-the-queen-of-kasyapa-model.glb",
+        "heightMeters": 1.6,
+        "lighting": "baked",
+        "playClip": true,
+        "loopClip": false
+      }
     },
     {
       "id": "sigiriya-ex09",
@@ -513,7 +519,13 @@
           "audio": null
         }
       },
-      "model": null
+      "model": {
+        "src": "./assets/content/ex13-the-queen-and-her-maid-model.glb",
+        "heightMeters": 1.6,
+        "lighting": "baked",
+        "playClip": true,
+        "loopClip": false
+      }
     },
     {
       "id": "sigiriya-ex41",
@@ -573,7 +585,13 @@
           "audio": null
         }
       },
-      "model": null
+      "model": {
+        "src": "./assets/content/ex41-the-lion-flag-model.glb",
+        "heightMeters": 1.3,
+        "lighting": "baked",
+        "playClip": true,
+        "loopClip": false
+      }
     }
   ]
 }

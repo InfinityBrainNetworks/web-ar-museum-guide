@@ -144,7 +144,8 @@ the bottom of `index.html`, drawn from the same paths as My Smart Store's.
 13 (the apsaras of Sigiriya, 5th century) and 41 (the lion flag of Lankatilaka
 Vihara, Kandy, 14th century), in that order — which is also their order in
 `targets.mind`. Files are named `exNN-<title>-{target.jpg,video.mp4,en.mp3}`,
-so the folder sorts in target order. No exhibit has a 3D object yet.
+so the folder sorts in target order. Three of them also stand a figure on the
+floor — see *The three figures* below.
 
 **Where it came from.** The sources live in `Updates/` on the authoring
 machine and are never committed (`.gitignore`): full-size PNG photographs
@@ -174,17 +175,18 @@ the animation's own sub-1% wobble, and the default **stretch** fit is exact.
 Exhibit 41's render also jumps ~4% in its first and last 0.3 s, so it is
 trimmed to 4.33 s and the loop never shows the jump.
 
-**Weight on the wire, about 18 MB in all:**
+**Weight on the wire, about 26 MB in all:**
 
 | | Each | All nine |
 |---|---|---|
 | Target photo — 1024 px long edge, progressive JPEG q84 | 115–205 KB | 1.5 MB |
 | Video — 960 px long edge, H.264 CRF 24, no audio track, faststart | 0.75–1.25 MB | 8.2 MB |
 | English narration — MP3 | 110–285 KB | 1.7 MB |
+| 3D figure — `.glb`, three exhibits | 2.0–2.8 MB | 7.1 MB |
 | `targets.mind` | | 7.0 MB |
 
 A visitor downloads the grid's photos, then `targets.mind` when AR starts, and
-only the video of the painting they actually point at. The tracker is compiled
+only the video — and the figure — of the painting they actually point at. The tracker is compiled
 at the portal's own 1024 px so a later recompile from `admin.html` gives the
 same result; at 512 px it would be 4.7 MB with less detail to lock onto up
 close. Every target reports 3,280–4,240 feature points, far above the ~400
@@ -193,6 +195,37 @@ where tracking gets unreliable.
 To edit any of it, open `admin.html` → ⋯ → **Load what is currently
 deployed**. The tracker comes along as already compiled, so adding a `.glb`
 to an exhibit and exporting needs no recompile.
+
+### The three figures
+
+| Exhibit | Figure | Height | Animation |
+|---|---|---|---|
+| 8 · The Queen of Kasyapa | the queen, rigged | 1.6 m | 10 s, once |
+| 13 · The Queen and Her Maid | the maid, in her red blouse, rigged | 1.6 m | 10 s, once |
+| 41 · The Lion Flag | the lion statue | 1.3 m | none |
+
+They arrived at 18–22 MB each, nearly all of it 4096² textures — which decode
+to about 90 MB of GPU memory apiece, enough for the lion's three to crash
+Safari on an iPhone. Each colour texture is now a 2048² JPEG and the lion's
+normal and metal-roughness maps 1024²; tangents with no normal map to feed
+were dropped; and the apsaras' animation keys, baked at every frame for all
+118 bones, were cut to the ones a straight line between neighbours does not
+already give (85k → 15k). Rendered against the originals with A-Frame's own
+loader, the two differ by under 1 level in 255.
+
+All three are **baked** shading. The apsaras carry `metallic = 1` with no
+metal map and the lion is gold, and with no environment map in the scene for
+metal to reflect, *lit* renders all three close to black.
+
+**Do not quantize a skinned model** (glTF-Transform `quantize`,
+`KHR_mesh_quantization`). It draws identically, but the app sizes a figure
+from its geometry's bounds, and quantized bounds are the −1…1 storage box,
+not the figure: the queen came out at 80% and floating 0.8 m off the floor.
+The lion, which has no skin, is quantized and measures true.
+
+The apsaras' own animation lifts their feet up to 8 cm as they move, and the
+pose they hold at the end is 7.7 cm up. That is the clip as authored;
+Adjust → **Offset** y lowers it if it reads as floating.
 
 ## Adding exhibits — the admin portal
 
@@ -392,7 +425,11 @@ whatever units it was exported in and wherever its pivot sits, it lands on the
 floor at the exhibit's *Figure height*. *Size multiplier* scales that without
 restating the measurement, which is the quick way to dial a model in on the
 device. It turns to face you when placed (`floor.faceViewer`); *Figure turn*
-corrects an export that faces sideways. glTF animation clips play automatically.
+corrects an export that faces sideways. glTF animation clips play automatically,
+**once**: the figure performs after it is placed and then holds its last pose.
+Tick *Loop the animation* on the exhibit in the portal (`loopClip`) to repeat
+it instead; Adjust → Effects → **Animation** switches between Once, Loop and
+Hold on the device.
 
 ### Shading: leave it on "baked" for scans
 
