@@ -1,0 +1,218 @@
+/* ============================================================================
+   The splash — IBN AR Museum, then "by IBN".
+
+   The composition is the Kotlin app's SplashScreen (a lamplit sigil, the name
+   in serif, the Sinhala and Tamil line under it); the signature and the colour
+   bar along the bottom edge are IBN's, the same ones My Smart Store opens with.
+
+   It is shown once per browser session and slides away when js/app.js says
+   the gallery is ready — never before the entrance has finished, never more
+   than a few seconds. The inline script after #splash in index.html decides.
+
+   It is a direct child of <body>, above everything else (#overlay is 45). It
+   does not need to be clickable, and it is removed from the page once it has
+   gone, so it cannot sit on top of anything afterwards.
+   ========================================================================== */
+
+#splash {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+  padding: calc(18px + env(safe-area-inset-top, 0px)) 24px
+           calc(22px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, #1C1714 0%, var(--c-bg) 52%, #0E0C0B 100%);
+  color: var(--c-text);
+  font-family: var(--font-sans);
+  text-align: center;
+  transition: transform 0.75s cubic-bezier(0.65, 0, 0.35, 1);
+}
+#splash.on   { display: flex; }
+#splash.done { transform: translateY(-100%); }
+
+/* Lamplight pooling behind the sigil */
+#splash .sp-lamp {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: 440px;
+  height: 440px;
+  margin: -220px 0 0 -220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(232, 163, 61, 0.20), rgba(224, 103, 58, 0.07) 45%, transparent 70%);
+  filter: blur(10px);
+  animation: sp-fade 1.2s ease-out both;
+}
+
+#splash .sp-chip {
+  position: relative;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid rgba(201, 162, 39, 0.25);
+  border-radius: 999px;
+  background: rgba(31, 26, 23, 0.8);
+  color: var(--c-text-2);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  animation: sp-up 0.6s var(--ease-museum) both;
+}
+#splash .sp-chip svg { width: 14px; height: 14px; color: var(--c-amber); }
+
+#splash .sp-brand {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 420px;
+}
+
+/* The sigil: the AR glyph in a gold-ringed disc with a breathing halo */
+#splash .sp-sigil {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  animation: sp-pop 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+#splash .sp-sigil::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(232, 163, 61, 0.22);
+  filter: blur(18px);
+  animation: ibn-breathe var(--d-amb) ease-in-out infinite;
+}
+#splash .sp-disc {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 1px solid rgba(201, 162, 39, 0.45);
+  background: rgba(31, 26, 23, 0.75);
+  color: var(--c-amber);
+}
+#splash .sp-disc svg { width: 30px; height: 30px; }
+
+#splash .sp-eyebrow {
+  margin-top: 24px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--c-amber);
+  animation: sp-up 0.6s var(--ease-museum) 0.18s both;
+}
+#splash .sp-name {
+  margin: 10px 0 0;
+  font-family: var(--font-serif);
+  font-size: clamp(34px, 10vw, 46px);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  animation: sp-up 0.6s var(--ease-museum) 0.28s both;
+}
+/* Sinhala and Tamil wrap rather than force the line wider — and keep their
+   generous line height, or the vowel signs are cropped. */
+#splash .sp-scripts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 12px;
+  margin-top: 12px;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.7;
+  animation: sp-up 0.6s var(--ease-museum) 0.38s both;
+}
+#splash .sp-scripts .si { color: var(--c-amber); }
+#splash .sp-scripts .ta { color: var(--c-gold); }
+#splash .sp-scripts .star { color: var(--c-text-3); }
+#splash .sp-sub {
+  margin-top: 14px;
+  max-width: 86%;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--c-text-2);
+  animation: sp-up 0.6s var(--ease-museum) 0.46s both;
+}
+#splash .sp-rule {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+  color: var(--c-gold);
+  font-size: 11px;
+  animation: sp-fade 0.8s ease-out 0.55s both;
+}
+#splash .sp-rule::before,
+#splash .sp-rule::after {
+  content: "";
+  width: 70px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201, 162, 39, 0.6));
+}
+#splash .sp-rule::after { transform: scaleX(-1); }
+
+/* ---- by IBN — the signature My Smart Store opens with ------------------- */
+#splash .sp-by {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: sp-up 0.6s var(--ease-museum) 0.55s both;
+}
+#splash .sp-by-text { font-size: 13px; color: rgba(245, 237, 229, 0.55); }
+#splash .sp-ibn { width: 34px; height: 34px; color: #fff; }
+#splash .sp-orbit { transform-origin: 252px 252px; animation: sp-in 0.7s var(--ease-museum) 0.6s both; }
+#splash .sp-node {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sp-node 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation-delay: calc(0.85s + var(--i) * 0.07s);
+}
+#splash .sp-ibn-text {
+  font-family: "Space Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 5px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* IBN's six colours along the bottom edge, drawn in as the gallery loads */
+#splash .sp-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #4169E1, #4B0082, #DC143C, #FFD700, #50C878);
+  transform-origin: left center;
+  animation: sp-grow 1.25s cubic-bezier(0.65, 0, 0.35, 1) 0.1s both;
+}
+
+@keyframes sp-pop  { from { opacity: 0; transform: scale(0.6) rotate(-8deg); } }
+@keyframes sp-up   { from { opacity: 0; transform: translateY(10px); } }
+@keyframes sp-fade { from { opacity: 0; transform: scale(0.8); } }
+@keyframes sp-in   { from { opacity: 0; transform: scale(0.7); } }
+@keyframes sp-node { from { opacity: 0; transform: scale(0); } }
+@keyframes sp-grow { from { transform: scaleX(0); } }
+
+/* Short screens (a phone held sideways) drop the decoration, not the name. */
+@media (max-height: 520px) {
+  #splash .sp-chip, #splash .sp-sub, #splash .sp-rule { display: none; }
+  #splash .sp-eyebrow { margin-top: 12px; }
+}

@@ -9,6 +9,7 @@
 
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>">
 <link rel="stylesheet" href="./css/theme.css">
+<link rel="stylesheet" href="./css/splash.css">
 <link rel="stylesheet" href="./css/style.css">
 <link rel="stylesheet" href="./css/shell.css">
 
@@ -27,6 +28,104 @@
 </head>
 
 <body>
+
+<!-- ============ SPLASH ============ -->
+<!-- IBN AR Museum, then "by IBN". First visit of a browser session only; it
+     slides away once js/app.js has the gallery ready. The look is in
+     css/splash.css. Its words are in all three languages at once rather than
+     translated, because nobody has picked a language yet. -->
+<div id="splash" aria-hidden="true">
+  <div class="sp-lamp"></div>
+  <div class="sp-chip">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7.5 4.2v8.6L12 20l-7.5-4.2V7.2z"/><path d="M4.5 7.2L12 11.5l7.5-4.3M12 11.5V20"/></svg>
+    WEB AR
+  </div>
+
+  <div class="sp-brand">
+    <div class="sp-sigil">
+      <div class="sp-disc">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7.5 4.2v8.6L12 20l-7.5-4.2V7.2z"/><path d="M4.5 7.2L12 11.5l7.5-4.3M12 11.5V20"/></svg>
+      </div>
+    </div>
+    <div class="sp-eyebrow">Museum Guide</div>
+    <h1 class="sp-name">IBN AR Museum</h1>
+    <div class="sp-scripts" lang="si">
+      <span class="si">කෞතුකාගාර මාර්ගෝපදේශය</span>
+      <span class="star" aria-hidden="true">✦</span>
+      <span class="ta" lang="ta">அருங்காட்சியக வழிகாட்டி</span>
+    </div>
+    <p class="sp-sub">Point your phone at an artwork and it answers, in your own language.</p>
+    <div class="sp-rule" aria-hidden="true">❖</div>
+  </div>
+
+  <div class="sp-by">
+    <span class="sp-by-text">by</span>
+    <svg class="sp-ibn" viewBox="80 80 344 344">
+      <g class="sp-orbit" fill="currentColor">
+        <path d="M100.09,289.2c-3.76-24.69-3.76-49.72,0-74.41l15.82,2.41c-3.51,23.09-3.51,46.5,0,69.59l-15.82,2.41Z"/>
+        <path d="M403.91,289.2l-15.82-2.41c3.51-23.09,3.51-46.5,0-69.59l15.82-2.41c3.76,24.69,3.76,49.72,0,74.41Z"/>
+        <path d="M361.74,300.37c-37.39-80.53-74.31-121.37-109.74-121.37s-72.35,40.83-109.74,121.37l-14.51-6.74c40.81-87.9,81.46-130.63,124.26-130.63s83.44,42.73,124.26,130.63l-14.51,6.74Z"/>
+        <path d="M252,341c-42.8,0-83.44-42.73-124.26-130.63l14.51-6.74c37.39,80.54,74.31,121.37,109.74,121.37s72.35-40.83,109.74-121.37l14.51,6.74c-40.81,87.9-81.46,130.63-124.26,130.63Z"/>
+        <path d="M346,159.25c-14.4-11.52-35-23.27-61.25-34.94l6.5-14.62c27.5,12.22,49.28,24.69,64.75,37.06l-9.99,12.49Z"/>
+        <path d="M158,159.25l-10-12.49c15.46-12.37,37.25-24.84,64.75-37.06l6.5,14.62c-26.25,11.67-46.86,23.42-61.25,34.94Z"/>
+        <path d="M291.25,394.31l-6.5-14.62c26.25-11.67,46.86-23.42,61.25-34.94l9.99,12.49c-15.46,12.37-37.25,24.84-64.75,37.06Z"/>
+        <path d="M212.75,394.31c-27.5-12.22-49.28-24.69-64.75-37.06l10-12.49c14.4,11.52,35,23.27,61.25,34.94l-6.5,14.62Z"/>
+        <circle cx="252" cy="252" r="45"/>
+      </g>
+      <circle class="sp-node" style="--i: 0" fill="#4169E1" cx="252" cy="108" r="27"/>
+      <circle class="sp-node" style="--i: 1" fill="#FFD700" cx="387" cy="171" r="27"/>
+      <circle class="sp-node" style="--i: 2" fill="#4B0082" cx="387" cy="333" r="27"/>
+      <circle class="sp-node" style="--i: 3" fill="#50C878" cx="252" cy="396" r="27"/>
+      <circle class="sp-node" style="--i: 4" fill="#DC143C" cx="117" cy="333" r="27"/>
+      <circle class="sp-node" style="--i: 5" fill="#C0C0C0" cx="117" cy="171" r="27"/>
+    </svg>
+    <span class="sp-ibn-text">&lt; IBN &gt;</span>
+  </div>
+  <div class="sp-bar"></div>
+</div>
+<script>
+  // Runs here, before anything below is parsed, so a visitor who has already
+  // seen the splash this session never sees a frame of it. js/shell.js calls
+  // ARSplash.done() when js/app.js reports the gallery ready; the splash then
+  // waits out its own entrance before sliding away, and a boot that never
+  // reports still lets the visitor in after six seconds.
+  (function () {
+    var el = document.getElementById('splash');
+    var noop = { done: function () {} };
+    var seen = false;
+    try {
+      seen = sessionStorage.getItem('ar-museum-splash') === '1';
+      sessionStorage.setItem('ar-museum-splash', '1');
+    } catch (e) {}
+    // Restore "Reduce motion" now rather than at DOMContentLoaded, so the
+    // splash does not animate for someone who switched it off.
+    try {
+      if (localStorage.getItem('ar-museum-motion') === 'off') {
+        document.documentElement.setAttribute('data-motion', 'off');
+      }
+    } catch (e) {}
+    // The portal's preview is opened over and over while editing.
+    var preview = /[?&]preview=1(&|$)/.test(location.search);
+    if (!el || seen || preview) {
+      if (el) el.parentNode.removeChild(el);
+      window.ARSplash = noop;
+      return;
+    }
+    el.className = 'on';
+    var start = Date.now();
+    var gone = false;
+    function hide() {
+      if (gone) return;
+      gone = true;
+      el.className = 'on done';
+      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 800);
+    }
+    window.ARSplash = {
+      done: function () { setTimeout(hide, Math.max(0, 1600 - (Date.now() - start))); },
+    };
+    setTimeout(hide, 6000);
+  })();
+</script>
 
 <!-- ============ AR SCENE ============ -->
 <!-- Two independent scenes share this one canvas:
@@ -327,6 +426,31 @@
     <g id="i-bug" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <rect x="7" y="7" width="10" height="13" rx="5"/><path d="M3 11h4M17 11h4M3.5 17h3.5M17 17h3.5M9 5l1.5 2M15 5l-1.5 2"/>
     </g>
+    <g id="i-link" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 4h6v6M20 4l-9 9M18 14v4.5A1.5 1.5 0 0116.5 20h-11A1.5 1.5 0 014 18.5v-11A1.5 1.5 0 015.5 6H10"/>
+    </g>
+    <!-- IBN's mark, drawn in its own 80 80 344 344 box. The orbit takes
+         currentColor (white on our dark ground); the six nodes are IBN's
+         colours and never change. Same drawing as the splash. -->
+    <g id="ibn-mark">
+      <g fill="currentColor">
+        <path d="M100.09,289.2c-3.76-24.69-3.76-49.72,0-74.41l15.82,2.41c-3.51,23.09-3.51,46.5,0,69.59l-15.82,2.41Z"/>
+        <path d="M403.91,289.2l-15.82-2.41c3.51-23.09,3.51-46.5,0-69.59l15.82-2.41c3.76,24.69,3.76,49.72,0,74.41Z"/>
+        <path d="M361.74,300.37c-37.39-80.53-74.31-121.37-109.74-121.37s-72.35,40.83-109.74,121.37l-14.51-6.74c40.81-87.9,81.46-130.63,124.26-130.63s83.44,42.73,124.26,130.63l-14.51,6.74Z"/>
+        <path d="M252,341c-42.8,0-83.44-42.73-124.26-130.63l14.51-6.74c37.39,80.54,74.31,121.37,109.74,121.37s72.35-40.83,109.74-121.37l14.51,6.74c-40.81,87.9-81.46,130.63-124.26,130.63Z"/>
+        <path d="M346,159.25c-14.4-11.52-35-23.27-61.25-34.94l6.5-14.62c27.5,12.22,49.28,24.69,64.75,37.06l-9.99,12.49Z"/>
+        <path d="M158,159.25l-10-12.49c15.46-12.37,37.25-24.84,64.75-37.06l6.5,14.62c-26.25,11.67-46.86,23.42-61.25,34.94Z"/>
+        <path d="M291.25,394.31l-6.5-14.62c26.25-11.67,46.86-23.42,61.25-34.94l9.99,12.49c-15.46,12.37-37.25,24.84-64.75,37.06Z"/>
+        <path d="M212.75,394.31c-27.5-12.22-49.28-24.69-64.75-37.06l10-12.49c14.4,11.52,35,23.27,61.25,34.94l-6.5,14.62Z"/>
+        <circle cx="252" cy="252" r="45"/>
+      </g>
+      <circle fill="#4169E1" cx="252" cy="108" r="27"/>
+      <circle fill="#FFD700" cx="387" cy="171" r="27"/>
+      <circle fill="#4B0082" cx="387" cy="333" r="27"/>
+      <circle fill="#50C878" cx="252" cy="396" r="27"/>
+      <circle fill="#DC143C" cx="117" cy="333" r="27"/>
+      <circle fill="#C0C0C0" cx="117" cy="171" r="27"/>
+    </g>
   </defs>
 </svg>
 
@@ -448,7 +572,49 @@
         </div>
       </div>
 
-      <p class="settings-about" id="settingsAbout"></p>
+      <!-- About. The Kotlin app's About & Credits, signed by IBN the way My
+           Smart Store is. The product and company names are proper nouns and
+           stay as they are in every language. -->
+      <div class="settings-group">
+        <h2 data-i18n="settings.about">About</h2>
+        <div class="about-card">
+          <div class="about-hero">
+            <span class="about-eyebrow" data-i18n="about.eyebrow">Augmented reality guide</span>
+            <strong class="about-name">IBN AR Museum</strong>
+          </div>
+          <p class="about-body" data-i18n="about.body">An augmented reality guide for the museum: point your phone at an artwork and it answers, in your own language.</p>
+          <p class="settings-about" id="settingsAbout"></p>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <h2 data-i18n="about.createdBy">Created by</h2>
+        <div class="settings-list team-list">
+          <div class="team-row"><span class="team-face" aria-hidden="true">A</span><span class="label"><strong>Abeyrathna</strong><span data-i18n="about.role.pm">Project Manager</span></span></div>
+          <div class="team-row"><span class="team-face" aria-hidden="true">A</span><span class="label"><strong>Asan</strong><span data-i18n="about.role.ar">AR Developer</span></span></div>
+          <div class="team-row"><span class="team-face" aria-hidden="true">S</span><span class="label"><strong>Sooriyapatabedhi</strong><span data-i18n="about.role.3d">3D Developer</span></span></div>
+          <div class="team-row"><span class="team-face" aria-hidden="true">A</span><span class="label"><strong>Ariyasinghe</strong><span data-i18n="about.role.ui">UI/UX &amp; Language Developer</span></span></div>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <h2 data-i18n="about.productOf">A product of</h2>
+        <a class="ibn-card" href="https://www.ibnxr.com" target="_blank" rel="noopener">
+          <span class="ibn-tile"><svg viewBox="80 80 344 344" aria-hidden="true"><use href="#ibn-mark"></use></svg></span>
+          <span class="label">
+            <span class="ibn-code">&lt; IBN &gt;</span>
+            <strong>Infinity Brain Network (Pvt) Ltd</strong>
+            <span class="ibn-web">ibnxr.com</span>
+          </span>
+          <svg class="ibn-go" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-link"></use></svg>
+        </a>
+        <div class="ibn-dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      </div>
+
+      <p class="about-foot">
+        SE4061 Multimedia Project Management · SLIIT Faculty of Computing · 2026<br>
+        © 2026 Infinity Brain Network (Pvt) Ltd
+      </p>
     </section>
 
     <!-- Map and Feedback. In the bar because the shape of the app is five

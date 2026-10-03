@@ -489,14 +489,144 @@
 .settings-row.on .switch { background: var(--c-terracotta-dk); border-color: var(--c-terracotta); }
 .settings-row.on .switch::after { transform: translateX(19px); background: var(--c-text); }
 
+/* -------------------------------------------------------------------- about */
+/* The Kotlin app's About & Credits: a lamplit name card, the team, then the
+   company. The IBN card is signed the way My Smart Store signs its pages. */
+.about-card {
+  border: 1px solid var(--c-hairline);
+  border-radius: 16px;
+  background: var(--c-surface);
+  overflow: hidden;
+}
+.about-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 30px 16px 26px;
+  background:
+    radial-gradient(ellipse 70% 90% at 50% 0%, rgba(232, 163, 61, 0.22), transparent 70%),
+    var(--c-elevated);
+  border-bottom: 1px solid var(--c-hairline-soft);
+  text-align: center;
+}
+.about-eyebrow {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--c-amber);
+}
+.about-name {
+  font-family: var(--font-serif);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--c-text);
+}
+.about-body {
+  margin: 0;
+  padding: 16px 16px 0;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--c-text-2);
+}
 .settings-about {
-  padding: 18px;
+  margin: 0;
+  padding: 12px 16px 16px;
   font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--c-text-3);
+}
+.settings-about strong { color: var(--c-text-2); }
+
+.team-row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 11px 15px;
+  border-bottom: 1px solid var(--c-hairline-soft);
+}
+.team-row:last-child { border-bottom: 0; }
+.team-face {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(201, 162, 39, 0.3);
+  background: var(--c-elevated);
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--c-amber);
+}
+.team-row .label { min-width: 0; }
+.team-row .label strong { display: block; font-size: 14.5px; font-weight: 600; overflow-wrap: anywhere; }
+.team-row .label span { display: block; margin-top: 1px; font-size: 12px; color: var(--c-amber); }
+
+.ibn-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 15px;
+  border: 1px solid var(--c-hairline-soft);
+  border-radius: 14px;
+  background: var(--c-surface);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color var(--d-fast) var(--ease-soft);
+}
+.ibn-card:active { background: var(--c-elevated); }
+.ibn-card .label { flex: 1 1 auto; min-width: 0; }
+.ibn-card .label strong { display: block; font-size: 14.5px; font-weight: 600; line-height: 1.35; }
+.ibn-tile {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  padding: 7px;
+  border-radius: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0E0E10;
+  color: #fff;
+  transition: transform var(--d-slow) var(--ease-museum);
+}
+.ibn-tile svg { width: 100%; height: 100%; }
+.ibn-card:hover .ibn-tile,
+.ibn-card:active .ibn-tile { transform: rotate(60deg); }
+.ibn-code {
+  display: block;
+  margin-bottom: 2px;
+  font-family: "Space Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  color: var(--c-text-2);
+}
+.ibn-web { display: block; margin-top: 2px; font-size: 12.5px; color: var(--c-amber); }
+.ibn-go { flex: none; width: 17px; height: 17px; color: var(--c-text-3); }
+
+/* IBN's six colours, the same order as the nodes of the mark */
+.ibn-dots { display: flex; justify-content: center; gap: 7px; padding: 14px 0 2px; }
+.ibn-dots i { width: 7px; height: 7px; border-radius: 50%; }
+.ibn-dots i:nth-child(1) { background: #4169E1; }
+.ibn-dots i:nth-child(2) { background: #FFD700; }
+.ibn-dots i:nth-child(3) { background: #4B0082; }
+.ibn-dots i:nth-child(4) { background: #50C878; }
+.ibn-dots i:nth-child(5) { background: #DC143C; }
+.ibn-dots i:nth-child(6) { background: #C0C0C0; }
+
+.about-foot {
+  margin: 0;
+  padding: 16px 22px 24px;
+  font-size: 11.5px;
   line-height: 1.7;
   color: var(--c-text-3);
   text-align: center;
 }
-.settings-about strong { color: var(--c-text-2); }
 
 /* ------------------------------------------------------- not-yet-built tabs */
 /* Map and Feedback are in the bar because the shape of the app is five slots,

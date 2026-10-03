@@ -119,6 +119,23 @@ vowel diacritics are not cropped, and every title clamps to a line count rather
 than a pixel height, so a long translation truncates instead of breaking the
 grid.
 
+## The splash and the IBN signature
+
+The first visit of a browser session opens on a splash: the Kotlin app's
+lamplit composition (the sigil, **IBN AR Museum** in serif, the Sinhala and
+Tamil line), signed off with the same animated "by IBN" mark and colour bar
+My Smart Store opens with. It is in all three languages at once, because
+nobody has picked one yet.
+
+It lifts when `js/app.js` reports the gallery ready — never before its own
+entrance has played (1.6 s), never later than 6 s even if boot hangs — and
+then removes itself from the page, so it can never sit on top of a button.
+It is skipped on a reload in the same session and on the portal's
+`?preview=1`, and it respects **Reduce motion**.
+
+Settings ends with **About**: the product card, the team, and the IBN card
+linking to ibnxr.com. The IBN mark is one `#ibn-mark` symbol in the sprite at
+the bottom of `index.html`, drawn from the same paths as My Smart Store's.
 ## Adding exhibits — the admin portal
 
 Open **`admin.html`** on a desktop browser. It runs entirely in that browser:
@@ -252,6 +269,7 @@ by a script, or by a merge nobody read.
 | `js/config.js` | Global settings, plus the defaults a new exhibit starts from |
 | `js/logger.js` | On-screen log window (loads first so it captures everything) |
 | `css/theme.css` | **The palette, motion and type tokens.** Ported from the Kotlin app; every other stylesheet points at it |
+| `css/splash.css` | The opening splash: IBN AR Museum, then "by IBN". Markup and its timing script are the first thing in `index.html`'s body |
 | `css/style.css`, `css/shell.css`, `css/admin.css` | AR overlay, browse screens, portal |
 | `assets/content/content.json` | **What the AR page reads** — every exhibit, in target order |
 | `assets/content/targets.mind` | Compiled tracking data, written by the portal |

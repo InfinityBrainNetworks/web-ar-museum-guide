@@ -599,8 +599,17 @@
     go('explore');
     refresh();
 
-    // The grid cannot be drawn until the exhibits have landed.
-    if (window.ARViewer) window.ARViewer.onReady(refresh);
+    // The grid cannot be drawn until the exhibits have landed — and the splash
+    // (index.html) waits for the same moment, so it never lifts onto an empty
+    // grid. Both are told after the grid is drawn.
+    if (window.ARViewer) {
+      window.ARViewer.onReady(function () {
+        refresh();
+        if (window.ARSplash) window.ARSplash.done();
+      });
+    } else if (window.ARSplash) {
+      window.ARSplash.done();
+    }
   }
 
   if (document.readyState === 'loading') {
