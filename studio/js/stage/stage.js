@@ -17,7 +17,10 @@
  *            hung from its anchor - the same function the phone calls
  *
  * so what stands here is what stands in the gallery. The contact shadow is
- * the viewer's too: the same ellipses, the same automatic circle.
+ * the viewer's too: the same shapes (js/shadows.js), the same automatic
+ * circle. Select a shape and the gizmo moves, turns and sizes it on the floor
+ * instead of the figure; a white patch of floor can be laid under it, because
+ * a dark shadow on this dark floor cannot be seen.
  *
  * The gizmo works in two modes. OBJECT moves, turns and scales the figure
  * about its anchor. ANCHOR moves the anchor itself and leaves the figure where
@@ -39,11 +42,14 @@ const VISITOR_EYE = 1.4;            // the gyro engine's assumed phone height
 const VISITOR_DISTANCE = 2.2;
 
 export class Stage {
-  constructor(container, { onChange = () => {}, onCommit = () => {}, onStatus = () => {} } = {}) {
+  constructor(container, { onChange = () => {}, onCommit = () => {}, onStatus = () => {}, onPickShadow = () => {} } = {}) {
     this.container = container;
     this.onChange = onChange;      // every frame of a drag
     this.onCommit = onCommit;      // once, when a drag ends - for undo
     this.onStatus = onStatus;      // hud text
+    this.onPickShadow = onPickShadow;   // a shadow shape clicked in the view
+    this.shadowEdit = null;        // the index of the shape the gizmo holds
+    this.shadowPicking = false;    // clicks in the view select shadow shapes
     this.state = null;
     this.measure = null;
     this.mode = 'translate';
@@ -129,11 +135,16 @@ export class Stage {
     this.viewHelper.center = orbit.target;
     this.viewHelper.setLabels('X', 'Y', 'Z');
 
-    // ---- picking a point on the model for the anchor
+    // ---- picking a point on the model for the anchor, or a shadow shape
     this.raycaster = new THREE.Raycaster();
+    let down = null;
+    renderer.domElement.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY }; });
     renderer.domElement.addEventListener('pointerup', (e) => {
       if (this.viewHelper.handleClick(e)) return;
-      if (this.picking) this.pickAt(e);
+      if (this.picking) { this.pickAt(e); return; }
+      // A click, not the end of an orbit or a gizmo drag.
+      const still = down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5;
+      if (still && this.shadowPicking && !this.gizmo.dragging && !this.gizmo.axis) this.pickShadowAt(e);
     });
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -166,6 +177,17 @@ export class Stage {
     coarse.position.y = 0.0005;
     this.scene.add(coarse);
     this.grids = [fine, coarse];
+
+    // A patch of light floor, for seeing a shadow by. Off until asked for.
+    this.patch = new THREE.Mesh(new THREE.PlaneGeometry(1, 1),
+      // Pulled towards the camera in depth, or the grid lines just under it
+      // stripe through from a distance.
+      new THREE.MeshBasicMaterial({ color: 0xf4f1ec, toneMapped: false, fog: false,
+        polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    this.patch.rotation.x = -Math.PI / 2;
+    this.patch.position.y = 0.0008;       // over the grid, under the shadow
+    this.patch.visible = false;
+    this.scene.add(this.patch);
 
     // Axis lines on the floor: x red, z blue, like every 3D tool.
     const axis = (from, to, colour) => {
@@ -338,12 +360,16 @@ export class Stage {
   }
 
   // ------------------------------------------------------------------ the shadow
-  /** The viewer's contact shadow, ported: ellipses or the automatic circle. */
+  /** The viewer's contact shadow, ported: shapes or the automatic circle. */
   updateShadow() {
     const s = this.state;
     const opacity = Math.max(0, Math.min(1, s.shadowOpacity ?? 0.5));
     this.shadowSlot.position.set(s.offset.x, 0, s.offset.z);
-    this.shadowSlot.visible = opacity > 0 && !!this.holder;
+    this.patch.position.x = s.offset.x;
+    this.patch.position.z = s.offset.z;
+    // Hidden at strength 0 - except while a shape is being edited, when an
+    // invisible handle would be no use to anyone.
+    this.shadowSlot.visible = (opacity > 0 || this.shadowEdit !== null) && !!this.holder;
     if (!this.shadowSlot.visible) return;
 
     const auto = !(s.shadows && s.shadows.length);
@@ -353,31 +379,134 @@ export class Stage {
     while (group.children.length < blobs.length) {
       const wrapper = new THREE.Object3D();
       const mesh = new THREE.Mesh(kit.geometry, new THREE.MeshBasicMaterial({
-        map: kit.texture, color: 0x000000, transparent: true, depthWrite: false, toneMapped: false,
+        map: null, color: 0x000000, transparent: true, depthWrite: false, toneMapped: false,
+        // Further forward still than the white floor, which lies just under it.
+        polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
       }));
       mesh.rotation.x = -Math.PI / 2;
       wrapper.add(mesh);
+      // The outline the selected shape wears.
+      const outline = new THREE.LineLoop(kit.circle, new THREE.LineBasicMaterial({
+        color: ANCHOR_COLOUR, transparent: true, opacity: 0.95, depthTest: false }));
+      outline.renderOrder = 18;
+      outline.visible = false;
+      wrapper.add(outline);
       group.add(wrapper);
     }
     while (group.children.length > blobs.length) {
       const gone = group.children.pop();
+      if (this.gizmo.object === gone) this.gizmo.detach();
       gone.children[0].material.dispose();
+      gone.children[1].material.dispose();
     }
     const follow = s.shadowFollow && !auto;
-    const k = follow && s.shadowScale > 0 ? (s.scale || 1) / s.shadowScale : 1;
+    const k = this.shadowFactor();
     group.rotation.set(0, follow ? s.rotation.y * D2R : 0, 0);
     blobs.forEach((b, i) => {
       const w = group.children[i];
+      const material = w.children[0].material;
       w.position.set(b.x * k, 0.002 + i * 0.0002, b.z * k);
       w.rotation.set(0, (b.r || 0) * D2R, 0);
       w.scale.set(Math.max(0.01, b.w * k), 1, Math.max(0.01, b.d * k));
-      w.children[0].material.color.set(b.c || '#000000');
-      w.children[0].material.opacity = opacity * (typeof b.o === 'number' ? b.o : 1);
+      const map = this.shadowTexture(b);
+      if (material.map !== map) { material.map = map; material.needsUpdate = true; }
+      w.children[0].visible = !!map;
+      material.color.set(b.c || '#000000');
+      // Never quite gone while it is being edited, so there is something to grab.
+      const strength = opacity * (typeof b.o === 'number' ? b.o : 1);
+      material.opacity = i === this.shadowEdit ? Math.max(0.12, strength) : strength;
+      const outline = w.children[1];
+      outline.geometry = b.s === 'ellipse' || !b.s ? kit.circle : kit.square;
+      outline.visible = i === this.shadowEdit;
     });
+    this.holdShadow();
+  }
+
+  /** How much the shapes are scaled: by the figure's size, when they follow it. */
+  shadowFactor() {
+    const s = this.state;
+    const follow = s.shadowFollow && s.shadows && s.shadows.length;
+    return follow && s.shadowScale > 0 ? (s.scale || 1) / s.shadowScale : 1;
+  }
+
+  /** The texture for one shape; a picture's is null until it has loaded. */
+  shadowTexture(b) {
+    const kit = shadowKit();
+    if (b.s === 'image') {
+      let got = kit.pictures.get(b.src);
+      if (got) return got.texture;
+      got = { texture: null };
+      kit.pictures.set(b.src, got);
+      window.ARShadows.loadMask(b.src).then((canvas) => {
+        got.texture = new THREE.CanvasTexture(canvas);
+        if (this.alive && this.state) this.updateShadow();
+      }, () => {
+        kit.pictures.delete(b.src);
+        this.onStatus('The shadow picture could not be loaded');
+      });
+      return null;
+    }
+    const shape = b.s === 'rect' ? 'rect' : 'ellipse';
+    const feather = window.ARShadows.featherOf(b);
+    const key = shape + '|' + feather.toFixed(2);
+    if (!kit.textures.has(key)) kit.textures.set(key, new THREE.CanvasTexture(window.ARShadows.mask(shape, feather)));
+    return kit.textures.get(key);
+  }
+
+  /**
+   * Hand the gizmo to shadow shape i (null gives it back to the figure). Moves
+   * stay on the floor, turns about the vertical, and sizing is width and depth.
+   */
+  setShadowEdit(i) {
+    const list = (this.state && this.state.shadows) || [];
+    this.shadowEdit = i !== null && i >= 0 && i < list.length ? i : null;
+    if (this.shadowEdit !== null && this.anchorEdit) this.setAnchorEdit(false);
+    this.updateShadow();
+    if (this.shadowEdit === null) {
+      this.gizmo.attach(this.anchorEdit ? this.anchorHandle : this.pivot);
+      this.gizmo.setMode(this.anchorEdit ? 'translate' : this.mode);
+      this.constrain(this.axis);
+    }
+  }
+
+  /** Keep the gizmo on the shape being edited, and its handles on the floor. */
+  holdShadow() {
+    if (this.shadowEdit === null) return;
+    const w = this.shadowGroup.children[this.shadowEdit];
+    if (!w) return;
+    if (this.gizmo.object !== w) this.gizmo.attach(w);
+    this.gizmo.setMode(this.mode);
+    const turning = this.mode === 'rotate';
+    this.gizmo.showX = !turning && (!this.axis || this.axis === 'x');
+    this.gizmo.showZ = !turning && (!this.axis || this.axis === 'z');
+    this.gizmo.showY = turning;
+  }
+
+  /** Lay the light patch: { on, w, d, colour }. */
+  setPatch({ on, w, d, colour } = {}) {
+    this.patch.visible = !!on;
+    if (w > 0 && d > 0) this.patch.scale.set(w, d, 1);
+    if (colour) this.patch.material.color.set(colour);
+  }
+
+  pickShadowAt(e) {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+    this.raycaster.setFromCamera(ndc, this.camera);
+    const list = (this.state && this.state.shadows) || [];
+    if (!list.length) return;
+    const meshes = this.shadowGroup.children.slice(0, list.length).map((w) => w.children[0]);
+    const hits = this.raycaster.intersectObjects(meshes, false);
+    // Nothing there: a click away from the shapes hands the gizmo back.
+    if (!hits.length) { if (this.shadowEdit !== null) this.onPickShadow(null); return; }
+    // The top one where they overlap: the later a shape, the higher it lies.
+    let best = -1;
+    hits.forEach((hit) => { best = Math.max(best, meshes.indexOf(hit.object)); });
+    if (best >= 0) this.onPickShadow(best);
   }
 
   autoBlob() {
-    if (!this.fit) return { x: 0, z: 0, w: 0.6, d: 0.6, r: 0, o: 1, c: '#000000' };
+    if (!this.fit) return { s: 'ellipse', x: 0, z: 0, w: 0.6, d: 0.6, r: 0, o: 1, c: '#000000', f: 1 };
     const footprint = this.fit.footprint * (this.state.scale || 1);
     const spread = Math.max(0.1, footprint * 2.1);
     // Under the figure's base, wherever the anchor is - as in the viewer.
@@ -385,12 +514,13 @@ export class Stage {
     const base = this.holder.localToWorld(this.measure.base.clone());
     this.shadowSlot.updateMatrixWorld(true);
     this.shadowSlot.worldToLocal(base);
-    return { x: base.x, z: base.z, w: spread, d: spread, r: 0, o: 1, c: '#000000' };
+    return { s: 'ellipse', x: base.x, z: base.z, w: spread, d: spread, r: 0, o: 1, c: '#000000', f: 1 };
   }
 
   // ------------------------------------------------------------------ gizmo
   setMode(mode) {
     this.mode = mode;
+    if (this.shadowEdit !== null) { this.holdShadow(); return; }
     if (!this.anchorEdit) this.gizmo.setMode(mode);
   }
 
@@ -406,13 +536,15 @@ export class Stage {
 
   /** X, Y or Z alone - Blender's axis constraint. null shows all three. */
   constrain(axis) {
+    this.axis = axis || null;
+    if (this.shadowEdit !== null) { this.holdShadow(); return; }
     this.gizmo.showX = !axis || axis === 'x';
     this.gizmo.showY = !axis || axis === 'y';
     this.gizmo.showZ = !axis || axis === 'z';
-    this.axis = axis || null;
   }
 
   setAnchorEdit(on) {
+    if (on && this.shadowEdit !== null) this.setShadowEdit(null);
     this.anchorEdit = !!on;
     this.updateAnchorMarker();
     if (on) {
@@ -430,6 +562,19 @@ export class Stage {
   /** The gizmo moved something: read it back into the state. */
   fromGizmo() {
     const s = this.state;
+    if (this.shadowEdit !== null) {
+      const w = this.shadowGroup.children[this.shadowEdit];
+      const b = s.shadows[this.shadowEdit];
+      const k = this.shadowFactor() || 1;
+      b.x = round(w.position.x / k, 0.001);
+      b.z = round(w.position.z / k, 0.001);
+      b.r = round(new THREE.Euler().setFromQuaternion(w.quaternion, 'YXZ').y / D2R, 0.1);
+      b.w = round(Math.max(0.01, Math.abs(w.scale.x) / k), 0.001);
+      b.d = round(Math.max(0.01, Math.abs(w.scale.z) / k), 0.001);
+      this.updateShadow();
+      this.onChange(this.getState());
+      return;
+    }
     if (this.anchorEdit) {
       this.moveAnchorTo(this.anchorHandle.position.clone(), false);
       return;
@@ -617,6 +762,8 @@ export class Stage {
   }
 
   showHuman(on) { this.human.visible = !!on; }
+  /** Out of the way, to see the shadow under it from above. */
+  showFigure(on) { this.pivot.visible = !!on; this.anchorMarker.visible = !!on; }
   showGrid(on) { this.grids.forEach((g) => { g.visible = !!on; }); }
 
   /** A PNG of the current view - for the release notes, or a quick check. */
@@ -698,15 +845,19 @@ function toUnlit(source) {
 let kit = null;
 function shadowKit() {
   if (kit) return kit;
-  const c = document.createElement('canvas');
-  c.width = c.height = 128;
-  const g = c.getContext('2d');
-  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-  grad.addColorStop(0, 'rgba(255,255,255,1)');
-  grad.addColorStop(0.5, 'rgba(255,255,255,0.44)');
-  grad.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 128, 128);
-  kit = { geometry: new THREE.PlaneGeometry(1, 1), texture: new THREE.CanvasTexture(c) };
+  const ring = [];
+  for (let i = 0; i < 64; i++) {
+    const a = (i / 64) * Math.PI * 2;
+    ring.push(new THREE.Vector3(Math.cos(a) * 0.5, 0.001, Math.sin(a) * 0.5));
+  }
+  kit = {
+    geometry: new THREE.PlaneGeometry(1, 1),
+    textures: new Map(),        // shape|softness -> texture
+    pictures: new Map(),        // url -> { texture }
+    // Unit outlines, lying on the floor: the wrapper's scale stretches them.
+    circle: new THREE.BufferGeometry().setFromPoints(ring),
+    square: new THREE.BufferGeometry().setFromPoints([[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]]
+      .map(([x, z]) => new THREE.Vector3(x, 0.001, z))),
+  };
   return kit;
 }

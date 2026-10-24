@@ -119,6 +119,19 @@ export function floorPlan() {
   return out;
 }
 
+/** A painted shadow as a plain picture: a black ellipse on a white page, no transparency. */
+export function shadowPicture() {
+  const out = path.join(SCRATCH, 'painted-shadow.png');
+  if (fs.existsSync(out)) return out;
+  execFileSync(process.env.FFMPEG || 'ffmpeg', [
+    '-v', 'error', '-y',
+    '-f', 'lavfi', '-i', 'color=c=white:s=600x300:d=1',
+    '-vf', "format=gray,geq=lum='if(lt(pow((X-300)/260,2)+pow((Y-150)/100,2),1),0,255)'",
+    '-frames:v', '1', out,
+  ]);
+  return out;
+}
+
 export async function launch({ camera = null, profile = null, headless = true } = {}) {
   const args = [
     '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',

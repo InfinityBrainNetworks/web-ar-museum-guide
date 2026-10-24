@@ -388,6 +388,34 @@ clip**: it samples the whole performance and reports where the feet go — for
 the queen, −2 to +4 cm while dancing and 0 on the pose she holds, the numbers
 the lean fix below was checked with.
 
+#### The shadow
+
+The **Shadow** section builds the contact shadow out of as many shapes as it
+needs — the same shapes the guide draws (`js/shadows.js`), so what you see is
+what the phone shows:
+
+- **+ Ellipse** and **+ Rectangle** — soft shapes with their own **Softness**
+  (1 fades from the middle, 0 is a hard edge), **Opacity** and **Colour** (six
+  swatches, or any colour);
+- **+ Picture (PNG)** — a painted shadow. A transparent PNG gives its alpha; a
+  black shadow on a white page works too (its darkness becomes the shadow).
+  It is shrunk to 1024 px, uploaded beside the figure, laid down in its own
+  proportions, and tinted by its colour like any other shape.
+
+Select a shape — in the list, or by **clicking it on the floor** — and the
+gizmo moves (**G**), turns (**R**) and sizes (**S**) it instead of the figure,
+flat on the floor; or type its position, size and turn. **Delete** removes it,
+**Esc** hands the gizmo back to the figure. Later shapes lie on top of earlier
+ones. **Clear** goes back to the automatic circle.
+
+The stage floor is dark, and so is a shadow, so a **white floor** goes down
+the first time you select a shape: resize it (1–5 m, or any size) and change
+its colour to the gallery's own floor. It is only the editor's — kept in this
+browser, never published. **Top** (7) is the easiest view to draw in.
+
+**Strength** is the whole shadow's peak opacity (0 for a model with a shadow
+baked in), and **Follow the figure** makes the shapes grow and turn with it.
+
 ### Publish
 
 1. **Check** — every exhibit complete, a tracker compiled for exactly these
@@ -827,7 +855,7 @@ exactly as before — including a line for every save.
 |---|---|
 | **Transform** | Size, Rotate X/Y/Z, Move X/Y/Z |
 | **Effects** | Shading (baked/lit), spin, animation |
-| **Shadow** | Strength, Follow, and the shape of the shadow as ellipses |
+| **Shadow** | Strength, Follow, and the shadow's shapes — ellipses and rectangles here; pictures are added in the Studio |
 | **Video** | Fit, size and nudge for the video on the painting |
 
 **Size** multiplies the exhibit's real height, and the readout shows what that
@@ -841,6 +869,11 @@ Raising a figure leaves its contact shadow on the floor, which is what a raised
 object does. Tilting it does not tilt the shadow either.
 
 ### Shaping the shadow
+
+The Studio's floor editor is the better place for this (see **The shadow**
+under the floor editor): it adds rectangles and pictures, and a white floor to
+see them on. The phone's tab edits the same list — a picture drawn in the
+Studio survives a save from the phone.
 
 Out of the box the shadow is one circle, sized automatically from the figure —
 exactly what it always was. The **Shadow** tab lets you replace that with as

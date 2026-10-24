@@ -380,20 +380,27 @@
   }
 
   /**
-   * Sanitise a list of shadow ellipses.
+   * Sanitise a list of shadow shapes (see js/shadows.js).
    *
-   * x/z place the ellipse on the floor and w/d are its width and depth, all in
-   * metres from the figure's feet; r turns it, in degrees; o is its own opacity
-   * on top of the exhibit's shadowOpacity, and c its colour. Anything missing
-   * or non-numeric falls back rather than reaching the renderer as NaN, because
-   * a NaN in a matrix silently removes the whole mesh.
+   * s is the shape - an ellipse, a rectangle or a picture; x/z place it on the
+   * floor and w/d are its width and depth, all in metres from the figure's
+   * feet; r turns it, in degrees; o is its own opacity on top of the exhibit's
+   * shadowOpacity, c its colour, f its softness, and src the picture. Anything
+   * missing or non-numeric falls back rather than reaching the renderer as
+   * NaN, because a NaN in a matrix silently removes the whole mesh. An entry
+   * written before shapes existed is an ellipse, and draws exactly as it did.
    */
   function shadowList(value) {
     if (!Array.isArray(value)) return [];
     var num = function (v, fallback) { return typeof v === 'number' && isFinite(v) ? v : fallback; };
-    return value.map(function (blob) {
+    var out = [];
+    value.forEach(function (blob) {
       var b = blob || {};
-      return {
+      var shape = b.s === 'rect' || b.s === 'image' ? b.s : 'ellipse';
+      var src = shape === 'image' ? pictureSrc(b.src) : null;
+      if (shape === 'image' && !src) return;      // a picture without one draws nothing
+      var entry = {
+        s: shape,
         x: num(b.x, 0),
         z: num(b.z, 0),
         w: Math.max(0.01, num(b.w, 0.6)),
@@ -402,7 +409,23 @@
         o: Math.min(1, Math.max(0, num(b.o, 1))),
         c: hexColour(b.c, '#000000'),
       };
+      if (shape === 'image') {
+        entry.src = src;
+        entry.n = typeof b.n === 'string' ? b.n.slice(0, 80) : '';
+      } else {
+        entry.f = Math.min(1, Math.max(0, num(b.f, shape === 'rect' ? 0.5 : 1)));
+      }
+      out.push(entry);
     });
+    return out;
+  }
+
+  /** A web address or a path in the gallery - never a script or a data blob. */
+  function pictureSrc(value) {
+    if (typeof value !== 'string' || value.length > 2000) return null;
+    if (/^https?:\/\//i.test(value)) return value;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return null;
+    return value;
   }
 
   /**

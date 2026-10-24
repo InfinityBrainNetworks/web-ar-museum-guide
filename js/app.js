@@ -2003,56 +2003,62 @@
 
   // ---------------------------------------------------------------- contact shadow
   /*
-   * One soft ellipse per entry in S.shadows, so the shadow can be built up to
-   * roughly the shape of the thing casting it - a body blob, one per foot, a
-   * long thin one under an outstretched arm.
+   * One soft shape per entry in S.shadows - an ellipse, a rectangle or a
+   * picture (js/shadows.js) - so the shadow can be built up to roughly the
+   * shape of the thing casting it: a body blob, one per foot, a long thin one
+   * under an outstretched arm, or a shadow painted as a PNG.
    *
    * An empty list keeps the original behaviour exactly: a single circle sized
    * from the figure's own footprint. That is what every exhibit written before
    * this had, and what a new one still gets until someone says otherwise.
    *
-   * Geometry and texture are shared by every ellipse; the material is not,
-   * because each one carries its own colour and its own opacity.
+   * The geometry is shared by every shape and each texture by every shape that
+   * looks the same; the material is not, because each one carries its own
+   * colour, opacity and texture.
    */
   var shadowKit = null;
 
   /** The colours a shadow can be tinted, in the order the swatches appear. */
-  var SHADOW_COLOURS = [
-    ['#000000', 'Black'],
-    ['#1c2333', 'Cool — daylight'],
-    ['#2a1a12', 'Warm — tungsten'],
-    ['#123024', 'Green — foliage'],
-    ['#241026', 'Violet'],
-    ['#3d3d3d', 'Grey — faint'],
-  ];
+  var SHADOW_COLOURS = window.ARShadows.COLOURS;
 
   function shadowResources() {
     if (shadowKit) return shadowKit;
-
-    // White, and tinted by material.color: MeshBasicMaterial multiplies the
-    // two, so a black map would swallow every colour. The ramp is alpha only
-    // and runs to full strength, scaled down by material.opacity, so the number
-    // in the panel IS the opacity you see.
-    var c = document.createElement('canvas');
-    c.width = c.height = 128;
-    var ctx = c.getContext('2d');
-    var grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-    grad.addColorStop(0, 'rgba(255,255,255,1)');
-    grad.addColorStop(0.5, 'rgba(255,255,255,0.44)');
-    grad.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 128, 128);
-
-    shadowKit = {
-      geometry: new THREE.PlaneGeometry(1, 1),
-      texture: new THREE.CanvasTexture(c),
-    };
+    shadowKit = { geometry: new THREE.PlaneGeometry(1, 1), textures: {}, pictures: {} };
     return shadowKit;
+  }
+
+  /**
+   * The texture for one shape: white, and tinted by material.color -
+   * MeshBasicMaterial multiplies the two, so a black map would swallow every
+   * colour. The mask is alpha only and runs to full strength, scaled down by
+   * material.opacity, so the number in the panel IS the opacity you see.
+   *
+   * A picture is null until it has loaded; the shadow redraws when it lands.
+   */
+  function shadowTexture(blob) {
+    var kit = shadowResources();
+    if (blob.s === 'image') {
+      var got = kit.pictures[blob.src];
+      if (got) return got.texture;
+      got = kit.pictures[blob.src] = { texture: null };
+      window.ARShadows.loadMask(blob.src).then(function (canvas) {
+        got.texture = new THREE.CanvasTexture(canvas);
+        updateFloorShadow();
+      }, function (err) {
+        log.warn('shadow picture failed: ' + (err && err.message));
+      });
+      return null;
+    }
+    var shape = blob.s === 'rect' ? 'rect' : 'ellipse';
+    var feather = window.ARShadows.featherOf(blob);
+    var key = shape + '|' + feather.toFixed(2);
+    if (!kit.textures[key]) kit.textures[key] = new THREE.CanvasTexture(window.ARShadows.mask(shape, feather));
+    return kit.textures[key];
   }
 
   function shadowMaterial() {
     return new THREE.MeshBasicMaterial({
-      map: shadowResources().texture,
+      map: null,
       color: 0x000000,
       transparent: true, depthWrite: false, toneMapped: false,
       opacity: S.shadowOpacity,
@@ -2079,7 +2085,7 @@
     var upm = S.engine ? S.engine.unitsPerMetre : 1;
     var spread = Math.max(0.1 * upm, (S.figureFootprint || 0.5 * upm) * 2.1) / upm;
     var at = figureBaseOnFloor();
-    return { x: at.x, z: at.z, w: spread, d: spread, r: 0, o: 1, c: '#000000' };
+    return { s: 'ellipse', x: at.x, z: at.z, w: spread, d: spread, r: 0, o: 1, c: '#000000', f: 1 };
   }
 
   /** Where the figure's base centre is, in metres in the slot's frame. */
@@ -2097,9 +2103,12 @@
 
   function copyShadows(list) {
     return (list || []).map(function (b) {
-      return { x: b.x, z: b.z, w: b.w, d: b.d, r: b.r,
-               o: typeof b.o === 'number' ? b.o : 1,
-               c: b.c || '#000000' };
+      var copy = { s: b.s || 'ellipse', x: b.x, z: b.z, w: b.w, d: b.d, r: b.r,
+                   o: typeof b.o === 'number' ? b.o : 1,
+                   c: b.c || '#000000' };
+      if (copy.s === 'image') { copy.src = b.src; copy.n = b.n || ''; }
+      else copy.f = window.ARShadows.featherOf(b);
+      return copy;
     });
   }
 
@@ -2157,6 +2166,12 @@
       wrapper.rotation.set(0, degToRad(blob.r), 0);
       wrapper.scale.set(Math.max(0.01, blob.w * k) * upm, 1,
                         Math.max(0.01, blob.d * k) * upm);
+      var map = shadowTexture(blob);
+      if (material.map !== map) {
+        material.map = map;
+        material.needsUpdate = true;
+      }
+      wrapper.visible = !!map;
       material.color.set(blob.c || '#000000');
       material.opacity = opacity * clamp(typeof blob.o === 'number' ? blob.o : 1, 0, 1);
     });
@@ -3083,8 +3098,8 @@
             // Colour and opacity carry over, so a shadow set once stays of a
             // piece however many ellipses it ends up being made of.
             var last = S.shadows[S.shadows.length - 1];
-            S.shadows.push({ x: last.x + 0.15, z: last.z, w: last.w * 0.6,
-                             d: last.d * 0.6, r: last.r, o: last.o, c: last.c });
+            S.shadows.push({ s: 'ellipse', x: last.x + 0.15, z: last.z, w: last.w * 0.6,
+                             d: last.d * 0.6, r: last.r, o: last.o, c: last.c, f: 1 });
           },
           remove: function (i) { S.shadows.splice(i, 1); },
           rows: [
@@ -3092,8 +3107,10 @@
             { label: 'Z', key: 'z', min: -1.5, max: 1.5, step: 0.01, print: metresOf },
             { label: 'Width', key: 'w', min: 0.02, max: 4, step: 0.01, print: metresOf },
             { label: 'Depth', key: 'd', min: 0.02, max: 4, step: 0.01, print: metresOf },
-            { label: 'Turn', key: 'r', min: -90, max: 90, step: 1, wrap: true,
+            { label: 'Turn', key: 'r', min: -180, max: 180, step: 1, wrap: true,
               print: degreesOf },
+            { label: 'Softness', key: 'f', min: 0, max: 1, step: 0.05, notFor: 'image',
+              print: function (v) { return v.toFixed(2); } },
             { label: 'Opacity', key: 'o', min: 0, max: 1, step: 0.05,
               print: function (v) { return v <= 0 ? 'off' : v.toFixed(2); } },
             { label: 'Colour', key: 'c', swatch: SHADOW_COLOURS },
@@ -3266,7 +3283,7 @@
       head.className = 'adj-group';
 
       var title = document.createElement('span');
-      title.textContent = 'Ellipse ' + (index + 1);
+      title.textContent = ({ rect: 'Rectangle', image: 'Picture' }[blob.s] || 'Ellipse') + ' ' + (index + 1);
       head.appendChild(title);
 
       var drop = document.createElement('button');
@@ -3285,6 +3302,7 @@
       host.appendChild(head);
 
       tab.list.rows.forEach(function (spec) {
+        if (spec.notFor && spec.notFor === blob.s) return;
         var row = {
           label: spec.label,
           min: spec.min, max: spec.max, step: spec.step, wrap: spec.wrap,
@@ -3443,13 +3461,18 @@
         shadowFollow: !!S.shadowFollow,
         shadowScale: roundToStep(S.shadowScale, 0.01),
         shadows: S.shadows.map(function (b) {
-          return {
+          var out = {
+            s: b.s || 'ellipse',
             x: roundToStep(b.x, 0.01), z: roundToStep(b.z, 0.01),
             w: roundToStep(b.w, 0.01), d: roundToStep(b.d, 0.01),
             r: roundToStep(b.r, 1),
             o: roundToStep(typeof b.o === 'number' ? b.o : 1, 0.01),
             c: b.c || '#000000',
           };
+          // A picture drawn in the Studio rides through a save from the phone.
+          if (out.s === 'image') { out.src = b.src; out.n = b.n || ''; }
+          else out.f = roundToStep(window.ARShadows.featherOf(b), 0.01);
+          return out;
         }),
         spin: !!S.spin,
         playClip: S.playClip !== false,
@@ -3682,7 +3705,7 @@
       '  Shading: ' + S.lighting +
       ', contact shadow ' + r(S.shadowOpacity) +
       ' (' + (S.shadows.length
-              ? S.shadows.length + ' ellipse(s)' +
+              ? S.shadows.length + ' shape(s)' +
                 (S.shadowFollow ? ', following the figure' : '')
               : 'auto circle') + ')\n' +
       '  Phone height (js/config.js floor.cameraHeightMeters): ' + r(S.cameraHeight) + '\n' +

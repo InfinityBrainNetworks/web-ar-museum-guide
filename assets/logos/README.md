@@ -5,7 +5,7 @@ plate, and shown above the shutter while the figure is standing:
 
 | File | Whose |
 |---|---|
-| `ibn.png` | IBN — drawn from the mark in `index.html` |
+| `ibn.png` | IBN — the mark alone, no wordmark (drawn from the one in `index.html`) |
 | `sliit-creative-computing.png` | SLIIT Creative Computing (from the approved `.ai`) |
 | `national-museum-colombo.png` | National Museum Colombo |
 

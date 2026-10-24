@@ -112,12 +112,20 @@
     bundle.exhibits.forEach(function (ex) {
       add(ex.media.src, ex.media.size, ex.media.kind === 'image' ? 'still' : 'video', ex.name);
       if (ex.model && ex.model.src) add(ex.model.src, ex.model.size, 'model', ex.name);
+      shadowPictures(ex).forEach(function (src) { add(src, 0, 'model', ex.name); });
       codes.forEach(function (code) {
         var d = ex.details && ex.details[code];
         if (d && d.audio && d.audio.src) add(d.audio.src, d.audio.size, 'narration', ex.name);
       });
     });
     return items;
+  }
+
+  /** The pictures an exhibit's shadow is drawn with (Studio > Floor > Shadow). */
+  function shadowPictures(ex) {
+    var list = (ex.model && ex.model.src && ex.model.shadows) || [];
+    return list.filter(function (b) { return b && b.s === 'image' && b.src; })
+      .map(function (b) { return b.src; });
   }
 
   /** Every file ANY language of this bundle uses - what pruning must keep. */
@@ -134,6 +142,7 @@
     bundle.exhibits.forEach(function (ex) {
       mark(ex.image.src); mark(ex.image.thumb); mark(ex.media.src);
       if (ex.model) mark(ex.model.src);
+      shadowPictures(ex).forEach(mark);
       Object.keys(ex.details || {}).forEach(function (code) {
         var d = ex.details[code];
         if (d && d.audio) mark(d.audio.src);

@@ -427,6 +427,31 @@ input.num { font-variant-numeric: tabular-nums; padding: 7px 8px; }
 .feet { font-size: 12px; color: var(--muted); }
 .feet.ok { color: var(--ok); }
 .feet.warn { color: var(--warn); }
+/* The shadow: the light floor, and the list of shapes it is built from. */
+.panel-sec.shadow-sec h3 .ico { color: var(--anchor); }
+.light-floor { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); }
+.light-floor-size { display: grid; grid-template-columns: 54px 1fr 1fr 34px; gap: 6px; align-items: center; }
+.light-floor-size > span { font-size: 12px; font-weight: 700; color: var(--muted); }
+.swatch-input { width: 34px; height: 30px; padding: 2px; border-radius: 8px; border: 1px solid var(--line-strong); background: transparent; cursor: pointer; }
+.shadow-shapes { display: flex; flex-direction: column; gap: 6px; }
+.shape-row { display: flex; align-items: center; gap: 4px; border-radius: 10px; border: 1px solid var(--line); padding: 2px 4px 2px 2px; }
+.shape-row.on { border-color: rgba(255, 159, 67, 0.6); background: rgba(255, 159, 67, 0.07); }
+.shape-row .icon-btn { width: 30px; height: 30px; border: 0; }
+.shape-pick { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 0; background: none;
+  color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; border-radius: 8px; }
+.shape-pick .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shape-swatch { flex: none; width: 26px; height: 18px; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25); }
+.shape-swatch.ellipse { border-radius: 50%; }
+.shape-swatch.rect { border-radius: 4px; }
+.shape-swatch.pic { border-radius: 4px; background: #f4f1ec center / contain no-repeat; }
+.shape-editor { display: flex; flex-direction: column; gap: 10px; padding: 10px 2px 12px 10px; margin-left: 12px; border-left: 2px solid rgba(255, 159, 67, 0.45); }
+.slider-row { display: grid; grid-template-columns: 54px 1fr 40px; gap: 8px; align-items: center; }
+.slider-row > span:first-child { font-size: 12px; font-weight: 700; color: var(--muted); }
+.slider-row input[type=range] { width: 100%; accent-color: var(--anchor); }
+.slider-row .mono { text-align: right; font-size: 12px; }
+.shadow-swatches { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.shadow-swatches .swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.18); cursor: pointer; padding: 0; }
+.shadow-swatches .swatch.on { border-color: var(--anchor); box-shadow: 0 0 0 2px rgba(255, 159, 67, 0.35); }
 @media (max-width: 900px) {
   .stage-page { grid-template-columns: 1fr; grid-template-rows: auto 52vh 1fr; }
   .stage-panel { border-left: 0; border-top: 1px solid var(--line); }

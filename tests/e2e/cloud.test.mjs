@@ -16,7 +16,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { ROOT, serve, launch, until, cameraOf, floorPlan, sleep } from './lib.mjs';
+import { ROOT, serve, launch, until, cameraOf, floorPlan, shadowPicture, sleep } from './lib.mjs';
 
 const PROJECT = 'demo-museum';
 const QUEEN = 'sigiriya-ex08';
@@ -229,7 +229,7 @@ test('an admin saves a small adjustment and it goes live by itself, no Publish n
   const page = await studio('owner@gmail.com', '#/floor/' + QUEEN);
   await until(page, () => !!(window.__stage && window.__stage.holder), { timeout: 60000, what: 'the queen in the floor editor' });
   await page.evaluate(() => {
-    const row = Array.from(document.querySelectorAll('.xyz')).find((r) => r.firstChild.textContent === 'Shadow');
+    const row = Array.from(document.querySelectorAll('.xyz')).find((r) => r.firstChild.textContent === 'Strength');
     const input = row.querySelector('input');
     input.value = '0.35';
     input.dispatchEvent(new Event('change'));
@@ -245,6 +245,89 @@ test('an admin saves a small adjustment and it goes live by itself, no Publish n
   });
   assert.notEqual(now.release, was, 'a new release is live');
   assert.equal(now.shadow, 0.35);
+  await guide.close();
+});
+
+test('a shadow built from shapes and a picture in the floor editor is the one the guide gets', async () => {
+  const page = await studio('owner@gmail.com', '#/floor/' + QUEEN);
+  await until(page, () => !!(window.__stage && window.__stage.holder), { timeout: 60000, what: 'the queen in the floor editor' });
+  const auto = await page.evaluate(() => window.__stage.autoBlob());
+
+  await click(page, 'Ellipse');
+  await until(page, () => window.__stage.state.shadows.length === 1, { what: 'the first ellipse' });
+  const first = await page.evaluate(() => ({
+    blob: window.__stage.state.shadows[0], edit: window.__stage.shadowEdit, floor: window.__stage.patch.visible,
+    held: window.__stage.gizmo.object === window.__stage.shadowGroup.children[0],
+  }));
+  assert.equal(first.blob.s, 'ellipse');
+  assert.ok(Math.abs(first.blob.w - auto.w) < 0.01, 'the first shape takes over the automatic circle, so nothing jumps');
+  assert.equal(first.edit, 0, 'and is selected');
+  assert.equal(first.held, true, 'the gizmo holds the shape, not the figure');
+  assert.equal(first.floor, true, 'the white floor goes down to see it by');
+  await shot(page, 'shadow-1-ellipse');
+
+  await click(page, 'Rectangle');
+  await until(page, () => window.__stage.state.shadows.length === 2, { what: 'the rectangle' });
+  // The gizmo drags it 30 cm to the right and turns it.
+  const moved = await page.evaluate(() => {
+    const st = window.__stage;
+    const w = st.shadowGroup.children[1];
+    const was = st.state.shadows[1].x;
+    w.position.x += 0.3;
+    w.rotation.y = Math.PI / 6;
+    st.fromGizmo();
+    st.commit();
+    return { dx: st.state.shadows[1].x - was, r: st.state.shadows[1].r, s: st.state.shadows[1].s, f: st.state.shadows[1].f };
+  });
+  assert.ok(Math.abs(moved.dx - 0.3) < 0.002, 'moved 30 cm: ' + moved.dx);
+  assert.ok(Math.abs(moved.r - 30) < 0.2, 'turned 30°: ' + moved.r);
+  assert.deepEqual([moved.s, moved.f], ['rect', 0.5]);
+
+  // Softer, by the slider.
+  await page.evaluate(() => {
+    const row = Array.from(document.querySelectorAll('.slider-row')).find((r) => r.firstChild.textContent === 'Softness');
+    const input = row.querySelector('input');
+    input.value = '0.2';
+    input.dispatchEvent(new Event('input'));
+    input.dispatchEvent(new Event('change'));
+  });
+
+  const [chooser] = await Promise.all([page.waitForFileChooser(), click(page, 'Picture (PNG)')]);
+  await chooser.accept([shadowPicture()]);
+  await until(page, () => window.__stage.state.shadows.length === 3, { timeout: 30000, what: 'the picture uploaded' });
+  await until(page, () => !!window.__stage.shadowGroup.children[2].children[0].material.map, { timeout: 15000, what: 'the picture drawn' });
+  const pic = await page.evaluate(() => window.__stage.state.shadows[2]);
+  assert.equal(pic.s, 'image');
+  assert.match(pic.src, /shadow-[0-9a-f]{16}\.png/);
+  assert.ok(Math.abs(pic.d / pic.w - 0.5) < 0.02, 'its depth from the picture, 600 × 300: ' + (pic.d / pic.w));
+  await page.evaluate(() => window.__stage.view('top'));
+  await sleep(300);
+  await shot(page, 'shadow-2-three-shapes');
+  await page.evaluate(() => {
+    Array.from(document.querySelectorAll('.toggle')).find((t) => /Show the figure/.test(t.textContent)).querySelector('input').click();
+  });
+  assert.equal(await page.evaluate(() => window.__stage.pivot.visible), false, 'the figure steps aside');
+  await shot(page, 'shadow-3-figure-hidden');
+  await page.evaluate(() => window.__stage.view('visitor'));
+  await sleep(300);
+  await shot(page, 'shadow-4-from-the-visitor');
+  await page.evaluate(() => document.querySelector('.shadow-sec').scrollIntoView());
+  await shot(page, 'shadow-5-panel');
+
+  // Esc hands the gizmo back to the figure.
+  await page.keyboard.press('Escape');
+  const back = await page.evaluate(() => ({ edit: window.__stage.shadowEdit, held: window.__stage.gizmo.object === window.__stage.pivot }));
+  assert.deepEqual(back, { edit: null, held: true });
+
+  await page.keyboard.down('Control'); await page.keyboard.press('s'); await page.keyboard.up('Control');
+  await until(page, () => /Live: visitors get it/.test(document.body.innerText), { timeout: 30000, what: 'the shadow to go live' });
+  await page.close();
+
+  const guide = await viewer();
+  const got = await guide.evaluate(() => window.ARViewer.bundle().exhibits.find((e) => e.id === 'sigiriya-ex08').model.shadows);
+  assert.deepEqual(got.map((b) => b.s), ['ellipse', 'rect', 'image']);
+  assert.equal(got[1].f, 0.2);
+  assert.equal(got[2].src, pic.src);
   await guide.close();
 });
 
@@ -269,6 +352,14 @@ test('on the phone she stands where the Studio put her, then a photo goes to the
   const placed = await until(guide, () => { const s = window.ARViewer.inspect(); return s.figure && s.figure.loaded && s; }, { timeout: 30000, what: 'her model' });
   assert.deepEqual(placed.anchor, { x: 0, y: 0.5, z: 0 });
   assert.ok(Math.abs(placed.figure.min.y) < 0.01, 'anchored at her middle and lifted half her height: feet on the floor, got ' + placed.figure.min.y);
+  // Under her, the three shapes from the Studio - the picture once it has loaded.
+  const shadow = await until(guide, () => {
+    const group = document.getElementById('floorShadow').getObject3D('mesh');
+    if (!group || group.children.length !== 3) return false;
+    const drawn = group.children.map((w) => w.visible && !!w.children[0].material.map);
+    return drawn.every(Boolean) && drawn.length;
+  }, { timeout: 15000, what: 'the three shadow shapes' });
+  assert.equal(shadow, 3);
 
   // The photo, and the two steps to the wall.
   await guide.evaluate(() => document.getElementById('shotBtn').click());
