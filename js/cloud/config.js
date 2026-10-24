@@ -20,15 +20,14 @@
   'use strict';
 
   var CLOUD = {
-    firebase: null,
-    // firebase: {
-    //   apiKey: '...',
-    //   authDomain: 'your-project.firebaseapp.com',
-    //   projectId: 'your-project',
-    //   storageBucket: 'your-project.firebasestorage.app',
-    //   messagingSenderId: '...',
-    //   appId: '...',
-    // },
+    firebase: {
+      apiKey: 'AIzaSyCTeTXvtO60uVlD6naRCwMbGeQGtvzAJFo',
+      authDomain: 'ar-museum-guide-4562f.firebaseapp.com',
+      projectId: 'ar-museum-guide-4562f',
+      storageBucket: 'ar-museum-guide-4562f.firebasestorage.app',
+      messagingSenderId: '824284738110',
+      appId: '1:824284738110:web:2a7b2a49c97eda3351576f',
+    },
 
     // Optional: App Check with reCAPTCHA Enterprise, which keeps scripts that
     // are not this site from filling the photobooth and the feedback inbox.
