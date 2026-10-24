@@ -1,6 +1,6 @@
 /**
  * Scene 3's camera button: one picture of what is on screen — the real camera
- * feed, the figure standing on the floor, and the logo strip across the top.
+ * feed, the figure standing on the floor, and the logo strip along the bottom.
  *
  * This cannot be a screenshot of the canvas, because neither half of the
  * picture is in it:
@@ -46,12 +46,15 @@ window.ARCapture = (function () {
    * before the real artwork exists.
    */
   function loadLogos() {
-    var slots = (api.branding && api.branding.logos) || [];
+    var slots = api.logos ? api.logos() : ((api.branding && api.branding.logos) || []);
     return Promise.all(slots.map(function (slot) {
       return new Promise(function (resolve) {
         var label = slot.label || 'LOGO';
         if (!slot.src) { resolve({ label: label, img: null }); return; }
         var img = new Image();
+        // Logos from the Studio live in Firebase Storage: without CORS the
+        // canvas is tainted and the photo cannot be saved at all.
+        img.crossOrigin = 'anonymous';
         img.onload = function () { resolve({ label: label, img: img }); };
         img.onerror = function () {
           say('debug', 'logo slot "' + label + '" has no file yet (' + slot.src +
@@ -88,9 +91,11 @@ window.ARCapture = (function () {
     }
     if (!slots || !slots.length) return;
     var b = api.branding || {};
-    var band = Math.max(26, H * (b.heightRatio || 0.075));
-    var gap = Math.max(10, H * (b.gapRatio || 0.03));
-    var top = Math.max(14, H * 0.035);
+    var atBottom = b.position !== 'top';
+    var plate = b.plate !== false;
+    var band = Math.max(24, H * (b.heightRatio || 0.055));
+    var gap = Math.max(10, H * (b.gapRatio || 0.035));
+    var margin = Math.max(14, H * 0.03);
 
     var widths = slots.map(function (s) {
       if (s.img && s.img.naturalHeight) {
@@ -100,25 +105,45 @@ window.ARCapture = (function () {
     });
     var total = widths.reduce(function (a, w) { return a + w; }, 0) + gap * (slots.length - 1);
 
-    // Never let the row run off the edges, however many slots there are.
-    var room = W * 0.9;
+    // Never let the row (and its plate) run off the edges, however many slots.
+    var padX = plate ? band * 0.45 : 0;
+    var padY = plate ? band * 0.32 : 0;
+    var room = W * 0.92 - padX * 2;
     if (total > room) {
       var squeeze = room / total;
       band *= squeeze;
       gap *= squeeze;
+      padX *= squeeze;
+      padY *= squeeze;
       widths = widths.map(function (w) { return w * squeeze; });
       total = room;
     }
+    var boxW = total + padX * 2, boxH = band + padY * 2;
+    var boxY = atBottom ? H - margin - boxH : margin;
+    var top = boxY + padY;
 
-    if (b.scrim !== false) {
-      var scrim = ctx.createLinearGradient(0, 0, 0, top + band * 2.2);
+    if (plate) {
+      // A light card, so dark artwork reads over a dark photo and colour logos
+      // keep their colours over a busy one.
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.28)';
+      ctx.shadowBlur = boxH * 0.35;
+      ctx.shadowOffsetY = boxH * 0.06;
+      ctx.fillStyle = 'rgba(255, 252, 247, 0.94)';
+      roundRect(ctx, (W - boxW) / 2, boxY, boxW, boxH, Math.min(boxH * 0.3, 28));
+      ctx.fill();
+      ctx.restore();
+    } else if (b.scrim !== false) {
+      var reach = margin + band * 2.2;
+      var scrim = atBottom ? ctx.createLinearGradient(0, H, 0, H - reach) : ctx.createLinearGradient(0, 0, 0, reach);
       scrim.addColorStop(0, 'rgba(0, 0, 0, 0.45)');
       scrim.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = scrim;
-      ctx.fillRect(0, 0, W, top + band * 2.2);
+      ctx.fillRect(0, atBottom ? H - reach : 0, W, reach);
     }
 
     var x = (W - total) / 2;
+    var ink = plate ? '40, 34, 30' : '255, 255, 255';
     slots.forEach(function (slot, i) {
       var w = widths[i];
       if (slot.img) {
@@ -127,13 +152,13 @@ window.ARCapture = (function () {
         ctx.save();
         ctx.lineWidth = Math.max(1.5, band * 0.05);
         ctx.setLineDash([band * 0.2, band * 0.13]);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.10)';
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.fillStyle = 'rgba(' + ink + ', 0.08)';
+        ctx.strokeStyle = 'rgba(' + ink + ', 0.6)';
         roundRect(ctx, x, top, w, band, band * 0.2);
         ctx.fill();
         ctx.stroke();
         ctx.setLineDash([]);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.fillStyle = 'rgba(' + ink + ', 0.85)';
         ctx.font = '600 ' + Math.round(band * 0.32) + 'px -apple-system, ' +
                    'BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
         ctx.textAlign = 'center';

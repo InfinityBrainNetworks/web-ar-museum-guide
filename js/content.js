@@ -785,6 +785,20 @@
     });
   }
 
+  /**
+   * The logos printed on a visitor's photo: the live release's own when the
+   * Studio has set them (Settings > Photo logos), else the built-in ones from
+   * js/config.js. Each { src, label }.
+   */
+  function photoLogos(bundle) {
+    var mine = bundle && bundle.site && bundle.site.logos;
+    if (Array.isArray(mine) && mine.length) {
+      return mine.filter(function (l) { return l && l.src; })
+        .map(function (l) { return { src: l.src, label: l.label || '' }; });
+    }
+    return ((cfg().branding || {}).logos || []).slice();
+  }
+
   /** Which release is live right now, or null: one small read, no SDK. */
   function liveRelease() {
     var c = cloud();
@@ -994,6 +1008,7 @@
     previewRequested: previewRequested,
     releaseRequested: releaseRequested,
     liveRelease: liveRelease,
+    photoLogos: photoLogos,
     fromData: fromData,
   };
 })();

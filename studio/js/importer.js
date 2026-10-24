@@ -147,6 +147,59 @@ export async function importBundle(onProgress = () => {}) {
   return { exhibits: ids.length, files: jobs.length, bytes, skipped };
 }
 
+/**
+ * Which 3D figures in the repo's bundle differ from the cloud's, by the hash
+ * of the file itself. Each entry: { id, name, change: 'added' | 'changed' |
+ * 'removed', src, fileName }. Exhibits only in one of the two are left alone.
+ */
+export async function figureChanges(cloudExhibits) {
+  const { base, bundle } = await readBundle();
+  const byId = new Map(cloudExhibits.map((ex) => [ex.id, ex]));
+  const out = [];
+  for (const ex of bundle.exhibits || []) {
+    const mine = byId.get(ex.id);
+    if (!mine) continue;
+    const src = ex.model && ex.model.src;
+    const has = !!(mine.model && mine.model.url);
+    if (!src) {
+      if (has) out.push({ id: ex.id, name: mine.name, change: 'removed' });
+      continue;
+    }
+    const file = await fetchFile(base, src, 'model/gltf-binary');
+    const hash = await data.sha256(file);
+    if (has && mine.model.hash === hash) continue;
+    out.push({ id: ex.id, name: mine.name, change: has ? 'changed' : 'added', src, fileName: file.name, file, model: ex.model });
+  }
+  return out;
+}
+
+/**
+ * Bring those figures in: upload each file and take the repo's settings with
+ * it (height, anchor, animation) - a new figure's old placement would not fit
+ * it. Labels, video, photo and map pin are not touched.
+ */
+export async function applyFigureChanges(changes, onProgress = () => {}) {
+  let i = 0;
+  for (const c of changes) {
+    const label = `${c.name} — 3D figure (${i + 1} of ${changes.length})`;
+    onProgress(i / changes.length, label);
+    if (c.change === 'removed') {
+      await data.saveExhibit(c.id, { model: {} });
+    } else {
+      const report = await inspectGlb(c.file).catch(() => null);
+      const got = await data.upload('exhibits/' + c.id, 'model', c.file,
+        (f) => onProgress((i + f) / changes.length, label));
+      const model = {};
+      window.ARContent.MODEL_FIELDS.forEach((key) => { if (c.model[key] !== undefined) model[key] = c.model[key]; });
+      Object.assign(model, { path: got.path, url: got.url, size: got.size, fileName: got.fileName, hash: got.hash });
+      if (report) model.report = slimReport(report);
+      await data.saveExhibit(c.id, { model });
+    }
+    i++;
+  }
+  onProgress(1, 'Done');
+}
+
 async function writeExhibit(id, doc) {
   const { F, db } = data.api();
   await F.setDoc(F.doc(db, 'exhibits', id), {
@@ -159,7 +212,7 @@ async function writeExhibit(id, doc) {
 export function slimReport(r) {
   return {
     size: r.size, triangles: r.triangles, vertices: r.vertices, meshes: r.meshes, materials: r.materials,
-    maxTexture: r.maxTexture, gpuMB: r.gpuMB, skinned: r.skinned, extensions: r.extensions,
+    maxTexture: r.maxTexture, gpuMB: r.gpuMB, skinned: r.skinned, positionsQuantized: !!r.positionsQuantized, extensions: r.extensions,
     animations: r.animations, textures: r.textures.length,
     // Firestore cannot hold an array inside an array.
     notes: r.notes.map(([kind, text]) => ({ kind, text })),

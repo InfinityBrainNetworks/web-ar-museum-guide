@@ -17,6 +17,8 @@ import { ROOT, serve, launch, open, until, cameraOf, appLog, sleep } from './lib
 const QUEEN = 4;   // exhibit 8 is the fifth target in targets.mind
 let site, browser;
 const content = JSON.parse(fs.readFileSync(ROOT + 'assets/content/content.json', 'utf8'));
+// Her life size, as the bundle sets it; half of it is where her middle is.
+const TALL = content.exhibits[QUEEN].model.heightMeters;
 
 before(async () => {
   site = await serve(8123);
@@ -138,12 +140,12 @@ test('a first-time visitor can tap through the language screen and scroll Explor
   await page.close();
 });
 
-test('the default anchor stands the queen on her base, centred, at 1.6 m', async () => {
+test('the default anchor stands the queen on her base, centred, at life size', async () => {
   const page = await viewer();
   const s = await placeQueen(page);
   assert.equal(s.engine, 'gyro');
   near(s.figure.min.y, 0, 0.005, 'lowest point');
-  near(s.figure.max.y - s.figure.min.y, 1.6, 0.01, 'height');
+  near(s.figure.max.y - s.figure.min.y, TALL, 0.01, 'height');
   near((s.figure.min.x + s.figure.max.x) / 2, 0, 0.005, 'centre x');
   near((s.figure.min.z + s.figure.max.z) / 2, 0, 0.005, 'centre z');
   const text = await appLog(page);
@@ -154,13 +156,13 @@ test('the default anchor stands the queen on her base, centred, at 1.6 m', async
 test('an anchor at her middle puts her middle on the spot', async () => {
   const page = await viewer({ anchor: { x: 0, y: 0.5, z: 0 } });
   const s = await placeQueen(page);
-  near(s.figure.min.y, -0.8, 0.01, 'lowest point, half below the floor');
-  near(s.figure.max.y, 0.8, 0.01, 'highest point');
+  near(s.figure.min.y, -TALL / 2, 0.01, 'lowest point, half below the floor');
+  near(s.figure.max.y, TALL / 2, 0.01, 'highest point');
   await page.close();
 });
 
 test('...and lifted by half her height she stands on the floor again', async () => {
-  const page = await viewer({ anchor: { x: 0, y: 0.5, z: 0 }, offset: { x: 0, y: 0.8, z: 0 } });
+  const page = await viewer({ anchor: { x: 0, y: 0.5, z: 0 }, offset: { x: 0, y: TALL / 2, z: 0 } });
   const s = await placeQueen(page);
   near(s.figure.min.y, 0, 0.01, 'lowest point');
   await page.close();
@@ -203,13 +205,113 @@ test('a visitor drags, twists and pinches the figure, and gets real size back', 
   const pinched = await page.evaluate(() => window.ARViewer.inspect());
   assert.ok(pinched.visitorScale > 1.5, 'pinching out should make her bigger (×' + pinched.visitorScale + ')');
   assert.ok(Math.abs(pinched.faceYaw - dragged.faceYaw) > 0.4, 'twisting should turn her');
-  near(pinched.figure.max.y - pinched.figure.min.y, 1.6, 0.01, 'her height in her own frame');
+  near(pinched.figure.max.y - pinched.figure.min.y, TALL, 0.01, 'her height in her own frame');
 
   const chip = await page.evaluate(() => !document.getElementById('realSizeChip').classList.contains('hidden'));
   assert.ok(chip, 'the Real size chip should show once she is resized');
   await page.evaluate(() => document.getElementById('realSizeChip').click());
   const reset = await page.evaluate(() => window.ARViewer.inspect());
   assert.equal(reset.visitorScale, 1);
+  await page.close();
+});
+
+/** What is on screen: which view, whether the camera is open, and in which mode. */
+const where = (page) => page.evaluate(() => ({
+  view: [...document.querySelectorAll('.view.on')].map((v) => v.id).join(),
+  inAR: window.ARViewer.inAR(),
+  mode: window.ARViewer.inspect().mode,
+}));
+const back = async (page) => { await page.goBack({ timeout: 3000 }).catch(() => {}); await sleep(600); };
+
+test('the phone’s Back button walks back through the guide, and out of the camera one layer at a time', async () => {
+  const page = await viewer();
+  await page.tap('#exhibitGrid > *:nth-child(5)');
+  await until(page, () => document.getElementById('viewExhibit').classList.contains('on'), { what: 'her page' });
+  await back(page);
+  assert.deepEqual(await where(page), { view: 'viewExplore', inAR: false, mode: 'boot' }, 'Back from a painting is Explore, not off the site');
+
+  await page.tap('#exhibitGrid > *:nth-child(5)');
+  await until(page, () => document.getElementById('viewExhibit').classList.contains('on'), { what: 'her page again' });
+  await page.tap('#exhibitAr');
+  await until(page, (i) => { const s = window.ARViewer.inspect(); return s.mode === 'scan' && s.activeIndex === i && s.mediaReady; },
+    { arg: QUEEN, timeout: 60000, what: 'the queen found' });
+  await page.evaluate(() => document.getElementById('arBtn').click());
+  await until(page, () => window.ARViewer.inspect().mode === 'floor', { what: 'the floor scene' });
+  await back(page);
+  assert.deepEqual(await where(page), { view: 'viewExhibit', inAR: true, mode: 'scan' }, 'first Back leaves the floor, not the camera');
+  await back(page);
+  assert.deepEqual(await where(page), { view: 'viewExhibit', inAR: false, mode: 'boot' }, 'second Back closes the camera, onto her page');
+  await back(page);
+  assert.equal((await where(page)).view, 'viewExplore');
+  assert.match(page.url(), /source=bundle/, 'still in the guide');
+  await page.close();
+});
+
+// The rule: no message ever sits on a button.
+const coveredButtons = (page) => page.evaluate(() => {
+  const out = [];
+  document.querySelectorAll('button').forEach((b) => {
+    const r = b.getBoundingClientRect();
+    const cs = getComputedStyle(b);
+    if (r.width < 4 || r.height < 4 || cs.visibility === 'hidden' || b.closest('.hidden')) return;
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) return;
+    const top = document.elementFromPoint(x, y);
+    if (top && !b.contains(top) && top.closest('#shellToast, #errorBanner, #gestureHint, #brandBar, #realSizeChip')) {
+      out.push((b.id || b.textContent.trim()) + ' under ' + (top.closest('[id]') || top).id);
+    }
+  });
+  return out;
+});
+
+test('a message never covers View in AR, and an error never covers the camera’s close button', async () => {
+  const page = await viewer();
+  await page.tap('#exhibitGrid > *:nth-child(5)');
+  await until(page, () => document.getElementById('viewExhibit').classList.contains('on'), { what: 'her page' });
+  await page.evaluate(() => { const t = document.getElementById('shellToast'); t.textContent = 'The camera is not available on this device yet'; t.classList.remove('hidden'); });
+  await sleep(500);
+  assert.deepEqual(await coveredButtons(page), []);
+  await page.evaluate(() => document.getElementById('shellToast').classList.add('hidden'));
+
+  await placeQueen(page);
+  await page.evaluate(() => {
+    document.getElementById('errorText').textContent = 'The video file could not be loaded. Check the log for details.';
+    document.getElementById('errorBanner').classList.remove('hidden');
+  });
+  await sleep(300);
+  assert.deepEqual(await coveredButtons(page), [], 'nothing floating covers a button with the figure placed and an error up');
+  await page.close();
+});
+
+test('the photo carries the three logos along the bottom, on a light plate', async () => {
+  const page = await viewer();
+  await placeQueen(page);
+  const onScreen = await until(page, () => {
+    const imgs = [...document.querySelectorAll('#brandBar img')];
+    return imgs.length === 3 && imgs.every((i) => i.complete && i.naturalWidth > 0) && imgs.map((i) => i.alt);
+  }, { what: 'the logo preview' });
+  assert.deepEqual(onScreen, ['IBN', 'SLIIT Creative Computing', 'National Museum Colombo']);
+
+  await page.evaluate(() => document.getElementById('shotBtn').click());
+  await until(page, () => (document.getElementById('photoPreview').src || '').startsWith('blob:'), { timeout: 20000, what: 'the photo' });
+  const plate = await page.evaluate(async () => {
+    const img = document.getElementById('photoPreview');
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const g = c.getContext('2d');
+    g.drawImage(img, 0, 0);
+    // The share of near-white pixels in the bottom tenth vs the top tenth.
+    const light = (y0, y1) => {
+      const d = g.getImageData(0, y0, c.width, y1 - y0).data;
+      let n = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i] > 235 && d[i + 1] > 232 && d[i + 2] > 225) n++;
+      return n / (d.length / 4);
+    };
+    return { bottom: light(Math.floor(c.height * 0.88), c.height), top: light(0, Math.floor(c.height * 0.12)) };
+  });
+  assert.ok(plate.bottom > 0.15, 'a light plate along the bottom of the photo (' + plate.bottom.toFixed(2) + ' light)');
+  assert.ok(plate.top < 0.05, 'and nothing at the top (' + plate.top.toFixed(2) + ' light)');
   await page.close();
 });
 

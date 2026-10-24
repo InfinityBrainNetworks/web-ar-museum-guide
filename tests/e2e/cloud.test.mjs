@@ -15,10 +15,13 @@
  */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { ROOT, serve, launch, until, cameraOf, floorPlan, sleep } from './lib.mjs';
 
 const PROJECT = 'demo-museum';
 const QUEEN = 'sigiriya-ex08';
+const TALL = JSON.parse(fs.readFileSync(ROOT + 'assets/content/content.json', 'utf8'))
+  .exhibits.find((e) => e.id === QUEEN).model.heightMeters;
 let site, browser;
 
 async function resetEmulators() {
@@ -110,6 +113,30 @@ test('the first account claims the Studio and imports the deployed gallery', asy
   await page.close();
 });
 
+test('figures that changed in the repo come into the cloud from one button', async () => {
+  // As if exhibit 4 had been imported before the repo gave her a dancer.
+  const doc = `http://127.0.0.1:8080/v1/projects/${PROJECT}/databases/(default)/documents/exhibits/sigiriya-ex04`;
+  await fetch(doc + '?updateMask.fieldPaths=model', {
+    method: 'PATCH', headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: { model: { mapValue: { fields: {} } } } }),
+  });
+  const page = await studio('owner@gmail.com', '#/exhibits');
+  await until(page, () => document.querySelectorAll('.ex-list > *').length === 9, { timeout: 30000, what: 'the list' });
+  await click(page, 'Figures from the repo');
+  await until(page, () => /1 figure to update/.test(document.body.innerText), { timeout: 60000, what: 'the comparison' });
+  assert.match(await page.evaluate(() => document.querySelector('.figure-changes').innerText), /Two Apsaras.*New figure.*apsara-dark-dance1\.glb/s);
+  await click(page, 'Update', '.dialog-foot button');
+  await until(page, () => /Updated 1 figure/.test(document.body.innerText), { timeout: 60000, what: 'the update' });
+  const model = await (await fetch(doc, { headers: { Authorization: 'Bearer owner' } })).json();
+  const m = model.fields.model.mapValue.fields;
+  assert.equal(m.fileName.stringValue, 'apsara-dark-dance1.glb');
+  assert.equal(m.heightMeters.doubleValue, 1.55);
+  // A second look finds nothing left to do.
+  await click(page, 'Figures from the repo');
+  await until(page, () => /Every 3D figure already matches the repo/.test(document.body.innerText), { timeout: 60000, what: 'all matching' });
+  await page.close();
+});
+
 test('an admin can make another admin, who can then add people too', async () => {
   const owner = await studio('owner@gmail.com', '#/people');
   await until(owner, () => /The team/.test(document.body.innerText), { what: 'the people screen' });
@@ -156,7 +183,7 @@ test('the floor editor moves the anchor without moving the figure, and locks it'
   await page.evaluate(() => document.querySelector('[data-preset=centre]').click());
   const s = await page.evaluate(() => window.__stage.getState());
   assert.deepEqual(s.anchor, { x: 0, y: 0.5, z: 0 });
-  assert.ok(Math.abs(s.offset.y - 0.8) < 0.001, 'the offset is solved so she stays put: ' + s.offset.y);
+  assert.ok(Math.abs(s.offset.y - TALL / 2) < 0.001, 'the offset is solved so she stays put: ' + s.offset.y);
   const box = await page.evaluate(() => { const b = window.__stage.posedBox(); return { min: b.min.y, max: b.max.y }; });
   assert.ok(Math.abs(box.min) < 0.05, 'still standing on the floor, lowest point ' + box.min);
 
@@ -190,7 +217,7 @@ test('a release is built and put live, and the guide reads it from the cloud', a
   assert.equal(b.source, 'cloud');
   assert.equal(b.n, 9);
   assert.deepEqual(b.anchor, { x: 0, y: 0.5, z: 0 });
-  assert.ok(Math.abs(b.offset.y - 0.8) < 0.001);
+  assert.ok(Math.abs(b.offset.y - TALL / 2) < 0.001);
   await guide.close();
 });
 
@@ -241,7 +268,7 @@ test('on the phone she stands where the Studio put her, then a photo goes to the
   await guide.evaluate(() => document.getElementById('placeBtn').click());
   const placed = await until(guide, () => { const s = window.ARViewer.inspect(); return s.figure && s.figure.loaded && s; }, { timeout: 30000, what: 'her model' });
   assert.deepEqual(placed.anchor, { x: 0, y: 0.5, z: 0 });
-  assert.ok(Math.abs(placed.figure.min.y) < 0.01, 'anchored at her middle and lifted 0.8 m: feet on the floor, got ' + placed.figure.min.y);
+  assert.ok(Math.abs(placed.figure.min.y) < 0.01, 'anchored at her middle and lifted half her height: feet on the floor, got ' + placed.figure.min.y);
 
   // The photo, and the two steps to the wall.
   await guide.evaluate(() => document.getElementById('shotBtn').click());
@@ -352,4 +379,24 @@ test('a visitor leaves feedback, and it reaches the inbox', async () => {
   const nav = await inbox.evaluate(() => Array.from(document.querySelectorAll('.nav-item')).map((n) => n.textContent.replace(/\d+$/, '').trim()));
   assert.ok(!nav.includes('Exhibits') && !nav.includes('People'), 'a moderator sees only the photobooth and the feedback: ' + nav.join(', '));
   await inbox.close();
+});
+
+test('the photo logos are changed in Settings and the guide prints the new ones', async () => {
+  const page = await studio('owner@gmail.com', '#/settings');
+  await until(page, () => document.querySelectorAll('.logo-row').length === 3, { timeout: 30000, what: 'the built-in logos' });
+  assert.match(await page.evaluate(() => document.body.innerText), /Showing the logos built into the app/);
+  await shot(page, 'studio-logos');
+  const [chooser] = await Promise.all([page.waitForFileChooser(),
+    page.evaluate(() => [...document.querySelector('.logo-row').querySelectorAll('button')].find((b) => b.textContent === 'Replace').click())]);
+  await chooser.accept([ROOT + 'assets/icons/icon-512.png']);
+  await until(page, () => /Live: visitors get it/.test(document.body.innerText), { timeout: 60000, what: 'the new logo live' });
+  assert.match(await page.evaluate(() => document.body.innerText), /Use the built-in logos/);
+  await page.close();
+
+  const guide = await viewer();
+  const logos = await guide.evaluate(() => window.ARContent.photoLogos(window.ARViewer.bundle()));
+  assert.equal(logos.length, 3);
+  assert.match(logos[0].src, /9199|firebasestorage/, 'the first logo now comes from Storage: ' + logos[0].src);
+  assert.equal(logos[0].label, 'IBN', 'a replaced logo keeps its name');
+  await guide.close();
 });

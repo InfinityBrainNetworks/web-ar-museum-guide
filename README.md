@@ -195,8 +195,8 @@ the bottom of `index.html`, drawn from the same paths as My Smart Store's.
 13 (the apsaras of Sigiriya, 5th century) and 41 (the lion flag of Lankatilaka
 Vihara, Kandy, 14th century), in that order — which is also their order in
 `targets.mind`. Files are named `exNN-<title>-{target.jpg,video.mp4,en.mp3}`,
-so the folder sorts in target order. Three of them also stand a figure on the
-floor — see *The three figures* below.
+so the folder sorts in target order. All nine also stand a figure on the
+floor — a dancing apsara, or the lion — see *The figures* below.
 
 **Where it came from.** The sources live in `Updates/` on the authoring
 machine and are never committed (`.gitignore`): full-size PNG photographs
@@ -226,14 +226,14 @@ the animation's own sub-1% wobble, and the default **stretch** fit is exact.
 Exhibit 41's render also jumps ~4% in its first and last 0.3 s, so it is
 trimmed to 4.33 s and the loop never shows the jump.
 
-**Weight on the wire, about 26 MB in all:**
+**Weight on the wire, about 33 MB in all:**
 
 | | Each | All nine |
 |---|---|---|
 | Target photo — 1024 px long edge, progressive JPEG q84 | 115–205 KB | 1.5 MB |
 | Video — 960 px long edge, H.264 CRF 24, no audio track, faststart | 0.75–1.25 MB | 8.2 MB |
 | English narration — MP3 | 110–285 KB | 1.7 MB |
-| 3D figure — `.glb`, three exhibits | 2.0–2.8 MB | 7.1 MB |
+| 3D figure — `.glb`, nine exhibits from seven files | 1.9–2.3 MB | 14.8 MB |
 | `targets.mind` | | 7.0 MB |
 
 A visitor downloads the grid's photos, then `targets.mind` when AR starts, and
@@ -247,51 +247,61 @@ To edit any of it, open `admin.html` → ⋯ → **Load what is currently
 deployed**. The tracker comes along as already compiled, so adding a `.glb`
 to an exhibit and exporting needs no recompile.
 
-### The three figures
+### The figures
 
-| Exhibit | Figure | Height | Animation |
+Every apsara painting has a dancer standing in front of it, and the lion his
+statue. The dancers come in two: the **light** one, in the tall crown, for the
+golden-skinned queens of the frescoes, and the **dark** one for their
+attendants — each in three dances, in the realistic style.
+
+| Exhibit | Figure (`assets/content/`) | Height | Animation |
 |---|---|---|---|
-| 8 · The Queen of Kasyapa | the queen, rigged | 1.6 m | 10 s, once |
-| 13 · The Queen and Her Maid | the maid, in her red blouse, rigged | 1.6 m | 10 s, once |
-| 41 · The Lion Flag | the lion statue | 1.3 m | none |
+| 4 · Two Apsaras Among the Clouds | `apsara-dark-dance1.glb` | 1.55 m | 10 s, once |
+| 5 · The Apsara with the Red Lily | `apsara-light-dance1.glb` | 1.65 m | 10 s, once |
+| 6 · Flowers Falling from the Clouds | `apsara-dark-dance2.glb` | 1.55 m | 10 s, once |
+| 7 · Two Ladies of Kasyapa's Court | `apsara-light-dance2.glb` | 1.65 m | 10 s, once |
+| 8 · The Queen of Kasyapa | `apsara-light-dance3.glb` | 1.65 m | 6.5 s, once |
+| 9 · The Apsara in the White Blouse | `apsara-dark-dance3.glb` | 1.55 m | 6.9 s, once |
+| 10 · A Golden Apsara | `apsara-light-dance1.glb` | 1.65 m | 10 s, once |
+| 13 · The Queen and Her Maid | `apsara-dark-dance2.glb` | 1.55 m | 10 s, once |
+| 41 · The Lion Flag | `ex41-the-lion-flag-model.glb` | 1.3 m | none |
 
-They arrived at 18–22 MB each, nearly all of it 4096² textures — which decode
-to about 90 MB of GPU memory apiece, enough for the lion's three to crash
-Safari on an iPhone. Each colour texture is now a 2048² JPEG and the lion's
-normal and metal-roughness maps 1024²; tangents with no normal map to feed
-were dropped; and the apsaras' animation keys, baked at every frame for all
-118 bones, were cut to the ones a straight line between neighbours does not
-already give (85k → 15k). Rendered against the originals with A-Frame's own
-loader, the two differ by under 1 level in 255.
+Neighbouring paintings never repeat a dance. The two files used twice are
+fetched once by the offline download; the Studio stores a copy per exhibit.
 
-All three are **baked** shading. The apsaras carry `metallic = 1` with no
-metal map and the lion is gold, and with no environment map in the scene for
-metal to reflect, *lit* renders all three close to black.
+**How they were made AR-friendly.** The dancers arrived at 5–11 MB each
+(the statue versions up to 22 MB), with 2048–4096² PNG and JPEG textures and
+up to 95k triangles. Each now has:
 
-**Do not quantize a skinned model** (glTF-Transform `quantize`,
-`KHR_mesh_quantization`). It draws identically, but the app sizes a figure
-from its geometry's bounds, and quantized bounds are the −1…1 storage box,
-not the figure: the queen came out at 80% and floating 0.8 m off the floor.
-The lion, which has no skin, is quantized and measures true.
+- its colour texture as a 2048² JPEG (q85) — the only map they use, opaque;
+- the dark dancer simplified from 47.7k triangles to 22k (meshoptimizer,
+  borders locked), the light one left at her 9.4k; one export carried a
+  duplicate copy of the mesh, now gone;
+- one dance (the exporter's `_backup` takes dropped), its keys resampled,
+  and the unused vertex colours removed;
+- normals, UVs and skin weights stored compactly (`KHR_mesh_quantization`,
+  which three.js reads natively) — **but never `POSITION`**.
 
-**The apsaras' animation tipped them over, and is corrected.** As exported,
-both clips rotate the pelvis about 25° further forward than the rest pose.
-Legs and torso hang off the pelvis, so the whole figure leaned like a plank
-— 22–23° on average, 25–27° in the pose it holds at the end — with her feet
-up to 8 cm off the floor. (Blender shows the same; it is in the file.) Every
-pelvis rotation key is tipped back by one constant angle, so the dance's own
-±2° sway survives, and the pelvis keys are shifted to put the feet back on
-the floor and under the placement point:
+That leaves 1.9–2.3 MB each. Rendered side by side with the originals they are
+indistinguishable, and their height, feet and lean are unchanged.
 
-| | Pelvis pitch | Lift | Forward | Lean after: mean · held | Feet after |
-|---|---|---|---|---|---|
-| Exhibit 8 | −25° | +1 cm | +8 cm | 0.3° · 2.5° | −2 to +4 cm while dancing, 0 at the end |
-| Exhibit 13 | −24° | 0 | +8.9 cm | 0.2° · 2.1° | −2 to +4 cm while dancing, 0 at the end |
+**Never quantize a skinned figure's positions.** It draws identically, but the
+app sizes a figure from its geometry's bounds, and quantized bounds are the
+−1…1 storage box: an earlier queen came out at 80% and floating 0.8 m up.
 
-Lean is measured on the posed mesh — head centroid over feet centroid, from
-the side — not on the bone, since the spine and legs move as well. A new
-export of either model from Unreal needs the same correction, or the fix made
-at the source (the root motion / pelvis rotation of the clip).
+**Measure the lean before shipping a new dance.** An earlier pair of exports
+rotated the pelvis 25° forward and the figures leaned like planks. These six
+were measured on the posed mesh through the whole dance (head centroid over
+feet centroid): 2–5° on average — a dancer's own sway — up to 11° for a
+moment in dance 2, feet within 2 cm of the floor throughout. Nothing needed
+correcting.
+
+**Changed a figure in the repo while the gallery runs from Firebase?** The
+Studio's **Exhibits → Figures from the repo** compares every exhibit's figure
+with the repo's by the hash of the file, lists what is new, changed or gone,
+and on **Update** brings the files in with the repo's height, anchor and
+animation settings (labels, video, photo and map pins are left alone), then
+publishes. That is how these dancers reach the live gallery.
 
 ## The Studio — making the gallery
 
@@ -745,7 +755,7 @@ texture**, or you get a second shadow stacked under the first.
 
 Once the figure is standing, a shutter button appears. It takes one picture of
 the whole scene — the real room from the camera, the figure standing in it, and
-a strip of logos across the top — and offers it to the phone's share sheet,
+a strip of logos along the bottom — and offers it to the phone's share sheet,
 which is what puts it in the camera roll on both platforms. If the share sheet
 is unavailable the picture downloads instead; on Android that lands in
 Downloads, which the gallery picks up.
@@ -779,24 +789,23 @@ both the log and the preview say so in as many words.
 
 ### The logo strip
 
-Three labelled dashed boxes by default. To use real artwork, drop it into
-`assets/logos/` and fill in the `src` for that slot in `branding.logos`
-(`js/config.js`):
+Along the bottom of every photo, on a light rounded plate so that dark
+artwork — the museum's black crest, the navy CC — reads over any picture:
+**IBN · SLIIT Creative Computing · National Museum Colombo**. The same row
+shows above the shutter while the figure is standing, so what you frame is
+what you get.
 
-```js
-logos: [
-  { src: './assets/logos/logo-1.png', label: 'LOGO 1' },
-  ...
-]
-```
+**To change them, use the Studio: Settings → Photo logos.** Add (up to five),
+replace, rename, reorder or remove; every change is published like any other
+edit. *Use the built-in logos* goes back to the three in the app. A transparent
+PNG about 400 px tall is right — every logo is drawn at the same height and
+keeps its aspect ratio, so wordmarks and square crests mix.
 
-Transparent PNG or SVG, any width — every logo is sized by height and keeps its
-aspect ratio, so wordmarks and square badges mix. Add, remove or rename slots
-freely; the row is centred and squeezed to fit whatever is in it. A slot without
-a `src` stays a placeholder box, in the photo and on screen, so the layout is
-visible and correctly spaced before the artwork exists.
+The built-in three are in `assets/logos/` and listed in `branding.logos`
+(`js/config.js`); they are what a gallery without Firebase prints, and the
+fallback when the Studio has none.
 
-The same `branding` block sets the strip's height and spacing, the dark gradient
+The same `branding` block sets the strip's position, height and spacing, the plate (or a dark gradient)
 behind it, and whether it also shows on screen during the floor scene — it does
 by default, so what you frame is what you get. `photo` next to it sets the
 picture's size, format and file name.
@@ -1062,7 +1071,7 @@ native build to fight with. The official
 | Saved in Adjust but the site is unchanged | Save only reaches the portal draft. Export from `admin.html` and commit, same as any other change. |
 | Photo has the figure but no room behind it | The device would not grant `camera-access`, so the WebXR passthrough is unreadable. The log says so. |
 | Photo button never appears | It is scene 3 only — place the figure first. `photo.enabled: false` also hides it. |
-| Logos show as dashed boxes | No `src` set for those slots. See **The logo strip**. |
+| Logos show as dashed boxes | A slot with no `src`, and the debug log on (visitors never see the boxes). See **The logo strip**. |
 | "Must be served over https" | Camera is blocked on plain http. Use the Pages URL. |
 | Camera never starts on iOS | Opened inside Instagram/Facebook/etc. Those in-app browsers block `getUserMedia` — open in Safari. |
 | Permission was denied once | iOS: Settings → Safari → Camera. Android: tap the padlock in the address bar → Permissions. |

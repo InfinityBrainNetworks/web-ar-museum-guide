@@ -108,7 +108,9 @@ a-scene, .a-canvas { width: 100% !important; height: 100% !important; }
 .gesture-hint {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--bar-lift) + 104px + var(--safe-b));
+  /* --bar-h is the action bar's real height, kept by js/app.js: the bar wraps
+     to two rows on a narrow phone, and a fixed offset sat on its buttons. */
+  bottom: calc(var(--bar-h, 150px) + 12px);
   z-index: 23;
   margin: 0;
   display: flex;
@@ -134,7 +136,7 @@ a-scene, .a-canvas { width: 100% !important; height: 100% !important; }
 .real-size-chip {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--bar-lift) + 104px + var(--safe-b));
+  bottom: calc(var(--bar-h, 150px) + 12px);
   z-index: 24;
   transform: translateX(-50%);
   display: inline-flex;
@@ -383,11 +385,32 @@ a-scene, .a-canvas { width: 100% !important; height: 100% !important; }
   padding: 6px 12px;
   pointer-events: none !important;   /* see .shutter-flash on why !important */
 }
-/* The strip owns the top of the screen while it is up, so the status chip and
-   the debug button step down out from under it rather than sitting on a logo. */
-.framing .status-chip,
-.framing .log-toggle { top: calc(58px + var(--safe-t)); }
-.framing .adjust-toggle { top: calc(110px + var(--safe-t)); }
+/* At the top, the strip owns the top of the screen while it is up, so the
+   status chip and the debug button step down out from under it. */
+.framing-top .status-chip,
+.framing-top .log-toggle { top: calc(58px + var(--safe-t)); }
+.framing-top .adjust-toggle { top: calc(110px + var(--safe-t)); }
+
+/* At the bottom (the default), just above the action bar - where the photo
+   prints it - and the gesture hint and the Real size chip step up over it. */
+.brand-bar.bottom {
+  top: auto;
+  bottom: calc(var(--bar-h, 150px) + 12px);
+}
+.brand-bar.plate {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 32px);
+  padding: 7px 14px;
+  gap: 14px;
+  border-radius: 12px;
+  background: rgba(255, 252, 247, 0.94);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.brand-bar.plate img { height: 24px; filter: none; }
+.framing-bottom .gesture-hint,
+.framing-bottom .real-size-chip { bottom: calc(var(--bar-h, 150px) + 64px); }
 
 .brand-bar img {
   height: 26px;
@@ -537,7 +560,7 @@ a-scene, .a-canvas { width: 100% !important; height: 100% !important; }
   border: 1px solid var(--line);
   border-bottom: 0;
   border-radius: 20px 20px 0 0;
-  padding: 0 0 calc(10px + var(--safe-b));
+  padding: 0 0 calc(18px + var(--safe-b));
   animation: detailsUp 0.24s cubic-bezier(0.2, 0.8, 0.25, 1);
 }
 @keyframes detailsUp { from { transform: translateY(14%); } to { transform: translateY(0); } }
@@ -991,7 +1014,9 @@ a-scene, .a-canvas { width: 100% !important; height: 100% !important; }
   z-index: 60;
   left: calc(12px + var(--safe-l));
   right: calc(12px + var(--safe-r));
-  top: calc(12px + var(--safe-t));
+  /* Below the close button and the status chip, never over them: a visitor
+     with an error on screen must still be able to leave the camera. */
+  top: calc(60px + var(--safe-t));
   display: flex;
   align-items: center;
   gap: 12px;

@@ -987,3 +987,12 @@ textarea.fb-input { resize: vertical; min-height: 110px; line-height: 1.5; }
 .map-card-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .map-card-text strong { font-family: var(--font-serif); font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .map-card-text span { font-size: 12px; color: var(--c-text-3); }
+
+/* Messages drop in under the top bar, never over the buttons at the bottom -
+   View in AR, Listen, the nav - which is exactly where a visitor's thumb is
+   when the message is about what they just tapped. */
+.shell-toast {
+  top: calc(68px + var(--safe-t));
+  bottom: auto;
+  z-index: 40;
+}

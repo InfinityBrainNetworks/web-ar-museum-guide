@@ -72,6 +72,10 @@ export function buildManifest({ id, notes, exhibits, site, tracker, map }) {
       name: site.name || '',
       features: site.features || {},
       photobooth: { enabled: !!(site.photobooth && site.photobooth.enabled) },
+      // The photo strip. Absent (or empty) means the app's built-in logos.
+      logos: Array.isArray(site.logos) && site.logos.length
+        ? site.logos.map((l) => ({ src: l.url, label: l.name || '' }))
+        : null,
       // The floor plan for the guide's Map tab; each exhibit carries its pin.
       map: plan ? { src: plan.url, width: plan.width, height: plan.height, size: plan.size || 0 } : null,
     },

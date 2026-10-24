@@ -101,6 +101,10 @@
     add(bundle.mindSrc, bundle.mindSize, 'tracker', t('sync.item.tracker'), true);
     var plan = bundle.site && bundle.site.map;
     if (plan && plan.src) add(plan.src, plan.size, 'photo', t('nav.map'), true);
+    // The photo strip: a souvenir taken offline still carries the logos.
+    if (window.ARContent && window.ARContent.photoLogos) {
+      window.ARContent.photoLogos(bundle).forEach(function (l) { add(l.src, 0, 'photo', l.label || 'logo', true); });
+    }
     bundle.exhibits.forEach(function (ex) {
       if (ex.image.thumb) add(ex.image.thumb, 0, 'photo', ex.name, true);
       add(ex.image.src, ex.image.size, 'photo', ex.name, true);
@@ -124,6 +128,9 @@
     mark(bundle.manifestSrc);
     mark(bundle.mindSrc);
     if (bundle.site && bundle.site.map) mark(bundle.site.map.src);
+    if (window.ARContent && window.ARContent.photoLogos) {
+      window.ARContent.photoLogos(bundle).forEach(function (l) { mark(l.src); });
+    }
     bundle.exhibits.forEach(function (ex) {
       mark(ex.image.src); mark(ex.image.thumb); mark(ex.media.src);
       if (ex.model) mark(ex.model.src);
@@ -521,6 +528,15 @@
    */
   function start(bundle) {
     state.bundle = bundle;
+    // Explore is on screen from here. The check below takes a few seconds, and
+    // a full-screen sheet rising over someone who has already started tapping
+    // ate their tap (it fades in from transparent) and pulled the page out from
+    // under them. So once they have touched anything, the download carries on
+    // behind Explore with the pill instead.
+    if (!state.watchingTouch) {
+      state.watchingTouch = true;
+      document.addEventListener('pointerdown', function () { state.touched = true; }, { capture: true, once: true });
+    }
     if (!bundle || !bundle.exhibits || !bundle.exhibits.length || bundle.source === 'preview') {
       refreshUi();
       return;
@@ -557,7 +573,21 @@
         var quiet = state.updating && (sum.all - sum.have) < 6 * 1048576;
 
         if (quiet) { run(); return; }
-        if (choice === 'later' && !sum.essentialMissing) { refreshUi(); return; }
+        // "Not now" means not now: a new release's photos and tracker (small)
+        // come down quietly, and nothing flashes up over Explore.
+        if (choice === 'later') {
+          if (sum.essentialMissing) {
+            download(state.items.filter(function (i) { return i.essential; }), function () {})
+              .then(function () { refreshUi(); }, function (err) { log.warn('offline: essentials incomplete — ' + err.message); });
+          }
+          refreshUi();
+          return;
+        }
+        if (state.touched) {
+          log.info('offline: the visitor is already browsing — downloading behind Explore');
+          if (!saveData() || sum.essentialMissing) run(); else refreshUi();
+          return;
+        }
 
         showScreen(true);
         // On a data-saving connection, ask first; everywhere else, start.

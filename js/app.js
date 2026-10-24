@@ -740,7 +740,11 @@
     var framing = onFloor && (cfg.branding || {}).showOnScreen !== false &&
                   !!el.brandBar && el.brandBar.childNodes.length > 0;
     toggle(el.brandBar, framing);
-    if (el.overlay) el.overlay.classList.toggle('framing', framing);
+    if (el.overlay) {
+      var low = (cfg.branding || {}).position !== 'top';
+      el.overlay.classList.toggle('framing-top', framing && !low);
+      el.overlay.classList.toggle('framing-bottom', framing && low);
+    }
     // Leaving the floor scene while looking at a photo drops the sheet too,
     // rather than leaving it floating over scene 1.
     if (!onFloor) hide(el.photoSheet);
@@ -2202,6 +2206,9 @@
     if (S.started) return;
     S.started = true;
     S.tStart = performance.now();
+    // One history entry for the camera, so the phone's Back button closes
+    // things in here instead of leaving the site (js/shell.js owns history).
+    if (window.ARShell && window.ARShell.enteredAr) window.ARShell.enteredAr();
 
     hide(el.errorBanner);
     hide(el.shell);
@@ -2287,6 +2294,26 @@
    * and survive the stop/start cycle the gyro fallback already puts MindAR
    * through, so a second visit to the viewfinder tracks exactly as the first.
    */
+  /**
+   * The phone's Back button while the camera is open: close the topmost
+   * thing, the way Back closes a sheet in any app. 'layer' when something
+   * closed and the camera stays open; 'exit' when the camera itself closed.
+   */
+  function backInAr() {
+    var open = function (node) { return !!node && !node.classList.contains('hidden'); };
+    if (open(el.logPanel)) { openLog(false); return 'layer'; }
+    if (open(el.photoSheet)) { closePhoto(); return 'layer'; }
+    if (open(el.adjustPanel)) { openAdjust(false); return 'layer'; }
+    if (S.detailsOpen) { openDetails(false); return 'layer'; }
+    if (S.mode === MODE.FLOOR || S.mode === MODE.PLACED) {
+      leaveFloorScene();
+      log.event('back: left the floor scene');
+      return 'layer';
+    }
+    exitAR();
+    return 'exit';
+  }
+
   function exitAR() {
     if (!S.started) return;
 
@@ -2419,6 +2446,22 @@
     return !!el.logToggle && !el.logToggle.classList.contains('hidden');
   }
 
+  /**
+   * Keep --bar-h at the action bar's real height. It wraps to two rows on a
+   * narrow phone, and everything that floats above it (the logo preview, the
+   * gesture hint, Real size) is placed from this, not from a guess.
+   */
+  function watchActionBar() {
+    var bar = el.actionBar;
+    if (!bar) return;
+    var set = function () {
+      document.documentElement.style.setProperty('--bar-h', (bar.offsetHeight || 0) + 'px');
+    };
+    set();
+    if (window.ResizeObserver) new ResizeObserver(set).observe(bar);
+    else window.addEventListener('resize', set);
+  }
+
   /** The logo row over the camera feed, mirroring what the photo will print. */
   function renderBrandBar() {
     var host = el.brandBar;
@@ -2435,7 +2478,9 @@
       return span;
     };
 
-    (brand.logos || []).forEach(function (entry) {
+    host.classList.toggle('bottom', brand.position !== 'top');
+    host.classList.toggle('plate', brand.plate !== false);
+    window.ARContent.photoLogos(bundle).forEach(function (entry) {
       var label = entry.label || 'LOGO';
       if (!entry.src) { if (placeholdersWanted()) host.appendChild(slot(label)); return; }
       var img = document.createElement('img');
@@ -3643,7 +3688,7 @@
       '  Phone height (js/config.js floor.cameraHeightMeters): ' + r(S.cameraHeight) + '\n' +
       '  photo: ' + (window.ARCapture ? window.ARCapture.report() : 'capture.js missing') +
       ' shareFiles=' + canShareFiles() +
-      ' logoSlots=' + ((cfg.branding && cfg.branding.logos) || []).length + '\n' +
+      ' logos=' + window.ARContent.photoLogos(bundle).length + '\n' +
       '  content: ' + (bundle ? bundle.source : '?') + ', ' + exhibits.length +
       ' exhibit(s), active ' + S.activeIndex + '\n' +
       '  scene: ' + S.mode +
@@ -3738,7 +3783,12 @@
     ARI18n.onChange(refreshChrome);
 
     on(el.langGo, 'click', function () { openLanguagePicker(false); });
-    on(el.exitAR, 'click', exitAR);
+    // Through history when the camera has an entry there, so the next Back
+    // press is not spent on a camera that is already closed.
+    on(el.exitAR, 'click', function () {
+      if (window.ARShell && window.ARShell.leaveAr && window.ARShell.leaveAr()) return;
+      exitAR();
+    });
 
     el.errorRetry.addEventListener('click', function () {
       hide(el.errorBanner);
@@ -3921,6 +3971,7 @@
           return system && system.video;
         },
         placeholders: placeholdersWanted,
+        logos: function () { return window.ARContent.photoLogos(bundle); },
       });
     }
 
@@ -3955,6 +4006,10 @@
 
           wireVideoElement();
           wireUI();
+          watchActionBar();
+          // The release may carry its own logos: the photo strip was preloaded
+          // before it landed.
+          if (window.ARCapture && window.ARCapture.reloadLogos) window.ARCapture.reloadLogos();
           applyModeUI();
           wireScene();
           boot.wired = true;
@@ -4053,6 +4108,7 @@
     refreshUi: function () { if (el.actionBar) applyModeUI(); },
     startAR: startAR,
     exitAR: exitAR,
+    backInAr: backInAr,
     /** Reopen the language question. The picker itself stays app.js's. */
     openLanguage: openLanguagePicker,
     /**

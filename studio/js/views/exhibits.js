@@ -8,7 +8,8 @@
  */
 import { h, clear, icon, toast, explain, dialog, busy, bytes, confirm } from '../ui.js';
 import { languagesOf, missing, coverage } from '../manifest.js';
-import { importBundle, readBundle } from '../importer.js';
+import { importBundle, readBundle, figureChanges, applyFigureChanges } from '../importer.js';
+import { afterSave } from '../autopublish.js';
 
 export async function render(ctx) {
   const { data } = ctx;
@@ -23,6 +24,8 @@ export async function render(ctx) {
   ctx.page.append(banner, list);
 
   ctx.setActions(
+    ctx.can('admin') ? h('button.btn', { type: 'button', title: 'Bring in 3D figures that changed in the repo (assets/content)',
+      onclick: () => updateFigures(ctx, exhibits) }, icon('cube'), 'Figures from the repo') : null,
     h('button.btn.primary', { type: 'button', onclick: () => addExhibit(ctx, exhibits.length) }, icon('plus'), 'New exhibit'));
 
   const draw = () => {
@@ -136,6 +139,45 @@ function emptyState(ctx) {
   }).catch(() => {});
   box.appendChild(h('button.btn', { type: 'button', onclick: () => addExhibit(ctx, 0) }, icon('plus'), 'Add an exhibit'));
   return box;
+}
+
+/**
+ * The repo's assets/content has new or changed 3D figures (a developer
+ * optimised them, say): show which, and on OK bring them into the cloud.
+ */
+async function updateFigures(ctx, exhibits) {
+  const look = busy('Comparing 3D figures', 'Reading the repo’s gallery…');
+  let changes;
+  try { changes = await figureChanges(exhibits); }
+  catch (err) { look.done(); toast('Could not read the repo’s gallery: ' + explain(err), 'err', 8000); return; }
+  look.done();
+  if (!changes.length) { toast('Every 3D figure already matches the repo.', 'ok'); return; }
+  const verb = { added: 'New figure', changed: 'Replaced', removed: 'Figure removed' };
+  const ok = await dialog({
+    title: `${changes.length} figure${changes.length === 1 ? '' : 's'} to update`,
+    wide: true,
+    build: (body) => body.append(
+      h('p', 'These exhibits have a different 3D figure in the repo. Updating brings the file in with the repo’s ' +
+        'height, anchor and animation settings — a new figure’s old placement would not fit it. Labels, video, ' +
+        'photo and map pin stay as they are.'),
+      h('ul.figure-changes', changes.map((c) => h('li', h('strong', c.name), ' — ',
+        verb[c.change], c.fileName ? h('span.faint', ' · ' + c.fileName + ' · ' + bytes(c.file.size)) : null)))),
+    buttons: [{ label: 'Cancel', value: false }, { label: 'Update', kind: 'primary', value: true }],
+  });
+  if (!ok) return;
+  const job = busy('Updating 3D figures', 'Starting…');
+  window.__studioDirty = true;
+  try {
+    await applyFigureChanges(changes, (f, text) => job.set(f, text));
+    job.done();
+    toast(`Updated ${changes.length} figure${changes.length === 1 ? '' : 's'}.`, 'ok', 6000);
+    afterSave('3D figures from the repo', toast);
+  } catch (err) {
+    job.done();
+    toast('Stopped: ' + explain(err), 'err', 8000);
+  } finally {
+    window.__studioDirty = false;
+  }
 }
 
 async function runImport(ctx, n) {

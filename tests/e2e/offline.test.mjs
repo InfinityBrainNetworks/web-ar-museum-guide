@@ -21,6 +21,8 @@ after(async () => {
   if (site) await site.close();
 });
 
+// The repo's own bundle, never whatever release the real Firebase project has
+// live: the test is about the download, not about Google's network that day.
 async function fresh(url) {
   const page = await browser.newPage();
   page.logs = [];
@@ -35,7 +37,7 @@ async function fresh(url) {
 }
 
 test('a first visit downloads the whole gallery, with progress, then lets you in', async () => {
-  const page = await fresh(`http://127.0.0.1:${PORT}/`);
+  const page = await fresh(`http://127.0.0.1:${PORT}/?source=bundle`);
   await until(page, () => !document.getElementById('syncScreen').classList.contains('hidden'),
     { timeout: 20000, what: 'the download screen' });
   const midway = await until(page, () => {
@@ -79,7 +81,7 @@ test('with the server gone, the guide still opens, finds the lion and plays its 
   await site.close();
   site = null;
 
-  const page = await fresh(`http://127.0.0.1:${PORT}/`);
+  const page = await fresh(`http://127.0.0.1:${PORT}/?source=bundle`);
   await until(page, () => window.ARViewer && window.ARViewer.ready(), { timeout: 30000, what: 'an offline boot' });
   const cards = await until(page, () => document.querySelectorAll('#exhibitGrid > *').length);
   assert.equal(cards, 9);

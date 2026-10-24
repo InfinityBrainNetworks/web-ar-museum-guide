@@ -93,7 +93,13 @@
           "audio": null
         }
       },
-      "model": null
+      "model": {
+        "src": "./assets/content/apsara-dark-dance1.glb",
+        "heightMeters": 1.55,
+        "lighting": "baked",
+        "playClip": true,
+        "loopClip": false
+      }
     },
     {
       "id": "sigiriya-ex05",
@@ -153,7 +159,13 @@
           "audio": null
         }
       },
-      "model": null
+      "model": {
+        "src": "./assets/content/apsara-light-dance1.glb",
+        "heightMeters": 1.65,
+        "lighting": "baked",
+        "playClip": true,
+        "loopClip": false
+      }
     },
     {
       "id": "sigiriya-ex06",
@@ -213,7 +225,13 @@
           "audio": null
         }
       },
-      "model": null
+      "model": {
+        "src": "./assets/content/apsara-dark-dance2.glb",
+        "heightMeters": 1.55,
+        "lighting": "baked",
+        "playClip": true,
+        "loopClip": false
+      }
     },
     {
       "id": "sigiriya-ex07",
@@ -273,7 +291,13 @@
           "audio": null
         }
       },
-      "model": null
+      "model": {
+        "src": "./assets/content/apsara-light-dance2.glb",
+        "heightMeters": 1.65,
+        "lighting": "baked",
+        "playClip": true,
+        "loopClip": false
+      }
     },
     {
       "id": "sigiriya-ex08",
@@ -334,8 +358,8 @@
         }
       },
       "model": {
-        "src": "./assets/content/ex08-the-queen-of-kasyapa-model.glb",
-        "heightMeters": 1.6,
+        "src": "./assets/content/apsara-light-dance3.glb",
+        "heightMeters": 1.65,
         "lighting": "baked",
         "playClip": true,
         "loopClip": false
@@ -399,7 +423,13 @@
           "audio": null
         }
       },
-      "model": null
+      "model": {
+        "src": "./assets/content/apsara-dark-dance3.glb",
+        "heightMeters": 1.55,
+        "lighting": "baked",
+        "playClip": true,
+        "loopClip": false
+      }
     },
     {
       "id": "sigiriya-ex10",
@@ -459,7 +489,13 @@
           "audio": null
         }
       },
-      "model": null
+      "model": {
+        "src": "./assets/content/apsara-light-dance1.glb",
+        "heightMeters": 1.65,
+        "lighting": "baked",
+        "playClip": true,
+        "loopClip": false
+      }
     },
     {
       "id": "sigiriya-ex13",
@@ -520,8 +556,8 @@
         }
       },
       "model": {
-        "src": "./assets/content/ex13-the-queen-and-her-maid-model.glb",
-        "heightMeters": 1.6,
+        "src": "./assets/content/apsara-dark-dance2.glb",
+        "heightMeters": 1.55,
         "lighting": "baked",
         "playClip": true,
         "loopClip": false

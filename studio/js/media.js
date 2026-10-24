@@ -4,7 +4,7 @@
  *
  * Every number a visitor downloads is chosen here or warned about here. The
  * advice is the same that got the deployed gallery to ~25 MB for nine
- * paintings and three figures; see "The deployed gallery" in the README.
+ * paintings and nine figures; see "The deployed gallery" in the README.
  */
 
 // ------------------------------------------------------------------ images
@@ -143,8 +143,8 @@ function imageDims(bytes, mime) {
  * The checks are the ones this gallery has learnt the hard way:
  *   - 4096² textures decode to ~90 MB of GPU memory each; three of them
  *     crashed Safari on an iPhone.
- *   - a quantized SKINNED model is sized wrong by the viewer (its stored
- *     bounds are the quantization box, not the figure).
+ *   - a SKINNED model with quantized positions is sized wrong by the viewer
+ *     (its stored bounds are the quantization box, not the figure).
  *   - Draco and meshopt need decoders the viewer does not load.
  */
 export async function inspectGlb(file) {
@@ -187,6 +187,13 @@ export async function inspectGlb(file) {
 
   const used = json.extensionsUsed || [];
   const skinned = (json.skins || []).length > 0;
+  // Quantized POSITIONS are what break sizing; quantized normals, UVs and
+  // weights (KHR_mesh_quantization too) are harmless and save a third.
+  const FLOAT = 5126;
+  const positionsQuantized = (json.meshes || []).some((mesh) => (mesh.primitives || []).some((p) => {
+    const pos = accessors[p.attributes && p.attributes.POSITION];
+    return pos && pos.componentType !== FLOAT;
+  }));
   const gpuBytes = textures.reduce((sum, t) => sum + (t.w * t.h * 4 * 1.33), 0);
   const report = {
     size: file.size,
@@ -197,6 +204,7 @@ export async function inspectGlb(file) {
     maxTexture: textures.reduce((m, t) => Math.max(m, t.w, t.h), 0),
     gpuMB: Math.round(gpuBytes / 1048576),
     skinned,
+    positionsQuantized,
     animations,
     extensions: used,
     generator: (json.asset && json.asset.generator) || '',
@@ -218,8 +226,8 @@ export function glbAdvice(r) {
     notes.push(['ok', `Largest texture ${r.maxTexture}² (~${r.gpuMB} MB of GPU memory).`]);
   }
   if (r.triangles > 300000) notes.push(['warn', `${(r.triangles / 1000).toFixed(0)}k triangles. Older phones slow down past ~150k.`]);
-  if (r.skinned && r.extensions.includes('KHR_mesh_quantization')) {
-    notes.push(['bad', 'A rigged model saved with quantization: the viewer will size it wrong (it measures the quantization box, not the figure). Re-export without quantizing.']);
+  if (r.skinned && (r.positionsQuantized !== undefined ? r.positionsQuantized : r.extensions.includes('KHR_mesh_quantization'))) {
+    notes.push(['bad', 'A rigged model with quantized positions: the viewer will size it wrong (it measures the quantization box, not the figure). Re-export without quantizing POSITION (normals, UVs and weights are fine).']);
   }
   if (r.extensions.includes('KHR_draco_mesh_compression') || r.extensions.includes('EXT_meshopt_compression')) {
     notes.push(['bad', 'Draco/meshopt compression needs a decoder the guide does not load. Re-export without mesh compression.']);

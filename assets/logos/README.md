@@ -1,27 +1,23 @@
 # Logo strip
 
-The row of logos printed across the top of every AR photo, and shown over the
-camera feed while the floor scene is open.
+The built-in logos printed along the bottom of every AR photo, on a light
+plate, and shown above the shutter while the figure is standing:
 
-## Adding one
+| File | Whose |
+|---|---|
+| `ibn.png` | IBN — drawn from the mark in `index.html` |
+| `sliit-creative-computing.png` | SLIIT Creative Computing (from the approved `.ai`) |
+| `national-museum-colombo.png` | National Museum Colombo |
 
-1. Drop the artwork in here. Transparent PNG or SVG, any width — the strip
-   sizes every logo by height and keeps its aspect ratio, so wide wordmarks and
-   square badges mix fine. Around 400px tall is plenty; the photo is 1600px on
-   its longest edge.
-2. Fill in that slot's `src` in `branding.logos` ([js/config.js](../../js/config.js)):
+All three are transparent PNGs, trimmed and 360 px tall.
 
-   ```js
-   { src: './assets/logos/logo-1.png', label: 'LOGO 1' },
-   ```
+## Changing them
 
-A slot with no `src` is drawn as a labelled dashed box, on screen and in the
-photo, so the layout is visible and correctly spaced before the artwork exists.
-All three start that way, which is why this folder starts empty.
+In the Studio: **Settings → Photo logos** — add, replace, rename, reorder or
+remove, and the change is published with the gallery. These files stay as the
+fallback, and as what a gallery without Firebase prints.
 
-## Changing how many there are, or what they are called
-
-`branding.logos` in [js/config.js](../../js/config.js). Add, remove or rename
-slots there; the row is centred and rescaled to fit whatever is in it. The same
-file has the strip's height, the gap between logos, whether a dark gradient is
-drawn behind it, and whether it shows on screen as well as in the photo.
+To change the built-in set itself, replace the files here and edit
+`branding.logos` in [js/config.js](../../js/config.js). Any width is fine:
+every logo is drawn at the same height and keeps its aspect ratio. About
+400 px tall is plenty — the photo is 1600 px on its longest edge.

@@ -257,17 +257,23 @@ window.AR_CONFIG = {
     // Also show the strip on screen while the floor scene is open, so what you
     // frame is what you get.
     showOnScreen: true,
-    // Strip height as a fraction of the picture's height.
-    heightRatio: 0.075,
+    // 'bottom' (the default) or 'top' of the picture.
+    position: 'bottom',
+    // Logo height as a fraction of the picture's height.
+    heightRatio: 0.055,
     // Gap between logos, same units.
-    gapRatio: 0.03,
-    // Dark gradient behind the strip, so pale logos stay legible over a bright
-    // gallery wall.
+    gapRatio: 0.035,
+    // A light rounded plate behind the logos, so dark artwork - the museum's
+    // black crest, the navy CC - reads over any photo. Without it, a dark
+    // gradient (scrim) is drawn instead, which suits pale logos.
+    plate: true,
     scrim: true,
+    // The built-in strip. The Studio can replace it (Settings > Photo logos),
+    // and then the live release's logos win; these stay as the fallback.
     logos: [
-      { src: null, label: 'LOGO 1' },   // e.g. './assets/logos/logo-1.png'
-      { src: null, label: 'LOGO 2' },
-      { src: null, label: 'LOGO 3' },
+      { src: './assets/logos/ibn.png', label: 'IBN' },
+      { src: './assets/logos/sliit-creative-computing.png', label: 'SLIIT Creative Computing' },
+      { src: './assets/logos/national-museum-colombo.png', label: 'National Museum Colombo' },
     ],
   },
 

@@ -85,7 +85,98 @@
   }
 
   // ================================================================ navigation
-  function go(next, exhibit) {
+  /*
+   * History. Every screen a visitor moves to is an entry in the browser's
+   * history, so the phone's own Back button walks back through the guide -
+   * painting, Map, Explore - instead of leaving the site, and the arrow in the
+   * top bar does the same. The tabs replace one another (Back from Settings
+   * goes home to Explore, not through every tab tried), a painting's page is
+   * pushed on top of wherever it was opened from, and the camera gets one
+   * entry of its own that app.js spends closing whatever is on top in there.
+   *
+   * Entries are { ibn: 1, v: view, ex: exhibit id, f: map focus, d: depth },
+   * depth counting the entries this page has pushed above Explore.
+   */
+  var TABS = { explore: 1, map: 1, feedback: 1, settings: 1, soon: 1 };
+  var depth = 0;
+  var leavingAr = false;
+
+  function entry(next, exhibit, extra) {
+    var e = { ibn: 1, v: next, ex: exhibit ? exhibit.id : null, f: mapFocus || null, d: depth };
+    if (extra) Object.keys(extra).forEach(function (k) { e[k] = extra[k]; });
+    return e;
+  }
+
+  function record(next, exhibit) {
+    if (!window.history || !history.pushState) return;
+    if (next === 'explore') {
+      // Home: back down to the root rather than another entry on top.
+      if (depth > 0) { history.go(-depth); return 'pending'; }
+      history.replaceState(entry('explore', null), '');
+      return;
+    }
+    if (TABS[next] && TABS[view] && view !== 'explore') {
+      history.replaceState(entry(next, exhibit), '');
+      return;
+    }
+    if (next === view && (exhibit ? exhibit.id : null) === (current ? current.id : null)) return;
+    depth++;
+    history.pushState(entry(next, exhibit), '');
+  }
+
+  function exhibitById(id) {
+    var list = (V() && V().exhibits()) || [];
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return null;
+  }
+
+  function onPop(e) {
+    var st = e.state && e.state.ibn ? e.state : { v: 'explore', d: 0 };
+    var viewer = V();
+    if (viewer && viewer.inAR && viewer.inAR()) {
+      if (leavingAr) {
+        viewer.exitAR();
+      } else if (viewer.backInAr && viewer.backInAr() === 'layer') {
+        // Something in the camera closed, and the camera stays: its entry
+        // goes back on, for the next press of Back.
+        depth = (st.d || 0) + 1;
+        history.pushState({ ibn: 1, v: st.v, ex: st.ex, f: st.f, d: depth, ar: 1 }, '');
+        return;
+      }
+    }
+    leavingAr = false;
+    depth = st.d || 0;
+    if (st.v === 'map') mapFocus = st.f || null;
+    go(st.v || 'explore', exhibitById(st.ex), { render: true });
+  }
+
+  /** app.js, as the camera opens: one entry for it. */
+  function enteredAr() {
+    if (!window.history || !history.pushState) return;
+    depth++;
+    history.pushState(entry(view, current, { ar: 1 }), '');
+  }
+
+  /** The camera's close button: through history when it has an entry there. */
+  function leaveAr() {
+    if (!history.state || !history.state.ar) return false;
+    leavingAr = true;
+    history.back();
+    return true;
+  }
+
+  /** The arrow in the top bar: wherever the visitor came from. */
+  function back() {
+    if (depth > 0 && history.state && history.state.ibn) history.back();
+    else go('explore');
+  }
+
+  /**
+   * how.render: draw `next` without touching history - a redraw, or a step
+   * the browser's own Back/Forward already took.
+   */
+  function go(next, exhibit, how) {
+    if (!(how && how.render) && record(next, exhibit) === 'pending') return;
     view = next;
     current = exhibit || (next === 'exhibit' ? current : null);
 
@@ -761,7 +852,8 @@
       setAudio(null);
     });
 
-    el.shellBack.addEventListener('click', function () { go('explore'); });
+    el.shellBack.addEventListener('click', back);
+    window.addEventListener('popstate', onPop);
     el.shellLang.addEventListener('click', openLanguage);
     el.setLang.addEventListener('click', openLanguage);
 
@@ -830,10 +922,10 @@
     if (view === 'exhibit') renderExhibit();
     if (view === 'settings') renderSettings();
     if (view === 'soon') renderSoon();
-    if (view !== 'explore') go(view);
+    if (view !== 'explore') go(view, null, { render: true });
   }
 
-  window.ARShell = { refresh: refresh, go: go };
+  window.ARShell = { refresh: refresh, go: go, back: back, enteredAr: enteredAr, leaveAr: leaveAr };
 
   function init() {
     var missing = cacheDom();

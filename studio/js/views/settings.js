@@ -5,7 +5,8 @@
  * Everything here belongs to the whole gallery rather than one exhibit, and
  * travels to visitors inside the next release.
  */
-import { h, clear, icon, toast, explain, field, toggle, copy } from '../ui.js';
+import { h, clear, icon, toast, explain, field, toggle, copy, pickFile, bytes } from '../ui.js';
+import { afterSave } from '../autopublish.js';
 
 export async function render(ctx) {
   const { data } = ctx;
@@ -14,9 +15,10 @@ export async function render(ctx) {
   let site = await data.getSite();
 
   const general = h('div.card');
+  const logosCard = h('div.card');
   const langs = h('div.card');
   const health = h('div.card');
-  ctx.page.append(general, langs, health);
+  ctx.page.append(general, logosCard, langs, health);
   if (!admin) ctx.page.prepend(h('div.banner.info', icon('lock'), h('div', 'Only an admin can change these. You can see them.')));
 
   const save = async (patch, msg) => {
@@ -47,6 +49,75 @@ export async function render(ctx) {
             'Put saved edits live straight away — a placement, a label or a video reaches visitors seconds after an admin saves it. ' +
             'Off: nothing changes for visitors until someone builds a release on Publish.'))));
     general.querySelectorAll('input[type=checkbox]').forEach((i) => { i.disabled = !admin; });
+  };
+
+  // ---- photo logos
+  // The strip printed along the bottom of every visitor's photo. Until an
+  // admin changes it, the app's built-in logos (js/config.js) are used; the
+  // first change saves the whole list into config/site.logos, which then
+  // travels with every release.
+  const builtIn = () => ((window.AR_CONFIG.branding || {}).logos || []).filter((l) => l.src)
+    .map((l) => ({ url: new URL(l.src, window.AR_CLOUD.appUrl).href, name: l.label || '', builtIn: true }));
+  const customLogos = () => Array.isArray(site.logos) && site.logos.length > 0;
+  const saveLogos = async (list, message) => {
+    try {
+      await data.saveSite({
+        logos: list.map((l) => ({ url: l.url, path: l.path || null, name: l.name || '', width: l.width || 0, height: l.height || 0, size: l.size || 0 })),
+      });
+      site = await data.getSite();
+      toast(message, 'ok');
+      afterSave('photo logos', toast);
+    } catch (err) { toast(explain(err), 'err'); }
+    drawLogos();
+  };
+  const measure = (file) => new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => { resolve({ width: img.naturalWidth, height: img.naturalHeight }); URL.revokeObjectURL(url); };
+    img.onerror = () => { resolve({ width: 0, height: 0 }); URL.revokeObjectURL(url); };
+    img.src = url;
+  });
+  const uploadLogo = async () => {
+    const file = await pickFile('image/png,image/webp,image/svg+xml,image/jpeg');
+    if (!file) return null;
+    if (file.size > 3 * 1024 * 1024) { toast('That file is ' + bytes(file.size) + ' — keep logos under 3 MB (a 400 px tall PNG is plenty).', 'err', 7000); return null; }
+    const size = await measure(file);
+    const got = await data.upload('site', 'logo', file);
+    return { url: got.url, path: got.path, size: got.size, name: file.name.replace(/\.[a-z0-9]+$/i, ''), ...size };
+  };
+  const drawLogos = () => {
+    clear(logosCard);
+    const list = (customLogos() ? site.logos : builtIn()).map((l) => ({ ...l }));
+    const rows = list.map((l, i) => h('div.logo-row',
+      h('div.logo-plate', h('img', { src: l.url, alt: l.name || 'Logo' })),
+      h('input', {
+        type: 'text', value: l.name || '', maxLength: 60, placeholder: 'Whose logo', disabled: !admin,
+        onchange: (e) => { list[i].name = e.target.value.trim(); saveLogos(list, 'Logo renamed.'); },
+      }),
+      admin ? h('div.row', { style: { flexWrap: 'nowrap' } },
+        h('button.icon-btn', { type: 'button', title: 'Move left in the photo', disabled: i === 0,
+          onclick: () => { [list[i - 1], list[i]] = [list[i], list[i - 1]]; saveLogos(list, 'Order saved.'); } }, '↑'),
+        h('button.icon-btn', { type: 'button', title: 'Move right in the photo', disabled: i === list.length - 1,
+          onclick: () => { [list[i + 1], list[i]] = [list[i], list[i + 1]]; saveLogos(list, 'Order saved.'); } }, '↓'),
+        h('button.btn.sm', { type: 'button', onclick: async () => {
+          try { const got = await uploadLogo(); if (got) { list[i] = { ...got, name: list[i].name || got.name }; saveLogos(list, 'Logo replaced.'); } }
+          catch (err) { toast(explain(err), 'err'); }
+        } }, 'Replace'),
+        h('button.icon-btn', { type: 'button', title: 'Remove', onclick: () => { list.splice(i, 1); saveLogos(list, 'Logo removed.'); } }, icon('trash'))) : null));
+    logosCard.append(
+      h('div.card-head', icon('image'), h('div.grow', h('h2', 'Photo logos'),
+        h('p', 'Printed along the bottom of every photo a visitor takes, on a light plate, in this order. ' +
+          'A transparent PNG about 400 px tall works best.'))),
+      h('div.card-body',
+        h('div.logo-preview', list.length ? list.map((l) => h('img', { src: l.url, alt: l.name || 'Logo' })) : h('span.faint', 'No logos — photos carry none.')),
+        h('div.logo-list', rows),
+        admin ? h('div.row', { style: { marginTop: '12px' } },
+          h('button.btn', { type: 'button', disabled: list.length >= 5, onclick: async () => {
+            try { const got = await uploadLogo(); if (got) { list.push(got); saveLogos(list, 'Logo added.'); } }
+            catch (err) { toast(explain(err), 'err'); }
+          } }, icon('plus'), 'Add a logo'),
+          h('span.spacer'),
+          customLogos() ? h('button.btn', { type: 'button', onclick: () => saveLogos([], 'Back to the built-in logos.') }, 'Use the built-in logos') : h('span.faint', 'Showing the logos built into the app.')) : null));
   };
 
   // ---- languages
@@ -132,6 +203,7 @@ export async function render(ctx) {
   };
 
   drawGeneral();
+  drawLogos();
   drawLangs();
   drawHealth();
   return null;
