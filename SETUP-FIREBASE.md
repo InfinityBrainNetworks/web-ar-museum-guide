@@ -88,6 +88,13 @@ That uploads `firestore.rules`, `storage.rules` and `firestore.indexes.json` —
 who may read and write what, which `tests/rules/` checks 26 ways against the
 emulators. **Claim the Studio straight after this step** (step 7).
 
+The first deploy asks **"Grant the new role?"** for cross-service rules:
+answer **y**. Storage checks each uploader's role in Firestore, and without
+that role (Firebase Rules Firestore Service Agent, on
+`service-<project number>@firebase-rules.iam.gserviceaccount.com`) every
+Studio upload fails with "not allowed", even for the owner. Running the deploy
+with `--non-interactive` skips the question - grant it in Cloud IAM instead.
+
 ## 6. Let phones download the files (CORS)
 
 Storage refuses cross-site downloads until told otherwise, and the guide needs
