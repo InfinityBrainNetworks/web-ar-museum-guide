@@ -60,8 +60,9 @@ few dollars with an email alert, so a surprise is impossible.
   share and the feedback they leave.
 
 Then **Settings → Authorised domains** → add every address the guide is
-served
-from: `infinitybrainnetworks.github.io`, and your own domain if you add one.
+served from: `infinitybrainnetworks.github.io`, the Vercel address (e.g.
+`web-ar-museum-guide.vercel.app`, the exact one is on the project's Vercel
+page), and your own domain if you add one.
 Without this the Google sign-in window refuses to open.
 
 ## 4. The database and the files
