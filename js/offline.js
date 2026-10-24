@@ -189,7 +189,10 @@
 
     entry.promise = fetch(item.url, { mode: 'cors', credentials: 'omit', cache: 'no-store' })
       .then(function (response) {
-        if (!response.ok) throw new Error('HTTP ' + response.status);
+        // A 200 and nothing else. A 204 is "ok" to fetch() but empty, and
+        // download managers that hook the OS (IDM, on Windows) answer media
+        // requests with exactly that - kept, it would be a silent recording.
+        if (response.status !== 200) throw new Error('HTTP ' + response.status);
         var total = Number(response.headers.get('Content-Length')) || item.bytes || 0;
         if (total) item.bytes = total;
         var type = response.headers.get('Content-Type') || 'application/octet-stream';
@@ -430,6 +433,12 @@
     }, function (err) {
       state.error = err;
       log.warn('offline: download incomplete — ' + err.message);
+      // Worth one more go by itself: museum wifi drops out and comes back,
+      // and the service worker taking over can be what was missing.
+      if (!state.retried) {
+        state.retried = true;
+        setTimeout(function () { if (!state.running && totals().missing) run(); }, 3000);
+      }
     }).then(function () {
       state.running = false;
       state.progress = null;
@@ -471,6 +480,17 @@
     });
     if (window.ARI18n && window.ARI18n.onChange) {
       window.ARI18n.onChange(function () { replan(); });
+    }
+    // The worker taking control mid-visit: anything that failed before it
+    // could answer gets another try, through it.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (state.items && !state.running && totals().missing && readChoice() !== 'later') {
+          log.info('offline: the service worker took over — fetching what is still missing');
+          state.retried = false;
+          run();
+        }
+      });
     }
   }
 

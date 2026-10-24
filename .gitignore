@@ -9,3 +9,6 @@ image&video/
 
 # screen recordings dropped in for debugging - kept on disk, not committed
 Updates/
+
+# scratch drivers for the e2e harness - not tests
+tests/e2e/_*.mjs
