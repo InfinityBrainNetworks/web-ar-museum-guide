@@ -286,6 +286,12 @@ window.AR_CONFIG = {
     maxLogEntries: 600,
     autoOpenLogOnError: false,
     showDebugTools: true,
+    // Whether the 🐞 button is on until someone switches it off in Settings.
+    // It also decides whether Adjust and the dashed "LOGO" placeholders show,
+    // so set it false when the gallery opens to the public - staff turn it
+    // back on for their own phone in Settings > Debug log, or sign in as
+    // staff, which shows Adjust by itself.
+    debugButtonByDefault: true,
     // Step sizes for the debug nudge buttons, in target units / multiplier.
     nudgeStep: 0.02,
     scaleStep: 0.05,

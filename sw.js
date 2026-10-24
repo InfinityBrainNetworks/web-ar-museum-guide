@@ -22,7 +22,7 @@
  * Never touched: the Studio, the photobooth wall and the old portal (they
  * want live data, always), Firebase's own APIs, and anything but GET.
  */
-const SHELL_VERSION = 'shell-2026-10-24a';
+const SHELL_VERSION = 'shell-2026-10-24b';
 const SHELL_CACHE = 'ar-' + SHELL_VERSION;
 const ASSET_CACHE = 'ar-assets-v1';     // shared with js/offline.js - keep the name in step
 const SLOW_MS = 3500;
@@ -32,7 +32,7 @@ const SHELL = [
   './', './index.html',
   './css/theme.css', './css/splash.css', './css/style.css', './css/shell.css',
   './js/logger.js', './js/config.js', './js/cloud/config.js', './js/content.js',
-  './js/placement.js', './js/i18n.js', './js/offline.js', './js/capture.js',
+  './js/placement.js', './js/i18n.js', './js/offline.js', './js/community.js', './js/capture.js',
   './js/app.js', './js/shell.js', './manifest.webmanifest', './assets/icons/icon.svg',
   // The repo bundle's index: fetched before this worker is in control on a
   // first visit, so it has to be fetched here too or an offline second visit

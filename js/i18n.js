@@ -62,6 +62,40 @@
       'gesture.pinch': 'Pinch to resize',
       'gesture.realSize': 'Real size',
 
+      'photo.share': "Share to the museum's photo wall",
+      'photo.consentTitle': 'Show this photo on the photo wall?',
+      'photo.consentText': "I agree to this photo being shown publicly on the museum's photo wall. Staff check every photo first, and I can take it down at any time from this phone.",
+      'photo.namePlaceholder': 'Your first name (optional)',
+      'photo.send': 'Share',
+      'photo.sending': 'Sharing…',
+      'photo.cancel': 'Not now',
+      'photo.unshare': 'Take it down',
+      'photo.sharedPending': 'Shared. It appears on the wall at {wall} once the museum staff have seen it.',
+      'photo.sharedLive': 'Shared. It is on the wall now, at {wall}.',
+      'photo.shareFailed': 'The photo could not be shared. Check the connection and try again.',
+      'photo.unshared': 'Taken down. It is no longer on the wall.',
+
+      'feedback.eyebrow': 'Tell the museum',
+      'feedback.title': 'How was your visit?',
+      'feedback.rating': 'Your rating',
+      'feedback.about': 'About',
+      'feedback.wholeVisit': 'The whole visit',
+      'feedback.placeholder': 'What did you enjoy? What could be better?',
+      'feedback.send': 'Send',
+      'feedback.sending': 'Sending…',
+      'feedback.note': "Anonymous. Only the museum's staff read it.",
+      'feedback.failed': 'That could not be sent. Check the connection and try again.',
+      'feedback.thanks': 'Thank you',
+      'feedback.thanksText': "The museum's team reads every message.",
+      'feedback.again': 'Write another',
+
+      'settings.staff': 'Museum staff',
+      'settings.staffSignIn': 'Staff sign-in',
+      'settings.staffSub': 'Tune exhibits from this phone, straight into the Studio',
+      'settings.staffAs': 'Signed in as {role} · tap to sign out',
+      'settings.staffNotMember': 'Not on the museum team yet · tap to sign out',
+      'settings.staffReady': 'Signed in. Adjust now saves to the Studio.',
+
       'sync.eyebrow': 'Before you start',
       'sync.title': 'Getting the gallery ready',
       'sync.lead': '{count} artworks, {size} MB. Downloading them once makes AR instant and lets the guide work without wifi.',
@@ -201,6 +235,40 @@
       'gesture.pinch': 'ප්‍රමාණය වෙනස් කිරීමට ඇඟිලි දෙකෙන් අදින්න',
       'gesture.realSize': 'සැබෑ ප්‍රමාණය',
 
+      'photo.share': 'කෞතුකාගාරයේ ඡායාරූප බිත්තියට බෙදාගන්න',
+      'photo.consentTitle': 'මෙම ඡායාරූපය ඡායාරූප බිත්තියේ පෙන්වන්නද?',
+      'photo.consentText': 'මෙම ඡායාරූපය කෞතුකාගාරයේ ඡායාරූප බිත්තියේ ප්‍රසිද්ධියේ පෙන්වීමට මම එකඟ වෙමි. කාර්ය මණ්ඩලය සෑම ඡායාරූපයක්ම පළමුව පරීක්ෂා කරන අතර, මෙම දුරකථනයෙන් ඕනෑම වේලාවක එය ඉවත් කළ හැක.',
+      'photo.namePlaceholder': 'ඔබේ මුල් නම (අත්‍යවශ්‍ය නොවේ)',
+      'photo.send': 'බෙදාගන්න',
+      'photo.sending': 'බෙදාගනිමින්…',
+      'photo.cancel': 'දැන් නොවේ',
+      'photo.unshare': 'ඉවත් කරන්න',
+      'photo.sharedPending': 'බෙදාගත්තා. කාර්ය මණ්ඩලය බැලූ පසු එය {wall} හි බිත්තියේ දිස්වේ.',
+      'photo.sharedLive': 'බෙදාගත්තා. එය දැන් {wall} හි බිත්තියේ ඇත.',
+      'photo.shareFailed': 'ඡායාරූපය බෙදාගත නොහැකි විය. සම්බන්ධතාවය පරීක්ෂා කර නැවත උත්සාහ කරන්න.',
+      'photo.unshared': 'ඉවත් කළා. එය තවදුරටත් බිත්තියේ නැත.',
+
+      'feedback.eyebrow': 'කෞතුකාගාරයට කියන්න',
+      'feedback.title': 'ඔබේ පැමිණීම කෙසේද?',
+      'feedback.rating': 'ඔබේ ශ්‍රේණිගත කිරීම',
+      'feedback.about': 'පිළිබඳව',
+      'feedback.wholeVisit': 'සම්පූර්ණ පැමිණීම',
+      'feedback.placeholder': 'ඔබ රස වින්දේ කුමක්ද? වඩා හොඳ කළ හැක්කේ කුමක්ද?',
+      'feedback.send': 'යවන්න',
+      'feedback.sending': 'යවමින්…',
+      'feedback.note': 'නිර්නාමිකයි. කෞතුකාගාර කාර්ය මණ්ඩලය පමණක් කියවයි.',
+      'feedback.failed': 'යැවිය නොහැකි විය. සම්බන්ධතාවය පරීක්ෂා කර නැවත උත්සාහ කරන්න.',
+      'feedback.thanks': 'ස්තූතියි',
+      'feedback.thanksText': 'කෞතුකාගාර කණ්ඩායම සෑම පණිවිඩයක්ම කියවයි.',
+      'feedback.again': 'තවත් එකක් ලියන්න',
+
+      'settings.staff': 'කෞතුකාගාර කාර්ය මණ්ඩලය',
+      'settings.staffSignIn': 'කාර්ය මණ්ඩල පිවිසුම',
+      'settings.staffSub': 'මෙම දුරකථනයෙන් ප්‍රදර්ශන සකසා Studio වෙත සුරකින්න',
+      'settings.staffAs': '{role} ලෙස පිවිස ඇත · වැසීමට තට්ටු කරන්න',
+      'settings.staffNotMember': 'තවම කෞතුකාගාර කණ්ඩායමේ නැත · වැසීමට තට්ටු කරන්න',
+      'settings.staffReady': 'පිවිසුණා. Adjust දැන් Studio වෙත සුරකියි.',
+
       'sync.eyebrow': 'ආරම්භ කිරීමට පෙර',
       'sync.title': 'ගැලරිය සූදානම් කරමින්',
       'sync.lead': 'කලා කෘති {count}ක්, MB {size}. එක් වරක් බාගත කළ විට AR ක්ෂණිකව ක්‍රියා කරන අතර wifi නොමැතිව ද මාර්ගෝපදේශය ක්‍රියා කරයි.',
@@ -339,6 +407,40 @@
       'gesture.twist': 'திருப்ப சுழற்றவும்',
       'gesture.pinch': 'அளவை மாற்ற கிள்ளவும்',
       'gesture.realSize': 'உண்மையான அளவு',
+
+      'photo.share': 'அருங்காட்சியகத்தின் புகைப்படச் சுவரில் பகிர்',
+      'photo.consentTitle': 'இந்தப் புகைப்படத்தைப் புகைப்படச் சுவரில் காட்டவா?',
+      'photo.consentText': 'இந்தப் புகைப்படம் அருங்காட்சியகத்தின் புகைப்படச் சுவரில் பொதுவாகக் காட்டப்படுவதை நான் ஒப்புக்கொள்கிறேன். ஊழியர்கள் ஒவ்வொரு புகைப்படத்தையும் முதலில் சரிபார்ப்பார்கள், இந்தத் தொலைபேசியிலிருந்து எப்போது வேண்டுமானாலும் அதை நீக்கலாம்.',
+      'photo.namePlaceholder': 'உங்கள் முதல் பெயர் (விருப்பம்)',
+      'photo.send': 'பகிர்',
+      'photo.sending': 'பகிர்கிறது…',
+      'photo.cancel': 'இப்போது வேண்டாம்',
+      'photo.unshare': 'நீக்கு',
+      'photo.sharedPending': 'பகிரப்பட்டது. ஊழியர்கள் பார்த்தபின் {wall} இல் சுவரில் தோன்றும்.',
+      'photo.sharedLive': 'பகிரப்பட்டது. அது இப்போது {wall} இல் சுவரில் உள்ளது.',
+      'photo.shareFailed': 'புகைப்படத்தைப் பகிர முடியவில்லை. இணைப்பைச் சரிபார்த்து மீண்டும் முயலவும்.',
+      'photo.unshared': 'நீக்கப்பட்டது. அது இனி சுவரில் இல்லை.',
+
+      'feedback.eyebrow': 'அருங்காட்சியகத்திடம் சொல்லுங்கள்',
+      'feedback.title': 'உங்கள் வருகை எப்படி இருந்தது?',
+      'feedback.rating': 'உங்கள் மதிப்பீடு',
+      'feedback.about': 'பற்றி',
+      'feedback.wholeVisit': 'முழு வருகை',
+      'feedback.placeholder': 'எது பிடித்தது? எதை மேம்படுத்தலாம்?',
+      'feedback.send': 'அனுப்பு',
+      'feedback.sending': 'அனுப்புகிறது…',
+      'feedback.note': 'அநாமதேயம். அருங்காட்சியக ஊழியர்கள் மட்டுமே படிப்பார்கள்.',
+      'feedback.failed': 'அனுப்ப முடியவில்லை. இணைப்பைச் சரிபார்த்து மீண்டும் முயலவும்.',
+      'feedback.thanks': 'நன்றி',
+      'feedback.thanksText': 'அருங்காட்சியகக் குழு ஒவ்வொரு செய்தியையும் படிக்கிறது.',
+      'feedback.again': 'இன்னொன்று எழுது',
+
+      'settings.staff': 'அருங்காட்சியக ஊழியர்கள்',
+      'settings.staffSignIn': 'ஊழியர் உள்நுழைவு',
+      'settings.staffSub': 'இந்தத் தொலைபேசியிலிருந்து கண்காட்சிகளைச் சரிசெய்து Studio இல் சேமிக்கவும்',
+      'settings.staffAs': '{role} ஆக உள்நுழைந்துள்ளீர்கள் · வெளியேறத் தட்டவும்',
+      'settings.staffNotMember': 'இன்னும் அருங்காட்சியகக் குழுவில் இல்லை · வெளியேறத் தட்டவும்',
+      'settings.staffReady': 'உள்நுழைந்தீர்கள். Adjust இப்போது Studio இல் சேமிக்கும்.',
 
       'sync.eyebrow': 'தொடங்கும் முன்',
       'sync.title': 'காட்சியகத்தைத் தயார் செய்கிறது',
@@ -543,6 +645,7 @@
    *   data-i18n        its text
    *   data-i18n-label  its aria-label, for the icon-only buttons
    *   data-i18n-title  its tooltip
+   *   data-i18n-placeholder  an input's placeholder
    *
    * Markup carries the key, not the English, so a screen added later is
    * translated by naming a key and nothing else.
@@ -555,6 +658,8 @@
     for (i = 0; i < nodes.length; i++) nodes[i].setAttribute('aria-label', t(nodes[i].getAttribute('data-i18n-label')));
     nodes = scope.querySelectorAll('[data-i18n-title]');
     for (i = 0; i < nodes.length; i++) nodes[i].setAttribute('title', t(nodes[i].getAttribute('data-i18n-title')));
+    nodes = scope.querySelectorAll('[data-i18n-placeholder]');
+    for (i = 0; i < nodes.length; i++) nodes[i].setAttribute('placeholder', t(nodes[i].getAttribute('data-i18n-placeholder')));
   }
 
   /**

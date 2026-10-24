@@ -394,6 +394,14 @@
       if (hint) hint.classList.toggle('bad', !!state.error);
     }
 
+    // Nothing left to fetch while the visitor is looking at the screen -
+    // however that came about, a retry or the worker catching up - lets them in.
+    if (screen && !screen.classList.contains('hidden') && !running && state.items &&
+        state.items.length && sum.missing === 0 && !state.closing) {
+      state.closing = true;
+      setTimeout(function () { state.closing = false; showScreen(false); }, 700);
+    }
+
     // The little pill in the top bar while the rest downloads behind Explore.
     var pill = $('syncPill');
     if (pill) {

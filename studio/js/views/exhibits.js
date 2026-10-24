@@ -45,16 +45,19 @@ export async function render(ctx) {
   };
 
   // The tracker and the languages can change under this list too - an import
-  // writes all three at once - so every change re-reads them.
-  const stop = data.watchExhibits(async (list) => {
-    exhibits = list;
+  // writes all three - so every change re-reads them, and so does the end of
+  // an import (the tracker is written after the last exhibit).
+  const refresh = async () => {
     try {
       const [site, t] = await Promise.all([data.getSite(), data.getTracker()]);
       languages = languagesOf(site);
       tracker = t;
     } catch { /* keep what we had */ }
     draw();
-  }, (err) => toast(explain(err), 'err'));
+  };
+  ctx.refreshExhibits = refresh;
+  const stop = data.watchExhibits((list) => { exhibits = list; refresh(); },
+    (err) => toast(explain(err), 'err'));
   return stop;
 }
 
@@ -146,6 +149,7 @@ async function runImport(ctx, n) {
   try {
     const result = await importBundle((f, text) => job.set(f, text));
     toast(`Imported ${result.exhibits} exhibits (${bytes(result.bytes)}).`, 'ok', 6000);
+    if (ctx.refreshExhibits) await ctx.refreshExhibits();
     if (result.skipped.length) {
       toast(`${result.skipped.length} recording(s) could not be read and were left out — add them in each exhibit's Label tab. ` +
             result.skipped.join('; '), 'err', 12000);

@@ -33,13 +33,39 @@ rather than vanishing the moment the artwork leaves the frame.
 The page can carry **any number of exhibits**. An exhibit is one artwork —
 a target image, the video or picture projected onto it, what the label says in
 each language with the recording of it, and optionally a 3D object — and you add
-them through the admin portal rather than by editing code.
+them in the **Studio** rather than by editing code.
 
-Built on [A-Frame](https://aframe.io) 1.5.0 + [MindAR](https://hiukim.github.io/mind-ar-js-doc/) 1.2.5.
+Built on [A-Frame](https://aframe.io) 1.5.0 + [MindAR](https://hiukim.github.io/mind-ar-js-doc/) 1.2.5,
+with [Firebase](https://firebase.google.com) behind it and [three.js](https://threejs.org) 0.186 in the Studio.
 Works on Android (Chrome) and iOS (Safari 11.3+).
 
 **Live:** https://infinitybrainnetworks.github.io/web-ar-museum-guide/
-**Portal:** add `/admin.html` to that URL
+**Studio:** add `/studio/` to that URL · **Photo wall:** `/photobooth/` · **Offline portal:** `/admin.html`
+
+## Four pieces, one gallery
+
+| | Who it is for | Where |
+|---|---|---|
+| **The guide** | Visitors, on their own phones | `/` — `index.html`, `js/` |
+| **The Studio** | The museum's staff, signed in with Google | `/studio/` |
+| **The photo wall** | A screen in the gallery, and anyone with the link | `/photobooth/` |
+| **Firebase** | Holds the exhibits, the releases, the photos and the feedback | `firestore.rules`, `storage.rules` |
+
+The flow is: staff build exhibits in the Studio and stand each 3D figure on
+the floor in its **floor editor**; **Publish** freezes the gallery into a
+release, which they open on a phone from a QR code before putting it live;
+visitors' phones download that release **once**, behind a progress screen,
+and keep it — after that the guide works with no network at all. A visitor
+who takes an AR photo can share it to the **photo wall**, with their consent
+and only after a moderator says yes, and can leave **feedback** that lands in
+the Studio's inbox.
+
+**Without a Firebase project nothing of this is required.** With
+`firebase: null` in `js/cloud/config.js` the guide reads
+`assets/content/content.json` from the repo exactly as it always did, and the
+offline portal (`admin.html`) is how exhibits are made. **SETUP-FIREBASE.md**
+connects a project in about 20 minutes, and the Studio imports the deployed
+gallery in one click.
 
 Open it on the phone, choose a language, and you are in Explore. Tap the
 round **AR** button in the middle of the bottom bar, allow the camera, and
@@ -72,25 +98,40 @@ It is that way so the debug button and the error banner stay reachable while
 browsing — which is exactly when someone is staring at a start screen
 wondering why nothing works.
 
-### Map and Feedback
+### Feedback and Map
 
-Both are in the bottom bar and neither is built. Each says what it still needs
-rather than opening a screen that pretends:
+**Feedback** is built once the guide has a Firebase project: five stars, an
+optional "about" (the whole visit or one artwork, by its title in the
+visitor's language) and a few words, sent anonymously into the Studio's
+**Feedback** inbox, with an average and the best-loved exhibit on top. An
+admin can switch it off in the Studio's Settings. Without a project the tab
+keeps saying what it is waiting for.
 
-- **Map** needs a floor plan of the gallery, and a room and wall for each
-  exhibit. Neither exists in the content model or the portal yet.
-- **Feedback** needs somewhere for the messages to go. This guide deploys as a
-  static site, so there is no server to post to — that is a decision to make
-  (a form endpoint, a serverless function, or an email link), not a missing
-  screen.
+**Map** is still not built: it needs a floor plan of the gallery and a place on
+it for each exhibit, and the panel says so rather than pretending.
 
 ### Settings
 
 Language, **Reduce motion** (which does the same thing as the OS-level
-preference), and **Debug log** — the switch that shows or hides the 🐞 button
-over the camera. Both preferences are remembered per device in
-`localStorage`, and both reads are wrapped: a private window makes the
-accessor throw rather than return nothing.
+preference), **Debug log** — the switch that shows or hides the 🐞 button
+over the camera — and:
+
+- **Offline gallery** — how much of the gallery is on this phone; tap to
+  download the rest, or to remove it.
+- **Museum staff** (only with a Firebase project) — a curator signs in with
+  Google on their own phone, and **Adjust** then saves straight into the
+  Studio's draft of the exhibit: the numbers found standing in front of the
+  real painting, with no copying and pasting.
+
+The preferences are remembered per device in `localStorage`, and every read
+is wrapped: a private window makes the accessor throw rather than return
+nothing.
+
+**The gear (Adjust) and the dashed "LOGO" placeholders only show to the people
+who tune exhibits** — staff signed in on that phone, or anyone with the debug
+log on. The debug log is on by default (`ui.debugButtonByDefault` in
+`js/config.js`); set that to `false` when the gallery opens to the public, and
+visitors see neither.
 
 ## The look
 
@@ -242,10 +283,128 @@ the side — not on the bone, since the spine and legs move as well. A new
 export of either model from Unreal needs the same correction, or the fix made
 at the source (the root motion / pelvis rotation of the clip).
 
-## Adding exhibits — the admin portal
+## The Studio — making the gallery
+
+Open **`/studio/`** on a desktop (a tablet works too). It is the cloud admin:
+everything it does is stored in Firebase, nothing waits in one browser, and
+several people can work in it at once. Setting it up is **SETUP-FIREBASE.md**.
+
+### Who gets in
+
+Staff sign in with **Google** and are listed under **People** by email, each
+with a role. The first account into a fresh project is offered **Claim this
+Studio** and becomes its **owner**; after that, only someone on the list gets
+past the sign-in screen, and anyone else can **ask for access** from it.
+
+| Role | Can |
+|---|---|
+| Owner | Everything, including other owners. Nobody else can remove an owner, and an owner cannot remove themselves — the Studio can never be locked |
+| Admin | Content, **Go live**, rolling back, the photobooth, and adding or removing admins, editors and moderators |
+| Editor | Exhibits, the floor editor, compiling, building releases |
+| Moderator | The photobooth queue and the feedback inbox — the front desk |
+
+The screens only offer what a role may do; **`firestore.rules` and
+`storage.rules` are what actually enforce it**, and `tests/rules/` checks them
+25 ways against the emulators.
+
+### Exhibits
+
+The gallery in **target order** — drag a card to reorder. A banner appears the
+moment the compiled tracker stops matching the order or a photo, and Publish
+recompiles it. **Import the N deployed exhibits** (on an empty Studio) brings
+in `assets/content/` whole: files, labels in every language, figures, and the
+compiled tracker, keeping the exhibit ids.
+
+Each exhibit saves as you type — no Save button to forget — in four tabs:
+
+| Tab | What happens to the file |
+|---|---|
+| **Target photo** | Resized to 1024 px (all the tracker uses) with a 480 px thumbnail for Explore; JPEGs already that small are kept byte for byte |
+| **Projection** | A video or a still. Weighed and advised on — with the exact ffmpeg line that gets a video to 1–2 MB |
+| **Label & narration** | Title and rich text per language, the narration MP3 per language. The first language is required |
+| **3D figure** | A `.glb`, inspected before upload: size, triangles, texture sizes and the GPU memory they need, and the problems this gallery has met — 4096² textures, a quantized rig, Draco |
+
+Every file is uploaded under a name made from a **hash of its own bytes**, so a
+URL never changes what it points at: phones and the CDN can keep it forever,
+and an older release keeps working after a file is replaced.
+
+### The floor editor — standing a figure up
+
+**Exhibit → Floor editor** (or **Floor** on its card) opens the figure on a
+gallery floor, built exactly as the guide builds it in AR — the same
+`js/placement.js`, the same unlit "baked" materials, the same contact shadow.
+The frame is the visitor's at the moment they place it:
+
+- the **blue ring** is the spot they tap; **x** is to their right, **y** up,
+  **z** towards them — the visitor is drawn standing at +z, at 1.4 m
+- a **1.70 m person** can stand beside it for scale; the grid is 10 cm and 1 m
+
+Move, rotate and scale with the **gizmo** or by **number** (Position X/Y/Z in
+metres, Rotation X/Y/Z in degrees, Size ×, and the real Height). Keys follow
+Blender: **G** move, **R** rotate, **S** scale, **X/Y/Z** to constrain to one
+axis, **F** frame, **1 / 3 / 7** front, side, top, **0** the visitor's view,
+**Ctrl** held flips snapping (1 cm, 5°, ×0.01), **Ctrl+Z / Ctrl+Shift+Z**,
+**Ctrl+S** saves.
+
+**The anchor** (the orange point) is what lands on the tapped spot and what
+the figure turns and scales about — Blender's origin. Move it by number
+(metres from the base centre), by preset (**Base centre**, **Centre**, **Top**,
+**Front edge**, **Back edge**, **Feet (posed)**), by dragging it with the gizmo
+(**A**), or by **Pick on the figure** and clicking a point on the model. In
+every case **the figure does not move**: the position is re-solved around the
+new anchor, so only what it turns about changes. **Lock** it (**L**) once it is
+right, and position, scale and rotate from there.
+
+It is stored as a fraction of the figure's height from its base centre, so it
+stays on the same point of the model when the height changes or a re-export
+comes back in other units. Zero — the base centre — is how every exhibit stood
+before anchors existed, so nothing already deployed moves.
+
+**Drop to floor** puts the lowest point of the pose on screen on the floor.
+For an animated figure, scrub the clip and **Check the floor through the
+clip**: it samples the whole performance and reports where the feet go — for
+the queen, −2 to +4 cm while dancing and 0 on the pose she holds, the numbers
+the lean fix below was checked with.
+
+### Publish
+
+1. **Check** — every exhibit complete, a tracker compiled for exactly these
+   photos in this order (**Compile now** runs MindAR's compiler in the
+   browser), and what a visitor downloads, exhibit by exhibit.
+2. **Build a release** — the gallery frozen into a manifest in Storage. Nobody
+   sees it yet: **Preview** shows a QR code that opens the guide on a phone
+   with exactly that release (`?release=<id>`).
+3. **Go live** — one write to `public/live`, and every visitor who opens the
+   guide from then on gets it. Any earlier release goes back the same way
+   (**Roll back to this**). Only admins can do this step.
+
+### Photobooth, feedback
+
+**Photobooth** is the moderation queue — Approve, Feature, Hide, Delete — and
+the wall's settings: switched on or off, auto-approve, its title. **Feedback**
+is the inbox. Both update live.
+
+## The photo wall — `/photobooth/`
+
+Approved photos, live: a new one goes straight to the big screen, featured
+ones lead the slideshow, the latest eight sit beside it, and a QR code invites
+the next visitor. Made for a TV on a gallery wall (big type, no cursor, a
+full-screen button that hides itself) and readable on a phone.
+
+How a photo gets there, from the guide's photo screen: **Share to the museum's
+photo wall** → a box to tick saying it may be shown publicly → an optional
+first name → **Share**. Nothing leaves the phone before the tick, and the rules
+refuse a photo without that consent on record. The visitor sees whether it is
+waiting or on the wall, and can **take it down** from the same phone at any
+time — their phone's anonymous account owns it. Photos are private in Storage;
+the wall shows them through the link recorded when a moderator approves.
+
+## The offline portal — `admin.html`
 
 Open **`admin.html`** on a desktop browser. It runs entirely in that browser:
-nothing is uploaded, there is no server and no account.
+nothing is uploaded, there is no server and no account. It is how exhibits
+were made before the Studio, and it still works for a gallery with no
+Firebase project; with one, use the Studio.
 
 1. **+ Add exhibit**, then fill the four parts of the card:
    1. **Target image** — what visitors point the phone at.
@@ -363,7 +522,18 @@ by a script, or by a merge nobody read.
 | Path | What it is |
 |---|---|
 | `index.html` | The AR page: scene + overlay UI |
-| `admin.html` | The authoring portal |
+| `studio/` | **The Studio** — the cloud admin. `js/main.js` signs in and routes; `js/views/` is one file per screen; `js/stage/stage.js` is the floor editor's 3D scene; `js/data.js` is every Firestore and Storage call |
+| `photobooth/` | The photo wall |
+| `js/cloud/config.js` | **The Firebase project** (or `null` for none), the emulator switch, and the REST reads visitors make |
+| `js/cloud/sdk.js` | The Firebase SDK, loaded on demand, shared by every page |
+| `js/placement.js` | **Where a figure stands** — the anchor, the fit, the frame. Shared by the guide and the floor editor so the two can never disagree |
+| `js/offline.js` + `sw.js` | The offline gallery: the download screen, the download manager, and the service worker that answers from the phone |
+| `js/community.js` | The guide's photobooth sharing, feedback, and staff sign-in |
+| `firestore.rules`, `storage.rules`, `firestore.indexes.json` | Who may read and write what — `firebase deploy --only firestore,storage` |
+| `firebase.json`, `.firebaserc`, `storage.cors.json` | Firebase CLI config, the project id, and the CORS rule Storage needs |
+| `tests/rules/` | Security rules, tested against the emulators |
+| `tests/e2e/` | The guide, the offline gallery and the whole cloud workflow, end to end in headless Chrome |
+| `admin.html` | The offline portal, for a gallery with no Firebase project |
 | `js/content.js` | Resolves which exhibits to show, the rich-text sanitiser, the language rules, and the shared IndexedDB store |
 | `js/i18n.js` | The interface's own words, in each language, and the remembered choice |
 | `js/app.js` | The scene machine, media mapping, the details sheet, both floor engines, debug tools. Publishes `window.ARViewer` |
@@ -384,14 +554,40 @@ by a script, or by a merge nobody read.
 
 ### Where content comes from
 
-`js/content.js` tries three sources in order, and says in the log which one won:
+`js/content.js` tries these in order, and says in the log which one won:
 
 | Source | When |
 |---|---|
-| **preview** | `index.html?preview=1` — the portal's draft, from IndexedDB |
-| **bundle** | `assets/content/content.json` — what visitors get |
+| **preview** | `index.html?preview=1` — the offline portal's draft, from IndexedDB |
+| **cloud** | A Firebase project is configured: the release at `public/live`, read over plain REST (no SDK on a visitor's phone). `?release=<id>` opens a release that is not live yet — the Studio's phone preview. Offline, the release this phone saw last |
+| **bundle** | `assets/content/content.json` in the repo — with no project, or when the cloud has nothing live yet. `?source=bundle` forces it |
 | **legacy** | `js/config.js` — only if it names a target image; the shipped one does not |
 | **empty** | Nothing is deployed. Explore says so instead of inventing an exhibit. |
+
+A release manifest has the same shape as `content.json` (plus every file's
+size), so the guide runs one code path for both.
+
+### The offline gallery
+
+A museum's wifi is at its worst exactly where the visitor stands. So the first
+visit shows **Getting the gallery ready** and downloads the gallery once into
+the phone — the tracker and the photographs first (what Explore and AR cannot
+do without), then the videos, the figures, and the narration in the
+visitor's language and the fallback one. **Start exploring** opens as soon as
+the essentials are in; the rest carries on behind a small progress pill. A
+phone that asked to save data is offered the download, not given it.
+
+After that the service worker (`sw.js`) answers from the phone: the guide
+opens, recognises a painting and plays its video with **no network at all**
+(`tests/e2e/offline.test.mjs` checks exactly that, with the server switched
+off). A new release fetches only the files that changed — every URL is
+immutable — and the ones no release mentions are deleted. If AR starts before
+the tracker has arrived, the loading screen counts the megabytes rather than
+spinning. Settings → **Offline gallery** shows what is kept and removes it.
+
+The app's own code is network-first (a deploy shows up on the next load);
+the libraries and exhibit files are cache-first. `?sw=0` removes the service
+worker from a phone that seems stuck on an old copy.
 
 ## Running it
 
@@ -403,8 +599,42 @@ from `main`, so pushing to `main` redeploys it.
 **On a desktop with a webcam:**
 
 ```bash
-npx http-server -p 8080     # then open http://localhost:8080
+npx http-server -p 8123     # then open http://localhost:8123
 ```
+
+**With the Firebase emulators instead of a real project** — see the end of
+SETUP-FIREBASE.md; add `?emu=1` to any page.
+
+## Tests
+
+Three suites, all run on this machine with nothing deployed:
+
+```bash
+cd tests/rules && npm install && npm test        # 25 security-rule checks, emulators started for you
+cd tests/e2e && npm install && npm test          # the guide: anchors, gestures, offline - headless Chrome
+cd tests/e2e && npm run test:cloud               # the Studio-to-wall workflow, against the emulators
+```
+
+The end-to-end tests drive a real headless Chrome with software WebGL and a
+fake camera showing a painting on a wall, so MindAR genuinely finds a target;
+the gyroscope is faked with `deviceorientation` events. What they check:
+
+- the queen stands on her base at 1.6 m by default; anchored at her middle,
+  her middle is on the spot; lifted by half her height she stands again;
+  turned 180° she swings about her anchor
+- a visitor's drag moves her, a twist turns her, a pinch resizes her, and
+  Real size undoes it
+- a first visit downloads the whole gallery with progress, and with the
+  server switched off the guide still opens, finds the lion and plays his video
+- the Studio is claimed and the gallery imported; an admin adds an admin, who
+  adds a moderator, and cannot touch the owner; the floor editor moves the
+  anchor without moving the figure and locks it; a release goes live and the
+  phone places the queen on that anchor; a photo is shared with consent,
+  approved, and appears on the wall; feedback reaches the moderator's inbox
+
+`tests/e2e/lib.mjs` expects Chrome at its usual Windows path (or `CHROME=`),
+`ffmpeg` on the PATH (or `FFMPEG=`), and, for the cloud suite and the rules,
+Java 21 for the emulators.
 
 ## How the video gets mapped onto the image
 
@@ -435,12 +665,28 @@ places a built-in placeholder, so the whole flow is testable before you have one
 Export `.glb`, not `.gltf`: a `.gltf` references its textures as separate files,
 which a single-file bundle cannot carry.
 
-The figure is auto-centred and **stands on its own base, not its origin** —
-whatever units it was exported in and wherever its pivot sits, it lands on the
-floor at the exhibit's *Figure height*. *Size multiplier* scales that without
-restating the measurement, which is the quick way to dial a model in on the
-device. It turns to face you when placed (`floor.faceViewer`); *Figure turn*
-corrects an export that faces sideways. glTF animation clips play automatically,
+The figure stands on its **anchor** — by default the centre of its base, so it
+is auto-centred and stands on its own base, not its origin — whatever units it
+was exported in and wherever its pivot sits, at the exhibit's *Figure height*.
+*Size multiplier* scales that without restating the measurement. It turns to
+face you when placed (`floor.faceViewer`); *Figure turn* corrects an export
+that faces sideways. Everything about how it stands is set in the Studio's
+**floor editor** (above), and `js/placement.js` is the one definition the
+editor and the guide share.
+
+The figure is **measured once, when it loads**, and that measurement is reused
+on every later fit. A playing clip moves nodes inside the model, and measuring
+again mid-dance used to make an Adjust change resize the figure.
+
+### The visitor handles it
+
+Once it is standing: **drag** with one finger to move it across the floor —
+the finger's ray is cast onto the floor itself, so the figure stays under the
+finger however far away it is — **twist** two fingers to turn it, and
+**pinch** to make it bigger or smaller (0.4–2.5×), for the photo they want. A
+**Real size** chip appears as soon as it is not, and puts it back. None of it
+is saved: where the figure stands is the museum's decision; this is the
+visitor arranging it. glTF animation clips play automatically,
 **once**: the figure performs after it is placed and then holds its last pose.
 Tick *Loop the animation* on the exhibit in the portal (`loopClip`) to repeat
 it instead; Adjust → Effects → **Animation** switches between Once, Loop and
@@ -473,8 +719,10 @@ which is what puts it in the camera roll on both platforms. If the share sheet
 is unavailable the picture downloads instead; on Android that lands in
 Downloads, which the gallery picks up.
 
-Nothing is uploaded. The picture is composed in the page and handed straight to
-the operating system.
+Nothing is uploaded unless the visitor asks: the picture is composed in the
+page and handed straight to the operating system. With the photobooth switched
+on, the same screen offers **Share to the museum's photo wall** — see *The
+photo wall* above for the consent step and how a visitor takes it down again.
 
 ### Why it is composed rather than screenshotted
 
@@ -586,10 +834,17 @@ Removing every ellipse goes back to the automatic circle, which is also what
 the portal's **Auto** button next to *Shadow shape* does. That circle is sized
 from the figure's live footprint, so it follows the size on its own.
 
-### Getting it into the repo
+### Getting it into the gallery
 
-**Save to exhibit** writes into the admin portal's draft in this browser — the
-same draft the portal edits. Then open `admin.html`, press **Export bundle**,
+**Signed in as staff on the phone** (Settings → Museum staff, as an editor or
+above, with the gallery coming from the cloud), **Save to exhibit** writes
+straight into the Studio's draft of that exhibit — only the fields Adjust
+owns, so a label being edited in the Studio at the same moment is left alone.
+It reaches visitors with the next release. The rest of this section is the
+offline portal's route.
+
+Otherwise, **Save to exhibit** writes into the offline portal's draft in this
+browser — the same draft the portal edits. Then open `admin.html`, press **Export bundle**,
 and commit the zip's contents as usual. The values ride along in
 `assets/content/content.json` like everything else.
 
@@ -655,6 +910,15 @@ sense a plane with. Instead the gyroscope gives the exact direction of gravity,
 and the floor is taken to be the horizontal plane `cameraHeightMeters` below the
 phone. "Stable" then means a real, checkable thing: the phone is pointed at that
 plane and has held still.
+
+**Up comes from gravity, always.** Only the *heading* is taken from the moment
+the floor scene opens. It used to keep the phone's whole orientation at that
+moment, which made the floor perpendicular to wherever the top of the phone
+pointed: right while it was held upright at the painting, and tilted by
+however far it was not — so opening the floor scene with the phone already
+angled down tilted the floor too, the figure leaned, and it landed nearer or
+further than the reticle. That was the iPhone half of "the positioning is
+off".
 
 The consequences are worth being clear about:
 
@@ -729,7 +993,17 @@ native build to fight with. The official
 
 | Symptom | Cause |
 |---|---|
-| Right artwork, **wrong video** | The tracker and `content.json` are out of step. Re-export from the portal. |
+| Right artwork, **wrong video** | The tracker and the exhibit order are out of step. In the Studio, Publish recompiles it; with the offline portal, re-export. |
+| Studio: "You are not on the team yet" | An admin has to add that Google address under People. The screen sends them a request. |
+| Studio: the Google window will not open | The site is not in Authentication → Settings → Authorised domains. |
+| Studio Settings: "Storage blocks the guide" | CORS is not set on the bucket — SETUP-FIREBASE.md step 6. Videos will not draw onto paintings until it is. |
+| Published, but phones still show the old gallery | It was built but not put live (Publish → Go live), or the phone has not reopened the guide since. |
+| Figure stands in the wrong place | Its anchor and position, in the Studio's floor editor. Remember the anchor never moves the figure — the position does. |
+| iPhone: figure leaned or landed short | Fixed — the gyro floor now takes up from gravity. An older cached copy: `?sw=0` once, then reload. |
+| "Share to the photo wall" never appears | The photobooth is switched off (Studio → Photobooth), or the guide has no Firebase project. |
+| A shared photo is not on the wall | It is waiting for a moderator (Studio → Photobooth), unless Auto-approve is on. |
+| The guide seems stuck on an old version | Open it once with `?sw=0` to remove the service worker, then reload. |
+| Download screen says some files failed | They stream when needed instead; Settings → Offline gallery tries again. A Windows download manager (IDM and the like) can answer media requests with an empty response — it is refused, not kept. |
 | "No exhibits yet" on Explore | Nothing is deployed. Add exhibits in the portal, compile, export, push. |
 | **More details** opens an empty sheet | That exhibit has no text in the fallback language. The portal marks the card incomplete and blocks Export, so this means a hand-edited `content.json`. |
 | Sheet says "Shown in English" | That exhibit has no translation in the chosen language yet. Fill its tab in the portal. |
@@ -773,7 +1047,8 @@ native build to fight with. The official
 
 ## Notes
 
-- A-Frame and MindAR load from jsDelivr, so the first load needs a network
-  connection. Everything else is served from this repo.
+- A-Frame and MindAR load from jsDelivr, so the first visit needs a network
+  connection; the service worker keeps them, with the rest of the app, for
+  every visit after.
 - The video has no audio track, which is what lets it autoplay on both platforms.
 - Tracking is all on-device; no camera frames leave the phone.

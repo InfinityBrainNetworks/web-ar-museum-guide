@@ -4,9 +4,11 @@
   "type": "module",
   "description": "The viewer, the Studio and the photobooth, end to end in headless Chrome",
   "scripts": {
-    "test": "node --test --test-concurrency=1 viewer.test.mjs offline.test.mjs"
+    "test": "node --test --test-concurrency=1 viewer.test.mjs offline.test.mjs",
+    "test:cloud": "firebase emulators:exec --only auth,firestore,storage --project demo-museum --config ../../firebase.json \"node --test --test-concurrency=1 cloud.test.mjs\""
   },
   "devDependencies": {
-    "puppeteer-core": "24.43.1"
+    "puppeteer-core": "24.43.1",
+    "firebase-tools": "15.34.0"
   }
 }

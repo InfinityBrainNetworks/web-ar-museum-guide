@@ -55,6 +55,8 @@
      'exhibitListen', 'exhibitListenLabel', 'exhibitAr', 'exhibitAudio',
      'viewSettings', 'setLang', 'setLangValue', 'setMotion', 'setLog', 'settingsAbout',
      'viewSoon', 'soonIcon', 'soonTitle', 'soonText', 'soonNeeds',
+     'viewFeedback', 'fbForm', 'fbThanks', 'fbStars', 'fbExhibit', 'fbMessage', 'fbSend', 'fbNote', 'fbAgain',
+     'staffGroup', 'setStaff', 'setStaffTitle', 'setStaffValue',
      'navAr', 'logToggle'
     ].forEach(function (id) {
       el[id] = $(id);
@@ -89,12 +91,13 @@
     toggle2(el.viewExhibit, next === 'exhibit');
     toggle2(el.viewSettings, next === 'settings');
     toggle2(el.viewSoon, next === 'soon');
+    toggle2(el.viewFeedback, next === 'feedback');
 
     // Back replaces nothing - it sits beside the title - so the title stays
     // the wordmark on Explore and becomes the screen's name elsewhere.
     toggle(el.shellBack, next !== 'explore');
     if (el.shellTitle) {
-      var titles = { exhibit: '', settings: t('nav.settings'), soon: t('nav.' + soonTab) };
+      var titles = { exhibit: '', settings: t('nav.settings'), soon: t('nav.' + soonTab), feedback: t('nav.feedback') };
       var label = next === 'explore' ? t('app.name') : titles[next];
       el.shellTitle.textContent = label || t('app.name');
     }
@@ -109,6 +112,7 @@
     if (next === 'exhibit') renderExhibit();
     if (next === 'settings') renderSettings();
     if (next === 'soon') renderSoon();
+    if (next === 'feedback') renderFeedback();
 
     // A new screen starts at the top, the way a new page would.
     if (el.shellBody) el.shellBody.scrollTop = 0;
@@ -461,6 +465,7 @@
 
     setSwitch(el.setMotion, motionOff());
     setSwitch(el.setLog, logShown());
+    renderStaff();
 
     if (el.settingsAbout) {
       el.settingsAbout.textContent = '';
@@ -511,6 +516,120 @@
     writePref(LOG_KEY, on ? 'on' : 'off');
   }
 
+  // ================================================================== feedback
+  /*
+   * A rating and a few words, into the Studio's inbox. The tab only becomes
+   * this when the guide has a Firebase project and the museum has feedback
+   * switched on; otherwise it stays the honest "not built yet" panel.
+   */
+  var feedbackOn = false;
+  var rating = 0;
+
+  function renderFeedback() {
+    if (!el.fbStars) return;
+    if (!el.fbStars.childNodes.length) {
+      for (var i = 1; i <= 5; i++) {
+        (function (n) {
+          var star = document.createElement('button');
+          star.type = 'button';
+          star.className = 'fb-star';
+          star.setAttribute('role', 'radio');
+          star.setAttribute('aria-label', n + ' / 5');
+          star.appendChild(icon('i-star'));
+          star.addEventListener('click', function () { rating = n; drawStars(); });
+          el.fbStars.appendChild(star);
+        })(i);
+      }
+    }
+    drawStars();
+
+    // What it is about: the whole visit, or one artwork, by its title in the
+    // visitor's own language.
+    var keep = el.fbExhibit.value;
+    el.fbExhibit.textContent = '';
+    var whole = document.createElement('option');
+    whole.value = '';
+    whole.textContent = t('feedback.wholeVisit');
+    el.fbExhibit.appendChild(whole);
+    ((V() && V().exhibits()) || []).forEach(function (ex) {
+      var o = document.createElement('option');
+      o.value = ex.id;
+      var picked = V().detailsOf(ex);
+      o.textContent = (picked.detail && picked.detail.title) || ex.name;
+      el.fbExhibit.appendChild(o);
+    });
+    el.fbExhibit.value = keep || (current ? current.id : '');
+  }
+
+  function drawStars() {
+    Array.prototype.forEach.call(el.fbStars.childNodes, function (star, i) {
+      star.classList.toggle('on', i < rating);
+      star.setAttribute('aria-checked', i + 1 === rating ? 'true' : 'false');
+    });
+    el.fbSend.disabled = !rating;
+  }
+
+  function sendFeedback() {
+    var community = window.ARCommunity;
+    if (!community || !rating) return;
+    var id = el.fbExhibit.value;
+    var option = el.fbExhibit.options[el.fbExhibit.selectedIndex];
+    var bundle = V() && V().bundle();
+    el.fbSend.disabled = true;
+    el.fbSend.textContent = t('feedback.sending');
+    community.sendFeedback({
+      rating: rating,
+      message: el.fbMessage.value,
+      exhibitId: id || null,
+      exhibitName: id && option ? option.textContent : null,
+      lang: window.ARI18n.code(),
+      release: bundle && bundle.releaseId,
+    }).then(function () {
+      el.fbSend.textContent = t('feedback.send');
+      hide(el.fbForm);
+      show(el.fbThanks);
+      rating = 0;
+      el.fbMessage.value = '';
+    }, function (err) {
+      el.fbSend.disabled = false;
+      el.fbSend.textContent = t('feedback.send');
+      el.fbNote.textContent = t('feedback.failed');
+      log().warn('feedback: ' + (err && err.message ? err.message : err));
+    });
+  }
+
+  // ===================================================================== staff
+  function renderStaff() {
+    var community = window.ARCommunity;
+    if (!el.staffGroup || !community || !community.enabled()) return;
+    show(el.staffGroup);
+    var s = community.staff.state();
+    if (s.signedIn) {
+      el.setStaffTitle.textContent = s.email;
+      el.setStaffValue.textContent = s.role
+        ? t('settings.staffAs', { role: s.role })
+        : t('settings.staffNotMember');
+    } else {
+      el.setStaffTitle.textContent = t('settings.staffSignIn');
+      el.setStaffValue.textContent = t('settings.staffSub');
+    }
+  }
+
+  function staffTap() {
+    var community = window.ARCommunity;
+    if (!community) return;
+    var s = community.staff.state();
+    var action = s.signedIn ? community.staff.signOut() : community.staff.signIn();
+    action.then(function () {
+      renderStaff();
+      var now = community.staff.state();
+      if (now.signedIn && !now.role) toast(t('settings.staffNotMember'));
+      else if (now.signedIn) toast(t('settings.staffReady'));
+    }, function (err) {
+      toast(String((err && err.message) || err).replace(/^Firebase:\s*/, ''));
+    });
+  }
+
   // ============================================== the two tabs not yet built
   function renderSoon() {
     if (el.soonIcon) {
@@ -528,7 +647,8 @@
     Array.prototype.forEach.call(el.shellNav.querySelectorAll('[data-nav]'), function (b) {
       b.addEventListener('click', function () {
         var target = b.getAttribute('data-nav');
-        if (target === 'map' || target === 'feedback') { soonTab = target; go('soon'); }
+        if (target === 'feedback' && feedbackOn) go('feedback');
+        else if (target === 'map' || target === 'feedback') { soonTab = target; go('soon'); }
         else go(target);
       });
     });
@@ -557,6 +677,23 @@
       applyLog(!logShown());
       setSwitch(el.setLog, logShown());
     });
+
+    if (el.fbSend) el.fbSend.addEventListener('click', sendFeedback);
+    if (el.fbAgain) el.fbAgain.addEventListener('click', function () { hide(el.fbThanks); show(el.fbForm); renderFeedback(); });
+    if (el.setStaff) el.setStaff.addEventListener('click', staffTap);
+    var community = window.ARCommunity;
+    if (community && community.enabled()) {
+      community.feature('feedback').then(function (on) {
+        feedbackOn = on;
+        var tab = el.shellNav.querySelector('[data-nav="feedback"]');
+        if (tab) tab.classList.toggle('dimmed', !on);
+      });
+      community.staff.onChange(function () {
+        renderStaff();
+        // The Adjust gear follows who is signed in.
+        if (window.ARViewer && window.ARViewer.refreshUi) window.ARViewer.refreshUi();
+      });
+    }
 
     // The whole interface redraws when the language changes, including the
     // parts built here rather than declared with data-i18n.
@@ -604,6 +741,7 @@
     applyMotion(readPref(MOTION_KEY) === 'off');
     var wantLog = readPref(LOG_KEY);
     if (wantLog) applyLog(wantLog === 'on');
+    else if ((cfg().ui || {}).debugButtonByDefault === false) toggle(el.logToggle, false);   // not saved: still the default
 
     wire();
     go('explore');

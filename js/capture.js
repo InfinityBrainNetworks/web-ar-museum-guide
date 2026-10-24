@@ -80,6 +80,12 @@ window.ARCapture = (function () {
   }
 
   function drawLogoStrip(ctx, W, H, slots) {
+    // An empty slot is drawn as a labelled box only for whoever is setting
+    // the strip up (the debug log on). A visitor's photo - which may end up
+    // on the public wall - carries real logos or none.
+    if (slots && !(api.placeholders && api.placeholders())) {
+      slots = slots.filter(function (s) { return !!s.img; });
+    }
     if (!slots || !slots.length) return;
     var b = api.branding || {};
     var band = Math.max(26, H * (b.heightRatio || 0.075));

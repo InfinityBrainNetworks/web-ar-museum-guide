@@ -36,6 +36,9 @@
 <!-- The gallery, downloaded once and kept: the service worker, the download
      manager and its screen. Optional - without it everything streams. -->
 <script src="./js/offline.js"></script>
+<!-- The photobooth, feedback, and staff signing in on a phone. Loads the
+     Firebase SDK only when one of them is actually used. -->
+<script src="./js/community.js"></script>
 
 <script src="https://cdn.jsdelivr.net/npm/aframe@1.5.0/dist/aframe-master.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -275,6 +278,30 @@
     <div class="photo-actions">
       <button id="photoSave" class="btn btn-primary" type="button" data-i18n="photo.save">Save to photos</button>
       <button id="photoClose" class="btn btn-ghost" type="button" data-i18n="photo.back">Back to AR</button>
+    </div>
+
+    <!-- The photo wall at /photobooth. Offered only when the museum has
+         switched it on, and nothing leaves the phone until the visitor ticks
+         the box and presses Share. js/community.js does the sending. -->
+    <button id="photoShare" class="btn btn-ghost photo-share hidden" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-camera"></use></svg>
+      <span data-i18n="photo.share">Share to the museum's photo wall</span>
+    </button>
+    <div id="photoConsent" class="photo-consent hidden">
+      <p class="consent-title" data-i18n="photo.consentTitle">Show this photo on the photo wall?</p>
+      <label class="consent-check">
+        <input id="photoAgree" type="checkbox">
+        <span data-i18n="photo.consentText">I agree to this photo being shown publicly on the museum's photo wall. Staff check every photo first, and I can take it down at any time from this phone.</span>
+      </label>
+      <input id="photoName" class="photo-name" type="text" maxlength="40" autocomplete="given-name" data-i18n-placeholder="photo.namePlaceholder" placeholder="Your first name (optional)">
+      <div class="photo-actions">
+        <button id="photoSend" class="btn btn-primary" type="button" disabled data-i18n="photo.send">Share</button>
+        <button id="photoCancel" class="btn btn-ghost" type="button" data-i18n="photo.cancel">Not now</button>
+      </div>
+    </div>
+    <div id="photoShared" class="photo-shared hidden" role="status">
+      <p id="photoSharedText"></p>
+      <button id="photoUnshare" class="btn btn-ghost btn-sm" type="button" data-i18n="photo.unshare">Take it down</button>
     </div>
   </div>
 </section>
@@ -649,6 +676,23 @@
         </div>
       </div>
 
+      <!-- Staff: a curator signs in here on their own phone, and the Adjust
+           panel then saves straight into the Studio. Hidden when the guide
+           has no Firebase project. -->
+      <div id="staffGroup" class="settings-group hidden">
+        <h2 data-i18n="settings.staff">Museum staff</h2>
+        <div class="settings-list">
+          <button id="setStaff" class="settings-row" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-gear"></use></svg>
+            <span class="label">
+              <strong id="setStaffTitle" data-i18n="settings.staffSignIn">Staff sign-in</strong>
+              <span id="setStaffValue">Tune exhibits from this phone</span>
+            </span>
+            <span class="chev" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><use href="#i-chevron"></use></svg></span>
+          </button>
+        </div>
+      </div>
+
       <!-- About. The Kotlin app's About & Credits, signed by IBN the way My
            Smart Store is. The product and company names are proper nouns and
            stay as they are in every language. -->
@@ -692,6 +736,28 @@
         SE4061 Multimedia Project Management · SLIIT Faculty of Computing · 2026<br>
         © 2026 Infinity Brain Network (Pvt) Ltd
       </p>
+    </section>
+
+    <!-- Feedback: a rating and a few words, into the Studio's inbox. Only with
+         a Firebase project behind the guide; without one the tab says what it
+         is waiting for, below. -->
+    <section id="viewFeedback" class="view">
+      <div id="fbForm" class="feedback-card">
+        <p class="eyebrow" data-i18n="feedback.eyebrow">Tell the museum</p>
+        <h1 data-i18n="feedback.title">How was your visit?</h1>
+        <div id="fbStars" class="fb-stars" role="radiogroup" data-i18n-label="feedback.rating" aria-label="Your rating"></div>
+        <label class="fb-label" for="fbExhibit" data-i18n="feedback.about">About</label>
+        <select id="fbExhibit" class="fb-input"></select>
+        <textarea id="fbMessage" class="fb-input" maxlength="2000" rows="5" data-i18n-placeholder="feedback.placeholder" placeholder="What did you enjoy? What could be better?"></textarea>
+        <button id="fbSend" class="btn btn-primary btn-lg" type="button" disabled data-i18n="feedback.send">Send</button>
+        <p id="fbNote" class="intro-hint" data-i18n="feedback.note">Anonymous. Only the museum's staff read it.</p>
+      </div>
+      <div id="fbThanks" class="feedback-card hidden">
+        <div class="fb-thanks-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><use href="#i-check"></use></svg></div>
+        <h1 data-i18n="feedback.thanks">Thank you</h1>
+        <p class="intro-hint" data-i18n="feedback.thanksText">The museum's team reads every message.</p>
+        <button id="fbAgain" class="btn btn-ghost" type="button" data-i18n="feedback.again">Write another</button>
+      </div>
     </section>
 
     <!-- Map and Feedback. In the bar because the shape of the app is five

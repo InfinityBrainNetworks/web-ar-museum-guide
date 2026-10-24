@@ -745,8 +745,15 @@
     // rather than leaving it floating over scene 1.
     if (!onFloor) hide(el.photoSheet);
 
-    // Adjust is for an exhibit that is actually on screen.
-    var canAdjust = m !== MODE.BOOT && !S.detailsOpen && !!el.adjustToggle;
+    // Adjust is for an exhibit that is actually on screen - and for the
+    // people who tune exhibits: staff signed in on this phone, or anyone with
+    // the debug log switched on in Settings. A visitor with neither never
+    // sees the gear.
+    var community = window.ARCommunity;
+    var tuner = (community && community.staff.state().signedIn) ||
+                (el.logToggle && !el.logToggle.classList.contains('hidden')) ||
+                window.ARContent.previewRequested();
+    var canAdjust = m !== MODE.BOOT && !S.detailsOpen && !!el.adjustToggle && tuner;
     toggle(el.adjustToggle, canAdjust);
     if (!canAdjust && el.adjustToggle) {
       hide(el.adjustPanel);
@@ -2378,6 +2385,15 @@
    */
   var lastShot = null;
 
+  /**
+   * Dashed "LOGO 1" boxes for slots with no artwork - a layout aid for whoever
+   * is setting the strip up, which here means the debug log is on. Visitors
+   * see real logos or none, on screen and in their photos.
+   */
+  function placeholdersWanted() {
+    return !!el.logToggle && !el.logToggle.classList.contains('hidden');
+  }
+
   /** The logo row over the camera feed, mirroring what the photo will print. */
   function renderBrandBar() {
     var host = el.brandBar;
@@ -2396,7 +2412,7 @@
 
     (brand.logos || []).forEach(function (entry) {
       var label = entry.label || 'LOGO';
-      if (!entry.src) { host.appendChild(slot(label)); return; }
+      if (!entry.src) { if (placeholdersWanted()) host.appendChild(slot(label)); return; }
       var img = document.createElement('img');
       img.alt = label;
       // No file there yet: show the same dashed box the photo will draw, so the
@@ -2471,13 +2487,98 @@
         : 'Save downloads the picture. You can also press and hold it to save it.');
     }
     el.photoHint.textContent = notes.join(' ');
+    resetShare();
     show(el.photoSheet);
+    // Offered only when the museum has the wall switched on; asked of the
+    // museum's live settings, not the release, so turning it off in the
+    // Studio takes effect at once.
+    if (window.ARCommunity && $('photoShare')) {
+      window.ARCommunity.feature('photobooth').then(function (on) {
+        if (on && lastShot && !el.photoSheet.classList.contains('hidden')) show($('photoShare'));
+      });
+    }
   }
 
   function closePhoto() {
     hide(el.photoSheet);
     el.photoSave.disabled = false;
-    el.photoSave.textContent = 'Save to photos';
+    el.photoSave.textContent = ARI18n.t('photo.save');
+    resetShare();
+  }
+
+  // ---------------------------------------------------------------- the photo wall
+  /*
+   * Sharing is two deliberate steps: "Share to the photo wall", then a box
+   * to tick saying yes, it may be shown publicly - and only then does the
+   * picture leave the phone. The rules refuse a photo without that consent
+   * on record, so it is not just this UI that insists.
+   */
+  var lastShared = null;
+
+  function resetShare() {
+    hide($('photoShare'));
+    hide($('photoConsent'));
+    hide($('photoShared'));
+    var agree = $('photoAgree');
+    if (agree) agree.checked = false;
+    var send = $('photoSend');
+    if (send) { send.disabled = true; send.textContent = ARI18n.t('photo.send'); }
+  }
+
+  function shareText(status) {
+    var wall = window.ARCommunity.wallUrl().replace(/^https?:\/\//, '').replace(/\/$/, '');
+    return ARI18n.t(status === 'approved' ? 'photo.sharedLive' : 'photo.sharedPending', { wall: wall });
+  }
+
+  function sharePhoto() {
+    if (!lastShot || !window.ARCommunity) return;
+    var send = $('photoSend');
+    send.disabled = true;
+    send.textContent = ARI18n.t('photo.sending');
+    var ex = EX();
+    var detail = ex ? window.ARContent.detailsFor(ex, ARI18n.code(), bundle && bundle.languages) : null;
+    window.ARCommunity.sharePhoto(lastShot.blob, {
+      consent: !!$('photoAgree').checked,
+      name: $('photoName').value,
+      exhibitId: ex ? ex.id : null,
+      exhibitName: detail && detail.detail.title ? detail.detail.title : (ex ? ex.name : null),
+      lang: ARI18n.code(),
+    }).then(function (result) {
+      lastShared = result.id;
+      hide($('photoConsent'));
+      $('photoSharedText').textContent = shareText(result.status);
+      show($('photoShared'));
+    }, function (err) {
+      log.error('photobooth: could not share — ' + (err && err.message ? err.message : err));
+      send.disabled = false;
+      send.textContent = ARI18n.t('photo.send');
+      el.photoHint.textContent = ARI18n.t('photo.shareFailed');
+    });
+  }
+
+  function unsharePhoto() {
+    if (!lastShared) return;
+    var btn = $('photoUnshare');
+    btn.disabled = true;
+    window.ARCommunity.removePhoto(lastShared).then(function () {
+      $('photoSharedText').textContent = ARI18n.t('photo.unshared');
+      hide(btn);
+      lastShared = null;
+    }, function (err) {
+      btn.disabled = false;
+      log.error('photobooth: could not remove — ' + (err && err.message ? err.message : err));
+    });
+  }
+
+  function wireShare() {
+    on($('photoShare'), 'click', function () {
+      hide($('photoShare'));
+      show($('photoConsent'));
+    });
+    on($('photoAgree'), 'change', function () { $('photoSend').disabled = !$('photoAgree').checked; });
+    on($('photoSend'), 'click', sharePhoto);
+    on($('photoCancel'), 'click', function () { resetShare(); show($('photoShare')); });
+    on($('photoUnshare'), 'click', unsharePhoto);
   }
 
   function savePhoto() {
@@ -3317,6 +3418,26 @@
 
     var patch = adjustPatch();
     el.adjustSave.disabled = true;
+
+    // Signed in as staff on this phone, with the gallery coming from the
+    // cloud: straight into the Studio's draft of this exhibit.
+    var community = window.ARCommunity;
+    if (community && community.staff.state().canEdit && bundle && bundle.source === 'cloud') {
+      community.staff.saveExhibit(ex.id, patch).then(function () {
+        el.adjustSave.disabled = false;
+        assignInto(ex.model, patch.model);
+        assignInto(ex.media, patch.media);
+        adjustNote('Saved to "' + ex.name + '" in the Studio. It reaches visitors with the next release.', 'ok');
+        log.ok('adjust: saved "' + ex.name + '" to the Studio draft as ' + community.staff.state().email +
+               ' — ' + JSON.stringify(patch.model));
+      }, function (err) {
+        el.adjustSave.disabled = false;
+        adjustNote(String((err && err.message) || err), 'bad');
+        log.warn('adjust: could not save to the Studio — ' + err);
+      });
+      return;
+    }
+
     window.ARContent.saveExhibitSettings(ex.id, patch).then(function (name) {
       el.adjustSave.disabled = false;
       // Keep the running copy in step, so leaving and re-entering the floor
@@ -3595,6 +3716,7 @@
     on(el.shotBtn, 'click', takePhoto);
     on(el.photoSave, 'click', savePhoto);
     on(el.photoClose, 'click', closePhoto);
+    wireShare();
     wireAdjust();
     wireGestures();
 
@@ -3750,6 +3872,7 @@
           var system = el.scene.systems['mindar-image-system'];
           return system && system.video;
         },
+        placeholders: placeholdersWanted,
       });
     }
 
@@ -3851,6 +3974,8 @@
     /** One sentence saying why, when there is one worth showing. */
     blockNote: function () { return S.blockNote; },
     inAR: function () { return S.started; },
+    /** Redraw the AR chrome - after a staff sign-in changes what it may show. */
+    refreshUi: function () { if (el.actionBar) applyModeUI(); },
     startAR: startAR,
     exitAR: exitAR,
     /** Reopen the language question. The picker itself stays app.js's. */
