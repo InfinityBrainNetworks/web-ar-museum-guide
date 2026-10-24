@@ -1,0 +1,12 @@
+{
+  "name": "ar-museum-e2e",
+  "private": true,
+  "type": "module",
+  "description": "The viewer, the Studio and the photobooth, end to end in headless Chrome",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 viewer.test.mjs offline.test.mjs"
+  },
+  "devDependencies": {
+    "puppeteer-core": "24.43.1"
+  }
+}

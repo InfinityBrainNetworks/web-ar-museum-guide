@@ -125,6 +125,15 @@
     // Live transform, seeded per exhibit and edited by the Adjust panel.
     modelRot: { x: 0, y: 0, z: 0 },      // degrees
     modelOffset: { x: 0, y: 0, z: 0 },   // metres from the placement point
+    // The point of the model that stands on the placement spot and that it
+    // turns about, as a fraction of its height. See js/placement.js.
+    modelAnchor: { x: 0, y: 0, z: 0 },
+    // The visitor's own pinch, on top of the exhibit's real size. Reset by the
+    // "Real size" chip, and never saved: it is theirs, not the museum's.
+    visitorScale: 1,
+    // Where the figure's base sits in its own model space, for centring the
+    // automatic shadow under it whatever the anchor is. Set when it loads.
+    figureBase: null,
 
     tStart: 0,
   };
@@ -578,6 +587,7 @@
     S.modelScale = ex.model.scale;
     S.modelRot = { x: ex.model.rotation.x, y: ex.model.rotation.y, z: ex.model.rotation.z };
     S.modelOffset = { x: ex.model.offset.x, y: ex.model.offset.y, z: ex.model.offset.z };
+    S.modelAnchor = window.ARPlacement.anchor(ex.model.anchor);
     S.spin = !!ex.model.spin;
     S.playClip = ex.model.playClip !== false;
     S.loopClip = !!ex.model.loopClip;
@@ -763,6 +773,12 @@
     el.floorScene.setAttribute('visible', m === MODE.FLOOR || m === MODE.PLACED);
     el.reticle.setAttribute('visible', m === MODE.FLOOR && S.floorFound);
     el.modelSlot.setAttribute('visible', m === MODE.PLACED);
+
+    // The touch layer only takes the screen while there is a figure to
+    // handle; the rest of the time it must not swallow a single tap.
+    var layer = $('gestureLayer');
+    if (layer) layer.classList.toggle('on', m === MODE.PLACED);
+    realSizeChip();
   }
 
   function setMode(next) {
@@ -1226,11 +1242,31 @@
     });
   }
 
-  /** The gyro frame at the moment the floor scene opened becomes "world". */
+  /**
+   * The floor scene's "world": gravity's up, and the heading the phone had
+   * when the scene opened.
+   *
+   * ONLY the heading. This used to keep the phone's whole orientation at that
+   * moment, which made the floor plane perpendicular to wherever the top of
+   * the phone pointed - right while it was held upright at the painting, and
+   * tilted by however far it was not. Opened with the phone already angled
+   * down, the floor came out angled too: the figure leaned, and stood nearer
+   * or further than the reticle. The device's orientation already carries
+   * gravity exactly, so only the compass part is taken from the moment, and
+   * up is always up.
+   */
   function captureReference() {
-    gyro.ref.copy(gyro.q);
+    var v = new THREE.Vector3(0, 0, -1).applyQuaternion(gyro.q);   // where the camera looks
+    if (Math.hypot(v.x, v.z) < 0.2) {
+      // Pointed almost straight down: the camera's heading is undefined, but
+      // the top edge of the phone points the way the visitor is facing.
+      v.set(0, 1, 0).applyQuaternion(gyro.q);
+    }
+    var yaw = Math.atan2(-v.x, -v.z);
+    gyro.ref.setFromAxisAngle(WORLD_UP, yaw);
     gyro.hasRef = true;
-    log.debug('floor scene: gyro reference frame captured');
+    log.debug('floor scene: gyro reference captured — heading ' +
+              (yaw * 180 / Math.PI).toFixed(0) + '°, up from gravity');
   }
 
   // ---------------------------------------------------- how steady is steady
@@ -1455,11 +1491,13 @@
     S.placedAt = p.clone();
     S.faceYaw = faceViewerYaw(p);
 
+    S.visitorScale = 1;
     buildFigure();
     applyFigureTransform();
     setMode(MODE.PLACED);
     updateFloorShadow();     // after setMode: it only draws in the placed scene
     setStatus(ARI18n.t('status.placed'), 'ok');
+    gestureHint(true);
     log.event('AR figure placed on the floor at ' +
               (p.length() / engine.unitsPerMetre).toFixed(2) + 'm, ' +
               'using the ' + engine.name + ' engine');
@@ -1489,20 +1527,25 @@
     var upm = S.engine ? S.engine.unitsPerMetre : 1;
     var slot = el.modelSlot.object3D;
 
+    // The visitor's pinch scales the whole slot, shadow and all, and the
+    // offset with it - as if the room's furniture had been drawn bigger.
+    var k = S.visitorScale || 1;
     if (S.placedAt) {
       var flat = new THREE.Vector3(S.modelOffset.x, 0, S.modelOffset.z)
-        .multiplyScalar(upm)
+        .multiplyScalar(upm * k)
         .applyAxisAngle(WORLD_UP, S.faceYaw);
       slot.position.copy(S.placedAt).add(flat);
     }
     slot.rotation.set(0, S.faceYaw, 0);
+    slot.scale.setScalar(k);
 
     var inner = $('modelTransform');
     if (!inner) return;
     inner.object3D.position.set(0, S.modelOffset.y * upm, 0);
     // YXZ: turn about world up first, then pitch, then roll — the order the
-    // three sliders read in.
-    inner.object3D.rotation.order = 'YXZ';
+    // three sliders read in, and the Studio's. All of it about the anchor,
+    // which normalizeModel() put on this entity's origin.
+    inner.object3D.rotation.order = window.ARPlacement.ORDER;
     inner.object3D.rotation.set(
       degToRad(S.modelRot.x), degToRad(S.modelRot.y), degToRad(S.modelRot.z));
   }
@@ -1581,6 +1624,7 @@
     S.shadowOpacity = typeof model.shadowOpacity === 'number' ? model.shadowOpacity : 0.5;
     S.modelRot = { x: model.rotation.x, y: model.rotation.y, z: model.rotation.z };
     S.modelOffset = { x: model.offset.x, y: model.offset.y, z: model.offset.z };
+    S.modelAnchor = window.ARPlacement.anchor(model.anchor);
     S.spin = !!model.spin;
     S.playClip = model.playClip !== false;
     S.loopClip = !!model.loopClip;
@@ -1590,6 +1634,169 @@
     S.faceYaw = 0;
     S.placedAt = null;
     S.figureFootprint = 0;
+    S.figureBase = null;
+    S.visitorScale = 1;
+    gestureHint(false);
+  }
+
+  // ---------------------------------------------------------------- touch
+  /*
+   * Once the figure is standing, the visitor can handle it:
+   *
+   *   one finger    drag it across the floor
+   *   two fingers   twist to turn it, pinch to make it bigger or smaller
+   *
+   * The drag follows the floor itself, not the screen: the finger's ray is cast
+   * onto the floor plane the figure stands on, so it stays under the finger
+   * however far away it is. Both floor engines share the code, because both
+   * keep that plane in #floorScene's own space.
+   *
+   * None of it is saved. The museum decides where the figure stands and how
+   * big it is; this is the visitor arranging it for a photo. "Real size" puts
+   * the scale back, and Move starts over.
+   */
+  var touch = { pointers: {}, count: 0, last: null, angle: 0, spread: 0, scale: 1 };
+  var VISITOR_SCALE_MIN = 0.4, VISITOR_SCALE_MAX = 2.5;
+
+  function gesturesOn() {
+    return S.mode === MODE.PLACED && !!S.placedAt &&
+           (!el.photoSheet || el.photoSheet.classList.contains('hidden')) &&
+           (!el.adjustPanel || el.adjustPanel.classList.contains('hidden'));
+  }
+
+  /** Where a point on the screen meets the floor, in #floorScene's space. */
+  var floorRay = null;
+  function floorPointAt(clientX, clientY, out) {
+    var cam = el.scene.camera;
+    if (!cam || !S.placedAt) return false;
+    if (!floorRay) floorRay = { caster: new THREE.Raycaster(), ndc: new THREE.Vector2(), inv: new THREE.Matrix4() };
+
+    // WebXR draws full-screen through the compositor. The gyro path draws into
+    // MindAR's canvas, which is sized to cover the screen and may overhang it.
+    var rect = S.engine && S.engine.worldTracked
+      ? { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight }
+      : el.scene.canvas.getBoundingClientRect();
+    floorRay.ndc.set(((clientX - rect.left) / rect.width) * 2 - 1,
+                     -((clientY - rect.top) / rect.height) * 2 + 1);
+    cam.updateMatrixWorld();
+    floorRay.caster.setFromCamera(floorRay.ndc, cam);
+
+    var scene = el.floorScene.object3D;
+    scene.updateMatrixWorld(true);
+    var ray = floorRay.caster.ray.clone().applyMatrix4(floorRay.inv.copy(scene.matrixWorld).invert());
+    if (Math.abs(ray.direction.y) < 1e-4) return false;
+    var t = (S.placedAt.y - ray.origin.y) / ray.direction.y;
+    if (!(t > 0)) return false;
+    out.copy(ray.origin).addScaledVector(ray.direction, t);
+    return true;
+  }
+
+  function twoFinger() {
+    var ids = Object.keys(touch.pointers);
+    var a = touch.pointers[ids[0]], b = touch.pointers[ids[1]];
+    return { angle: Math.atan2(b.y - a.y, b.x - a.x), spread: Math.hypot(b.x - a.x, b.y - a.y) };
+  }
+
+  function onGestureDown(e) {
+    if (!gesturesOn()) return;
+    e.preventDefault();
+    touch.pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+    touch.count = Object.keys(touch.pointers).length;
+    if (e.target.setPointerCapture) { try { e.target.setPointerCapture(e.pointerId); } catch (err) {} }
+
+    if (touch.count === 1) {
+      var hit = new THREE.Vector3();
+      touch.last = floorPointAt(e.clientX, e.clientY, hit) ? hit : null;
+    } else if (touch.count === 2) {
+      var g = twoFinger();
+      touch.angle = g.angle;
+      touch.spread = g.spread || 1;
+      touch.scale = S.visitorScale;
+      touch.last = null;      // a second finger ends the drag; lifting it does not restart one
+    }
+    gestureHint(false);
+  }
+
+  function onGestureMove(e) {
+    var p = touch.pointers[e.pointerId];
+    if (!p || !gesturesOn()) return;
+    e.preventDefault();
+    p.x = e.clientX;
+    p.y = e.clientY;
+
+    if (touch.count === 1 && touch.last) {
+      var hit = new THREE.Vector3();
+      if (!floorPointAt(e.clientX, e.clientY, hit)) return;
+      S.placedAt.x += hit.x - touch.last.x;
+      S.placedAt.z += hit.z - touch.last.z;
+      touch.last = hit;
+      applyFigureTransform();
+    } else if (touch.count === 2) {
+      var g = twoFinger();
+      // Screen angles grow clockwise; a turn about +y is counter-clockwise
+      // seen from above. Hence the minus: the figure turns the way the
+      // fingers do.
+      var d = g.angle - touch.angle;
+      if (d > Math.PI) d -= 2 * Math.PI;
+      if (d < -Math.PI) d += 2 * Math.PI;
+      S.faceYaw -= d;
+      touch.angle = g.angle;
+      S.visitorScale = clamp(touch.scale * (g.spread / touch.spread), VISITOR_SCALE_MIN, VISITOR_SCALE_MAX);
+      applyFigureTransform();
+      realSizeChip();
+    }
+  }
+
+  function onGestureUp(e) {
+    if (!touch.pointers[e.pointerId]) return;
+    delete touch.pointers[e.pointerId];
+    touch.count = Object.keys(touch.pointers).length;
+    if (touch.count < 2) {
+      touch.last = null;
+      if (Math.abs(S.visitorScale - 1) < 0.04) { S.visitorScale = 1; applyFigureTransform(); }
+      realSizeChip();
+      log.debug('figure handled by the visitor: ' +
+                (S.visitorScale === 1 ? 'real size' : '×' + S.visitorScale.toFixed(2)));
+    }
+  }
+
+  function realSizeChip() {
+    var chip = $('realSizeChip');
+    if (!chip) return;
+    var scaled = S.mode === MODE.PLACED && Math.abs(S.visitorScale - 1) > 0.001;
+    toggle(chip, scaled);
+    if (scaled) {
+      var label = $('realSizeValue');
+      if (label) label.textContent = '×' + S.visitorScale.toFixed(1);
+    }
+  }
+
+  /** "Drag to move · twist to turn", once per visit, until the first touch. */
+  var hintShown = false;
+  function gestureHint(on) {
+    var hint = $('gestureHint');
+    if (!hint) return;
+    if (!on) { hint.classList.remove('on'); return; }
+    if (hintShown) return;
+    hintShown = true;
+    hint.classList.add('on');
+    clearTimeout(gestureHint._t);
+    gestureHint._t = setTimeout(function () { hint.classList.remove('on'); }, 5200);
+  }
+
+  function wireGestures() {
+    var layer = $('gestureLayer');
+    if (!layer || !window.PointerEvent) return;
+    layer.addEventListener('pointerdown', onGestureDown, { passive: false });
+    layer.addEventListener('pointermove', onGestureMove, { passive: false });
+    layer.addEventListener('pointerup', onGestureUp);
+    layer.addEventListener('pointercancel', onGestureUp);
+    on($('realSizeChip'), 'click', function () {
+      S.visitorScale = 1;
+      applyFigureTransform();
+      realSizeChip();
+      log.event('figure back to real size');
+    });
   }
 
   /** Back to hunting for a spot, keeping the scene and the engine running. */
@@ -1603,64 +1810,40 @@
   }
 
   /**
-   * Measures a subtree in its OWN space.
+   * Scale the glTF to its real height and hang it from its anchor.
    *
-   * Box3.setFromObject() works in world space, and this model hangs under a
-   * scene whose matrix carries the engine's unit scale — and can be degenerate
-   * on the frames before the first pose arrives. Either would corrupt the fit,
-   * so the walk starts from identity at the root and ignores every ancestor.
+   * js/placement.js does the measuring and the arithmetic, and the Studio's
+   * floor editor calls the very same function - which is the whole guarantee
+   * that a figure stands here exactly as it stood there. With the default
+   * anchor this is what it always was: centred, base on the floor.
    */
-  function localBox(root) {
-    var box = new THREE.Box3();
-    var tmp = new THREE.Box3();
-
-    (function walk(node, parentMatrix) {
-      node.updateMatrix();
-      var m = new THREE.Matrix4().multiplyMatrices(parentMatrix, node.matrix);
-      if (node.geometry) {
-        if (!node.geometry.boundingBox) node.geometry.computeBoundingBox();
-        if (node.geometry.boundingBox) {
-          box.union(tmp.copy(node.geometry.boundingBox).applyMatrix4(m));
-        }
-      }
-      for (var i = 0; i < node.children.length; i++) walk(node.children[i], m);
-    })(root, new THREE.Matrix4());
-
-    return box;
-  }
-
-  /** Centre the glTF horizontally, stand it on its base, scale it to real height. */
   function normalizeModel(holder) {
     var obj = holder.getObject3D('mesh');
     if (!obj) { log.warn('model has no mesh to normalize'); return; }
 
-    obj.position.set(0, 0, 0);
-    obj.scale.set(1, 1, 1);
-    obj.updateMatrix();
-
-    var box = localBox(obj);
-    var size = box.getSize(new THREE.Vector3());
-    var center = box.getCenter(new THREE.Vector3());
-
-    if (!isFinite(size.y) || size.y <= 0) {
+    // Measured the first time only: see fit() on why a re-measure mid-clip
+    // would resize the figure.
+    var fit = window.ARPlacement.fit(THREE, obj, figureHeightUnits(), S.modelAnchor,
+                                     obj.userData.__measure || null);
+    if (fit) obj.userData.__measure = fit.measure;
+    if (!fit) {
       log.warn('model bounding box is empty (no geometry, or skinned-only meshes) — ' +
                'leaving it at its authored scale');
       return;
     }
 
-    var wanted = figureHeightUnits();
-    var s = wanted / size.y;
-    obj.scale.setScalar(s);
-    // The base sits on the slot origin, which is the floor — not the centre,
-    // or half the figure would be underground.
-    obj.position.set(-center.x * s, -box.min.y * s, -center.z * s);
+    S.figureFootprint = fit.footprint;
+    S.figureBase = { object: obj, point: fit.measure.base.clone() };
 
-    S.figureFootprint = Math.max(size.x, size.z) * s;
-
+    var size = fit.measure.size;
+    var a = S.modelAnchor;
     log.info('model normalized: source size ' +
              size.x.toFixed(2) + ' x ' + size.y.toFixed(2) + ' x ' + size.z.toFixed(2) +
-             ' -> scale ' + s.toFixed(4) + ' (' +
-             (modelCfg().heightMeters * S.modelScale).toFixed(2) + 'm tall on the floor)');
+             ' -> scale ' + fit.scale.toFixed(4) + ' (' +
+             (modelCfg().heightMeters * S.modelScale).toFixed(2) + 'm tall on the floor), ' +
+             'anchor ' + (a.x || a.y || a.z
+               ? a.x.toFixed(3) + ', ' + a.y.toFixed(3) + ', ' + a.z.toFixed(3) + ' of its height'
+               : 'at the base centre'));
   }
 
   /**
@@ -1745,11 +1928,17 @@
     g.id = 'modelHolder';
     g.setAttribute('data-placeholder', '');
 
-    // Authored around its own centre, then lifted so its base is on the floor.
-    var f = figureHeightUnits() * 0.92;
+    // Authored around its own centre, then lifted so its base is on the floor
+    // - and shifted by the anchor, so a placeholder obeys the same rule a real
+    // model does.
+    var h = figureHeightUnits();
+    var f = h * 0.92;
+    var a = S.modelAnchor;
+    g.setAttribute('position', (-a.x * h) + ' ' + (-a.y * h) + ' ' + (-a.z * h));
     var lift = document.createElement('a-entity');
     lift.setAttribute('position', '0 ' + (f * 0.46) + ' 0');
     S.figureFootprint = f * 0.84;
+    S.figureBase = { object: g.object3D, point: new THREE.Vector3(0, 0, 0) };
 
     var base = document.createElement('a-cylinder');
     base.setAttribute('radius', f * 0.42);
@@ -1868,11 +2057,31 @@
     }
   }
 
-  /** The circle an exhibit gets when it has not been given a shadow shape. */
+  /**
+   * The circle an exhibit gets when it has not been given a shadow shape.
+   *
+   * Centred under the figure's base rather than under the slot: with the
+   * anchor anywhere but the base centre - a statue anchored at the front edge
+   * of its plinth, say - the two are not the same spot.
+   */
   function autoShadowBlob() {
     var upm = S.engine ? S.engine.unitsPerMetre : 1;
     var spread = Math.max(0.1 * upm, (S.figureFootprint || 0.5 * upm) * 2.1) / upm;
-    return { x: 0, z: 0, w: spread, d: spread, r: 0, o: 1, c: '#000000' };
+    var at = figureBaseOnFloor();
+    return { x: at.x, z: at.z, w: spread, d: spread, r: 0, o: 1, c: '#000000' };
+  }
+
+  /** Where the figure's base centre is, in metres in the slot's frame. */
+  function figureBaseOnFloor() {
+    var base = S.figureBase;
+    if (!base || !base.object) return { x: 0, z: 0 };
+    var slot = el.modelSlot.object3D;
+    slot.updateMatrixWorld(true);
+    var p = base.object.localToWorld(base.point.clone());
+    slot.worldToLocal(p);
+    var upm = S.engine ? S.engine.unitsPerMetre : 1;
+    if (!isFinite(p.x) || !isFinite(p.z)) return { x: 0, z: 0 };
+    return { x: p.x / upm, z: p.z / upm };
   }
 
   function copyShadows(list) {
@@ -2018,15 +2227,38 @@
     if (bundle && bundle.mindSrc) system.imageTargetSrc = bundle.mindSrc;
 
     var shown = function (v) { return v === null || v === undefined ? 'library default' : v; };
-    log.event('starting AR — mind: ' + system.imageTargetSrc +
+    log.event('starting AR — mind: ' + shortSrc(system.imageTargetSrc) +
               ', filterMinCF=' + shown(system.filterMinCF) +
               ', filterBeta=' + shown(system.filterBeta) +
               ', missTolerance=' + shown(system.missTolerance) +
               ', warmupTolerance=' + shown(system.warmupTolerance));
-    try {
-      system.start();
-    } catch (e) {
-      onArError(e);
+
+    var go = function () {
+      if (!S.started) return;          // they left while it downloaded
+      try {
+        system.start();
+      } catch (e) {
+        onArError(e);
+      }
+    };
+
+    // The tracker is the one file AR cannot start without, and at several MB
+    // the slowest. If the gallery download has not reached it yet, fetch it
+    // now - into the offline cache, so this is the only time - and say how far
+    // along it is, rather than spinning in silence.
+    if (window.AROffline && bundle && bundle.mindSrc) {
+      var mb = function (n) { return (n / 1048576).toFixed(1); };
+      window.AROffline.ensure(bundle.mindSrc, function (got, total) {
+        el.loadingText.textContent = total
+          ? ARI18n.t('loading.tracker', { done: mb(got), total: mb(total) })
+          : ARI18n.t('loading.trackerSome', { done: mb(got) });
+      }).then(go, function (err) {
+        log.warn('the tracker could not be kept offline (' + (err && err.message ? err.message : err) +
+                 ') — MindAR will fetch it itself');
+        go();
+      });
+    } else {
+      go();
     }
 
     // MindAR has no timeout of its own; without this the user just watches a
@@ -3032,6 +3264,9 @@
           y: roundToStep(S.modelOffset.y, 0.01),
           z: roundToStep(S.modelOffset.z, 0.01),
         },
+        // Set in the Studio's floor editor, and carried through untouched so
+        // a save from the phone never moves it.
+        anchor: { x: S.modelAnchor.x, y: S.modelAnchor.y, z: S.modelAnchor.z },
         lighting: S.lighting,
         shadowOpacity: roundToStep(S.shadowOpacity, 0.01),
         shadowFollow: !!S.shadowFollow,
@@ -3361,6 +3596,7 @@
     on(el.photoSave, 'click', savePhoto);
     on(el.photoClose, 'click', closePhoto);
     wireAdjust();
+    wireGestures();
 
     window.addEventListener('orientationchange', function () {
       setTimeout(function () {
@@ -3594,6 +3830,12 @@
     queue.forEach(function (fn) {
       try { fn(); } catch (e) { log.error('a ready handler threw: ' + ((e && e.stack) || e)); }
     });
+    // Now there is a gallery to download. Explore is worth having offline even
+    // on a phone that cannot run the camera, so this runs on every path here.
+    if (window.AROffline && bundle) {
+      try { window.AROffline.start(bundle); }
+      catch (e) { log.warn('offline: could not start — ' + e); }
+    }
   }
 
   window.ARViewer = {
@@ -3622,6 +3864,46 @@
       return window.ARContent.detailsFor(ex, ARI18n.code(), bundle && bundle.languages);
     },
     log: log,
+    /**
+     * Where everything is, as plain numbers: the scene, the live transform,
+     * and the standing figure's bounds in metres in its slot's frame (bind
+     * pose, like the sizing). For the end-to-end tests and the debug log -
+     * it reads, and never changes anything.
+     */
+    inspect: function () {
+      var upm = S.engine ? S.engine.unitsPerMetre : 1;
+      var out = {
+        mode: S.mode, engine: S.engine ? S.engine.name : null,
+        exhibit: EX() ? EX().id : null, activeIndex: S.activeIndex,
+        mediaReady: S.mediaReady, floorStable: S.floorStable,
+        anchor: S.modelAnchor, offset: S.modelOffset, rotation: S.modelRot,
+        scale: S.modelScale, visitorScale: S.visitorScale, faceYaw: S.faceYaw,
+        placedAt: S.placedAt ? { x: S.placedAt.x / upm, y: S.placedAt.y / upm, z: S.placedAt.z / upm } : null,
+        figure: null,
+      };
+      var holder = $('modelHolder');
+      var mesh = holder && (holder.getObject3D('mesh') || holder.object3D);
+      if (mesh && S.mode === MODE.PLACED && THREE) {
+        var slot = el.modelSlot.object3D;
+        slot.updateMatrixWorld(true);
+        // The bounds it was fitted by, measured at load in the model's own
+        // space and carried straight into the slot's frame - never through a
+        // world-aligned box, which the gyro engine's tilted scene would
+        // inflate. So a playing clip cannot change the answer either.
+        var measured = mesh.userData && mesh.userData.__measure;
+        var source = measured ? measured.box.clone() : window.ARPlacement.localBox(THREE, holder.object3D);
+        var from = measured ? mesh : holder.object3D.parent;
+        var toSlot = new THREE.Matrix4().copy(slot.matrixWorld).invert().multiply(from.matrixWorld);
+        var inSlot = source.applyMatrix4(toSlot);
+        out.figure = {
+          min: { x: inSlot.min.x / upm, y: inSlot.min.y / upm, z: inSlot.min.z / upm },
+          max: { x: inSlot.max.x / upm, y: inSlot.max.y / upm, z: inSlot.max.z / upm },
+          loaded: !!holder.getObject3D('mesh'),
+          placeholder: holder.hasAttribute('data-placeholder'),
+        };
+      }
+      return JSON.parse(JSON.stringify(out));
+    },
     /** Runs fn once the exhibits have landed — immediately if they already have. */
     onReady: function (fn) {
       if (boot.ready) fn();

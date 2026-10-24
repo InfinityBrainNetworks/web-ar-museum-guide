@@ -774,3 +774,101 @@
   text-align: center;
   animation: ibn-rise var(--d-base) var(--ease-museum) both;
 }
+
+/* ------------------------------------------------------- getting the gallery ready */
+/* The first-visit download. A sibling of #shell, above it (30) and below the
+   language screen (40), so a first visit reads language -> this -> Explore. */
+.sync-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(24px + var(--safe-t)) 22px calc(24px + var(--safe-b));
+  background: radial-gradient(120% 80% at 50% 0%, #2A1B13 0%, var(--c-bg) 68%);
+  color: var(--c-text);
+  text-align: center;
+  animation: ibn-rise var(--d-base) var(--ease-museum) both;
+}
+.sync-card {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.sync-card h1 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 30px;
+  line-height: 1.2;
+  font-weight: 600;
+}
+.sync-sigil {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--c-hairline);
+  background: radial-gradient(circle at 50% 35%, rgba(232, 163, 61, 0.22), rgba(20, 17, 16, 0.4));
+  color: var(--c-amber);
+  box-shadow: 0 0 40px rgba(232, 163, 61, 0.18);
+}
+.sync-sigil svg { width: 28px; height: 28px; animation: ibn-breathe var(--d-amb) ease-in-out infinite; }
+.sync-lead { margin: 0; color: var(--c-text-2); font-size: 15px; line-height: 1.6; }
+.sync-meter {
+  width: 100%;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--c-hairline-soft);
+}
+.sync-meter > div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--c-terracotta-dk), var(--c-amber));
+  transform-origin: left center;
+  transform: scaleX(0.02);
+  transition: transform 0.3s var(--ease-soft);
+}
+.sync-numbers {
+  width: 100%;
+  margin: 0 0 6px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--c-text-3);
+  font-variant-numeric: tabular-nums;
+}
+.sync-numbers span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sync-card .btn-lg { width: 100%; }
+.sync-card .intro-hint.bad { color: #ef8f8f; }
+
+/* The rest of the gallery downloading behind Explore. */
+.sync-pill {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--c-hairline);
+  background: rgba(232, 163, 61, 0.1);
+  color: var(--c-amber);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.sync-pill svg { width: 15px; height: 15px; animation: ibn-breathe var(--d-amb) ease-in-out infinite; }

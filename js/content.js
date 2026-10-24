@@ -343,6 +343,14 @@
       // rather than the room, so the same numbers mean the same thing wherever
       // in the gallery it is stood up.
       offset: vec3(m.offset, { x: 0, y: 0, z: 0 }),
+      // The point of the model that lands on the placement spot, and that it
+      // turns and scales about - Blender's origin. A fraction of the figure's
+      // height, from the centre of its base; see js/placement.js. Zero is the
+      // base centre, which is where every exhibit stood before this existed.
+      anchor: vec3(m.anchor, { x: 0, y: 0, z: 0 }),
+      // Studio bookkeeping: the anchor was set on purpose and should not be
+      // dragged by accident. Means nothing to the viewer.
+      anchorLocked: !!m.anchorLocked,
       // A plain multiplier on heightMeters, so a model can be nudged bigger or
       // smaller without restating the real-world measurement.
       scale: typeof m.scale === 'number' ? m.scale : 1,
@@ -410,12 +418,12 @@
   }
 
   /** Everything an exhibit may override on top of the model defaults. */
-  var MODEL_FIELDS = ['heightMeters', 'rotation', 'offset', 'scale', 'spin',
+  var MODEL_FIELDS = ['heightMeters', 'rotation', 'offset', 'anchor', 'anchorLocked', 'scale', 'spin',
                       'playClip', 'loopClip', 'lighting', 'shadowOpacity', 'shadows',
                       'shadowFollow', 'shadowScale'];
 
   /** Of those, the ones that are {x,y,z} and must be merged, not replaced. */
-  var MODEL_VECTORS = ['rotation', 'offset'];
+  var MODEL_VECTORS = ['rotation', 'offset', 'anchor'];
 
   /**
    * Lay an exhibit's own model settings over the defaults.
@@ -545,15 +553,19 @@
       targetIndex: index,
       image: {
         src: image.src || null,
+        // A small copy for the Explore grid, when the Studio made one.
+        thumb: image.thumb || null,
         file: image.file || null,
         width: image.width || 1,
         height: image.height || 1,
+        size: image.size || 0,
       },
       media: assign(assign({}, mediaDefaults()), {
         src: media.src || null,
         file: media.file || null,
         width: media.width || 0,
         height: media.height || 0,
+        size: media.size || 0,
       }),
       details: normalizeDetails(ex.details, languages),
       model: null,
@@ -578,6 +590,7 @@
       out.model = assign(assign({}, modelDefaults()), {
         src: model.src || null,
         file: model.file || null,
+        size: model.size || 0,
       });
       applyModelFields(out.model, model);
     } else if (model) {
@@ -630,23 +643,137 @@
     };
   }
 
+  /** A bundle or a release manifest - the same shape - as the viewer uses it. */
+  function fromData(data, source, extra) {
+    if (!data || !Array.isArray(data.exhibits)) throw new Error('the content has no exhibits list');
+    var languages = languageList(data.languages);
+    return assign({
+      source: source,
+      generated: data.generated || null,
+      mindSrc: data.mindSrc || './assets/content/targets.mind',
+      mindSize: data.mindSize || 0,
+      languages: languages,
+      site: data.site || {},
+      release: data.release || null,
+      exhibits: data.exhibits.map(function (ex, i) { return normalize(ex, i, languages); }),
+    }, extra || {});
+  }
+
+  /**
+   * The bundle's own files, with its export stamp on the end.
+   *
+   * Their names come from the exhibit's title, not its contents, so a
+   * re-export can put a different video behind the same name - and the offline
+   * cache keeps a file for as long as its URL is unchanged. The stamp makes
+   * every export a new set of URLs. Release files from the cloud are named by
+   * their contents and need nothing of the kind.
+   */
+  function versioned(src, stamp) {
+    if (!src || !stamp || !/^\.{0,2}\//.test(src) || src.indexOf('?') !== -1) return src;
+    return src + '?v=' + encodeURIComponent(stamp);
+  }
+
+  function stampBundle(data) {
+    var v = data && data.generated;
+    if (!v) return data;
+    data.mindSrc = versioned(data.mindSrc || './assets/content/targets.mind', v);
+    (data.exhibits || []).forEach(function (ex) {
+      if (ex.image) ex.image.src = versioned(ex.image.src, v);
+      var media = ex.media || ex.video;
+      if (media) media.src = versioned(media.src, v);
+      if (ex.model) ex.model.src = versioned(ex.model.src, v);
+      Object.keys(ex.details || {}).forEach(function (code) {
+        var audio = ex.details[code] && ex.details[code].audio;
+        if (audio) audio.src = versioned(audio.src, v);
+      });
+    });
+    return data;
+  }
+
   function fromBundle() {
     return fetch('./assets/content/content.json', { cache: 'no-cache' })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
       })
+      .then(function (data) { return fromData(stampBundle(data), 'bundle'); });
+  }
+
+  // ------------------------------------------------------------------ the cloud
+  /*
+   * With a Firebase project configured (js/cloud/config.js), what visitors see
+   * is whichever release the Studio last put live. Two small reads: the
+   * pointer at public/live, then the manifest it names. The manifest and every
+   * file in it are immutable, so the offline cache can keep them forever, and
+   * a phone that loses the network mid-visit still has the release it last saw.
+   */
+  var LAST_RELEASE_KEY = 'ar-museum-last-release';
+
+  function cloud() {
+    var c = window.AR_CLOUD;
+    return c && c.enabled() ? c : null;
+  }
+
+  /** ?release=<id>: a release that is not live yet, from the Studio's phone preview. */
+  function releaseRequested() {
+    var m = /[?&]release=([A-Za-z0-9_-]{1,80})/.exec(location.search);
+    return m ? m[1] : null;
+  }
+
+  function rememberRelease(live) {
+    try {
+      localStorage.setItem(LAST_RELEASE_KEY, JSON.stringify({
+        release: live.release, manifest: live.manifest, at: live.at || null,
+      }));
+    } catch (e) { /* a private window simply has no memory */ }
+  }
+
+  function lastRelease() {
+    try { return JSON.parse(localStorage.getItem(LAST_RELEASE_KEY) || 'null'); }
+    catch (e) { return null; }
+  }
+
+  function fromManifest(pointer, extra) {
+    return fetch(pointer.manifest)
+      .then(function (r) {
+        if (!r.ok) throw new Error('the release manifest answered HTTP ' + r.status);
+        return r.json();
+      })
       .then(function (data) {
-        if (!data || !Array.isArray(data.exhibits)) throw new Error('content.json has no exhibits list');
-        var languages = languageList(data.languages);
-        return {
-          source: 'bundle',
-          generated: data.generated || null,
-          mindSrc: data.mindSrc || './assets/content/targets.mind',
-          languages: languages,
-          exhibits: data.exhibits.map(function (ex, i) { return normalize(ex, i, languages); }),
-        };
+        return fromData(data, 'cloud', assign({
+          releaseId: pointer.release,
+          // Kept so the offline download can keep the manifest too: it was
+          // fetched before the service worker was in control.
+          manifestSrc: pointer.manifest,
+        }, extra || {}));
       });
+  }
+
+  function fromCloud(notes) {
+    var c = cloud();
+    if (!c) return Promise.reject(new Error('no Firebase project is configured'));
+
+    var wanted = releaseRequested();
+    if (wanted) {
+      return c.getDocument('releases/' + wanted, c.liveTimeoutMs).then(function (doc) {
+        if (!doc || !doc.manifest) throw new Error('there is no release "' + wanted + '"');
+        return fromManifest({ release: wanted, manifest: doc.manifest }, { previewRelease: true });
+      });
+    }
+
+    return c.getDocument('public/live', c.liveTimeoutMs).then(function (live) {
+      if (!live || !live.manifest) throw new Error('no release has been put live yet');
+      rememberRelease(live);
+      return fromManifest(live);
+    }, function (err) {
+      // Offline, or Firestore is having a bad day: the release this phone saw
+      // last is still in its cache, and is a far better answer than nothing.
+      var last = lastRelease();
+      if (!last || !last.manifest) throw err;
+      notes.push('the live release could not be checked (' + err.message + ') — ' +
+                 'using the one this phone last saw, ' + last.release);
+      return fromManifest(last, { offline: true });
+    });
   }
 
   function fromDraft() {
@@ -783,12 +910,22 @@
     var notes = [];
     var wantPreview = previewRequested();
 
-    var chain = wantPreview
-      ? fromDraft().catch(function (err) {
-          notes.push('preview requested but unavailable (' + err.message + ') — falling back');
-          return fromBundle();
-        })
-      : fromBundle();
+    // The bundle in the repo is the floor everything else falls through to.
+    var thenBundle = function (what) {
+      return function (err) {
+        notes.push(what + ' (' + err.message + ') — falling back to the bundle in the repo');
+        return fromBundle();
+      };
+    };
+
+    var chain;
+    if (wantPreview) {
+      chain = fromDraft().catch(thenBundle('preview requested but unavailable'));
+    } else if (cloud() && !/[?&]source=bundle\b/.test(location.search)) {
+      chain = fromCloud(notes).catch(thenBundle('no cloud release'));
+    } else {
+      chain = fromBundle();
+    }
 
     return chain
       .catch(function (err) {
@@ -837,5 +974,7 @@
     sanitizeRichText: sanitizeRichText,
     plainText: plainText,
     previewRequested: previewRequested,
+    releaseRequested: releaseRequested,
+    fromData: fromData,
   };
 })();

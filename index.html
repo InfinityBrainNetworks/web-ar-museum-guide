@@ -7,7 +7,11 @@
 <meta name="description" content="Web AR museum guide - scans an artwork, plays its video or picture over it, reads out its label in your language, then places a related 3D object on the floor.">
 <title>Web AR Museum Guide</title>
 
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>">
+<link rel="icon" href="./assets/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="./css/theme.css">
 <link rel="stylesheet" href="./css/splash.css">
 <link rel="stylesheet" href="./css/style.css">
@@ -17,11 +21,21 @@
      so failures inside A-Frame / MindAR are captured too. -->
 <script src="./js/logger.js"></script>
 <script src="./js/config.js"></script>
+<!-- The Firebase project, if this gallery has one. Without it the guide reads
+     the bundle in the repo, exactly as before. -->
+<script src="./js/cloud/config.js"></script>
 <!-- Resolves which exhibits this page shows: the admin portal's draft when
-     opened as ?preview=1, otherwise the deployed bundle, otherwise config.js. -->
+     opened as ?preview=1, otherwise the live cloud release, otherwise the
+     bundle in the repo. -->
 <script src="./js/content.js"></script>
+<!-- Where a figure stands. Shared with the Studio's floor editor, so the two
+     can never disagree. -->
+<script src="./js/placement.js"></script>
 <!-- The interface's own words. The exhibits' words travel with the exhibits. -->
 <script src="./js/i18n.js"></script>
+<!-- The gallery, downloaded once and kept: the service worker, the download
+     manager and its screen. Optional - without it everything streams. -->
+<script src="./js/offline.js"></script>
 
 <script src="https://cdn.jsdelivr.net/npm/aframe@1.5.0/dist/aframe-master.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -181,6 +195,17 @@
 <!-- ============ OVERLAY UI ============ -->
 <!-- One wrapper, because WebXR's dom-overlay can only promote a single element. -->
 <div id="overlay">
+
+<!-- 1. The figure, by hand: drag to move it, twist to turn, pinch to resize.
+        Full-bleed and FIRST, so every control below sits on top of it - and
+        pointer-transparent except in scene 3, when js/app.js adds .on. -->
+<div id="gestureLayer" class="gesture-layer" aria-hidden="true"></div>
+<p id="gestureHint" class="gesture-hint" aria-hidden="true">
+  <span data-i18n="gesture.drag">Drag to move</span><span class="sep">·</span><span data-i18n="gesture.twist">Twist to turn</span><span class="sep">·</span><span data-i18n="gesture.pinch">Pinch to resize</span>
+</p>
+<button id="realSizeChip" class="real-size-chip hidden" type="button">
+  <span id="realSizeValue">×1.0</span><span data-i18n="gesture.realSize">Real size</span>
+</button>
 
 <!-- 2. Loading -->
 <section id="loadingScreen" class="screen hidden">
@@ -426,6 +451,18 @@
     <g id="i-bug" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <rect x="7" y="7" width="10" height="13" rx="5"/><path d="M3 11h4M17 11h4M3.5 17h3.5M17 17h3.5M9 5l1.5 2M15 5l-1.5 2"/>
     </g>
+    <g id="i-download" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/>
+    </g>
+    <g id="i-check" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 12.5l4.5 4.5L19 7.5"/>
+    </g>
+    <g id="i-star" fill="currentColor" stroke="none">
+      <path d="M12 3.2l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 17l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z"/>
+    </g>
+    <g id="i-camera" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 8.5A2.5 2.5 0 016.5 6h1.8l1.4-2h4.6l1.4 2h1.8A2.5 2.5 0 0120 8.5v9a2.5 2.5 0 01-2.5 2.5h-11A2.5 2.5 0 014 17.5z"/><circle cx="12" cy="13" r="3.6"/>
+    </g>
     <g id="i-link" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <path d="M14 4h6v6M20 4l-9 9M18 14v4.5A1.5 1.5 0 0116.5 20h-11A1.5 1.5 0 014 18.5v-11A1.5 1.5 0 015.5 6H10"/>
     </g>
@@ -469,6 +506,27 @@
   </div>
 </section>
 
+<!-- ============ GETTING THE GALLERY READY ============ -->
+<!-- The first visit downloads the gallery once, so AR is instant and the guide
+     works without wifi. Above the shell and below the language screen, so a
+     first visit reads: language, then this, then Explore. Driven by
+     js/offline.js; hidden whenever there is nothing left to fetch. -->
+<section id="syncScreen" class="sync-screen hidden" aria-live="polite">
+  <div class="sync-card">
+    <div class="sync-sigil" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><use href="#i-download"></use></svg>
+    </div>
+    <p class="eyebrow" data-i18n="sync.eyebrow">Before you start</p>
+    <h1 data-i18n="sync.title">Getting the gallery ready</h1>
+    <p id="syncLead" class="sync-lead"></p>
+    <div class="sync-meter" aria-hidden="true"><div id="syncFill"></div></div>
+    <p class="sync-numbers"><span id="syncBytes"></span><span id="syncItem"></span></p>
+    <button id="syncGo" class="btn btn-primary btn-lg" type="button" data-i18n="sync.go">Start exploring</button>
+    <button id="syncSkip" class="btn btn-ghost btn-sm" type="button" data-i18n="sync.notNow">Not now</button>
+    <p id="syncHint" class="intro-hint"></p>
+  </div>
+</section>
+
 <!-- ============ BROWSE SHELL ============ -->
 <!-- Explore, the exhibit label, and Settings - everything the app can do with
      the camera off. See the note at the top of css/shell.css for why this is a
@@ -480,6 +538,11 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-back"></use></svg>
     </button>
     <span id="shellTitle" class="shell-wordmark" data-i18n="app.name">Museum Guide</span>
+    <!-- The rest of the gallery downloading behind Explore. Tap for details. -->
+    <button id="syncPill" class="sync-pill hidden" type="button" data-i18n-label="sync.title" aria-label="Downloading the gallery">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-download"></use></svg>
+      <span id="syncPillValue">0%</span>
+    </button>
     <button id="shellLang" class="icon-btn" type="button" data-i18n-label="lang.change" aria-label="Language">
       <span id="shellLangCode">EN</span>
     </button>
@@ -568,6 +631,20 @@
               <span data-i18n="settings.logSub">Show the bug button over the camera</span>
             </span>
             <span class="switch" aria-hidden="true"></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <h2 data-i18n="settings.storage">On this phone</h2>
+        <div class="settings-list">
+          <button id="setOffline" class="settings-row" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-download"></use></svg>
+            <span class="label">
+              <strong data-i18n="settings.offline">Offline gallery</strong>
+              <span id="setOfflineValue">Keep the gallery on this phone</span>
+            </span>
+            <span class="chev" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><use href="#i-chevron"></use></svg></span>
           </button>
         </div>
       </div>

@@ -87,7 +87,68 @@ a-scene, .a-canvas { width: 100% !important; height: 100% !important; }
 #overlay > .details-sheet,
 #overlay > .adjust-toggle,
 #overlay > .exit-ar,
+#overlay > .real-size-chip,
 #overlay > .adjust-panel { pointer-events: auto; }
+
+/* ---------------------------------------------------------------- handling the figure */
+/* Drag, twist and pinch. Full-bleed, at the bottom of the stack and the first
+   child of #overlay, so every control is drawn over it - and it takes no
+   pointer at all until a figure is standing, when js/app.js adds .on. */
+.gesture-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+}
+#overlay > .gesture-layer.on { pointer-events: auto; touch-action: none; }
+
+.gesture-hint {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--bar-lift) + 104px + var(--safe-b));
+  z-index: 23;
+  margin: 0;
+  display: flex;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--c-text);
+  background: rgba(0, 0, 0, 0.62);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  opacity: 0;
+  transform: translate(-50%, 8px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  pointer-events: none !important;
+}
+.gesture-hint.on { opacity: 1; transform: translate(-50%, 0); }
+.gesture-hint .sep { color: var(--c-text-3); }
+
+.real-size-chip {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--bar-lift) + 104px + var(--safe-b));
+  z-index: 24;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--c-hairline);
+  background: rgba(20, 17, 16, 0.78);
+  color: var(--c-text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.real-size-chip #realSizeValue { color: var(--c-terracotta-lt); }
 .a-enter-vr, .a-enter-ar, .a-orientation-modal { display: none !important; }
 
 .hidden { display: none !important; }
