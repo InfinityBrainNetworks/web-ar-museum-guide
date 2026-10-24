@@ -1,0 +1,86 @@
+rules_version = '2';
+
+/*
+ * Who may read and write what, in Cloud Storage. The roles are the ones in
+ * firestore.rules, read from the same /members documents.
+ *
+ * Exhibit files are public to read, because a release has to be: visitors
+ * download them anonymously. Every exhibit file is named after a hash of its
+ * own bytes, so a path is never reused for different content - which is what
+ * lets a phone cache it forever, and an older release keep working after the
+ * file is replaced.
+ */
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() { return request.auth != null; }
+
+    function staffAccount() {
+      return signedIn()
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
+        && request.auth.token.email_verified == true
+        && request.auth.token.email is string;
+    }
+
+    function member() {
+      return /databases/(default)/documents/members/$(request.auth.token.email.lower());
+    }
+
+    function hasRole(roles) {
+      return staffAccount()
+        && firestore.exists(member())
+        && firestore.get(member()).data.role in roles;
+    }
+
+    function isEditor()    { return hasRole(['owner', 'admin', 'editor']); }
+    function isModerator() { return hasRole(['owner', 'admin', 'editor', 'moderator']); }
+
+    function under(megabytes) { return request.resource.size < megabytes * 1024 * 1024; }
+    function typed(pattern)   { return request.resource.contentType.matches(pattern); }
+
+    // Target photos, thumbnails, videos, stills, narration and 3D models.
+    match /exhibits/{exhibitId}/{file} {
+      allow read: if true;
+      allow create, update: if isEditor() && under(250)
+        && typed('image/(jpeg|png|webp)|video/(mp4|webm|quicktime)|audio/(mpeg|mp4|aac|x-m4a|ogg|wav)|model/gltf-binary|application/octet-stream');
+      allow delete: if isEditor();
+    }
+
+    // Compiled image trackers, one per exhibit order.
+    match /tracker/{file} {
+      allow read: if true;
+      allow create, update: if isEditor() && under(150);
+      allow delete: if isEditor();
+    }
+
+    // Release manifests. Never rewritten once a release exists.
+    match /releases/{releaseId}/{file} {
+      allow read: if true;
+      allow create: if isEditor() && under(20) && typed('application/json');
+      allow delete: if isEditor();
+    }
+
+    // The gallery's own artwork: logos, the floor plan.
+    match /site/{file} {
+      allow read: if true;
+      allow create, update: if isEditor() && under(20) && typed('image/.*');
+      allow delete: if isEditor();
+    }
+
+    // Visitors' photos. Written by the visitor's own anonymous account, into a
+    // folder named after it, and read by that visitor or by staff. The wall
+    // shows approved photos through the download URL stored on the Firestore
+    // record, so nothing here has to be public.
+    match /photobooth/{uid}/{photo} {
+      allow read: if (signedIn() && request.auth.uid == uid) || isModerator();
+      allow create: if signedIn() && request.auth.uid == uid
+        && photo.matches('[A-Za-z0-9_-]{8,40}[.]jpg')
+        && under(5) && typed('image/jpeg');
+      allow delete: if (signedIn() && request.auth.uid == uid) || isModerator();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

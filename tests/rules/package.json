@@ -1,0 +1,14 @@
+{
+  "name": "ar-museum-rules-tests",
+  "private": true,
+  "type": "module",
+  "description": "Firestore and Storage security rules, tested against the local emulators",
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore,storage --project demo-museum --config ../../firebase.json \"node --test rules.test.mjs\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "5.0.2",
+    "firebase": "12.19.0",
+    "firebase-tools": "15.34.0"
+  }
+}

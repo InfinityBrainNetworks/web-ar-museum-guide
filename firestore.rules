@@ -1,0 +1,234 @@
+rules_version = '2';
+
+/*
+ * Who may read and write what, in Firestore.
+ *
+ * Three kinds of caller reach this database:
+ *
+ *   visitors   the guide on a phone. Anonymous, and only ever: read the live
+ *              release, add a photo to the photobooth, leave feedback.
+ *   staff      signed in with Google, and listed in /members by email, with a
+ *              role. Nobody is staff by having an account - only by being
+ *              listed.
+ *   the wall   /photobooth on a screen. Anonymous; reads approved photos.
+ *
+ * Roles, each one including everything below it:
+ *
+ *   owner      the account that claimed the project (see config/setup). Can
+ *              manage other owners, and can never be removed by anyone else.
+ *   admin      everything else: content, Go live, rollback, and adding or
+ *              removing admins, editors and moderators.
+ *   editor     content: exhibits, uploads, compile, build a release. Cannot
+ *              put a release live, or touch the people list.
+ *   moderator  the photobooth queue and the feedback inbox. Nothing else.
+ *
+ * Staff are keyed by lowercase email rather than uid, so an admin can add
+ * someone who has never signed in. Google verifies the address, and an
+ * anonymous token carries none, so neither can impersonate a member.
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ------------------------------------------------------------------ who
+    function signedIn() { return request.auth != null; }
+
+    // A Google account with a verified address. An anonymous visitor token has
+    // no email at all, so this is false for every phone in the gallery.
+    function staffAccount() {
+      return signedIn()
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
+        && request.auth.token.email_verified == true
+        && request.auth.token.email is string;
+    }
+
+    function myEmail() { return request.auth.token.email.lower(); }
+    function memberDoc(email) { return /databases/$(database)/documents/members/$(email); }
+    function isMember() { return staffAccount() && exists(memberDoc(myEmail())); }
+    function myRole() { return get(memberDoc(myEmail())).data.role; }
+    function hasRole(roles) { return isMember() && myRole() in roles; }
+
+    function isOwner()     { return hasRole(['owner']); }
+    function isAdmin()     { return hasRole(['owner', 'admin']); }
+    function isEditor()    { return hasRole(['owner', 'admin', 'editor']); }
+    function isModerator() { return hasRole(['owner', 'admin', 'editor', 'moderator']); }
+
+    function stamped(field) { return request.resource.data[field] == request.time; }
+    function onlyChanges(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+    function shortString(value, max) { return value is string && value.size() <= max; }
+
+    // ------------------------------------------------------------------ people
+    function validMember(email) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['email', 'role', 'name', 'note', 'addedBy', 'addedAt'])
+        && d.email == email
+        && email == email.lower()
+        && email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$')
+        && d.role in ['owner', 'admin', 'editor', 'moderator']
+        && (!('name' in d) || shortString(d.name, 80))
+        && (!('note' in d) || shortString(d.note, 200));
+    }
+
+    /*
+     * The one way an owner is made from the app: the first Google account to
+     * sign in to the Studio after the rules are deployed claims the project,
+     * writing its own member record and config/setup in one batch. Once
+     * config/setup exists this is false for everyone, forever.
+     *
+     * Claim it straight after deploying. If someone else ever got there first,
+     * delete both documents in the Firebase console and claim again.
+     */
+    function claimingOwnership(email) {
+      let setup = /databases/$(database)/documents/config/setup;
+      return staffAccount()
+        && email == myEmail()
+        && request.resource.data.role == 'owner'
+        && !exists(setup)
+        && existsAfter(setup);
+    }
+
+    match /members/{email} {
+      allow read: if isAdmin() || (staffAccount() && email == myEmail());
+
+      // Admins manage everyone except owners; owners manage owners too. An
+      // owner cannot demote or delete themselves, so the project can never be
+      // left with nobody able to manage it.
+      allow create: if validMember(email) && (
+                       (isAdmin() && request.resource.data.role != 'owner')
+                    || isOwner()
+                    || claimingOwnership(email));
+      allow update: if validMember(email) && (
+                       (isAdmin() && resource.data.role != 'owner' && request.resource.data.role != 'owner')
+                    || (isOwner() && email != myEmail()));
+      allow delete: if (isAdmin() && resource.data.role != 'owner')
+                    || (isOwner() && email != myEmail());
+    }
+
+    // Someone who signed in to the Studio but is not on the list can ask.
+    match /accessRequests/{email} {
+      allow read, delete: if isAdmin() || (staffAccount() && email == myEmail());
+      allow create, update: if staffAccount()
+        && email == myEmail()
+        && request.resource.data.keys().hasOnly(['email', 'name', 'message', 'at'])
+        && request.resource.data.email == email
+        && stamped('at')
+        && (!('name' in request.resource.data) || shortString(request.resource.data.name, 80))
+        && (!('message' in request.resource.data) || shortString(request.resource.data.message, 500));
+    }
+
+    // ------------------------------------------------------------------ config
+    match /config/setup {
+      allow read: if signedIn();
+      allow create: if staffAccount()
+        && request.resource.data.keys().hasOnly(['owner', 'at'])
+        && request.resource.data.owner == myEmail()
+        && stamped('at')
+        && getAfter(memberDoc(myEmail())).data.role == 'owner';
+      allow update, delete: if false;
+    }
+
+    // What visitors see of the gallery's settings: its name, which features are
+    // switched on, and how the photobooth behaves. Public by design.
+    match /config/site {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Which tracker matches which exhibit order. Staff only.
+    match /config/tracker {
+      allow read, write: if isEditor();
+    }
+
+    // ------------------------------------------------------------------ content
+    // Drafts. Visitors never read these; they read a release.
+    match /exhibits/{id} {
+      allow read: if isModerator();
+      allow create, update: if isEditor()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 200
+        && request.resource.data.order is number;
+      allow delete: if isEditor();
+    }
+
+    // A release is a frozen snapshot: a manifest in Storage plus this record.
+    // Public, because the manifest it points at is public anyway, and the phone
+    // preview of a release that is not live yet reads it by id.
+    match /releases/{id} {
+      allow read: if true;
+      allow create: if isEditor()
+        && request.resource.data.createdBy == myEmail()
+        && stamped('createdAt')
+        && request.resource.data.manifest is string;
+      allow update: if isAdmin() && onlyChanges(['notes', 'liveAt', 'liveBy']);
+      allow delete: if isAdmin()
+        && get(/databases/$(database)/documents/public/live).data.release != id;
+    }
+
+    // The one document every visitor reads first: which release is live.
+    match /public/live {
+      allow read: if true;
+      allow write: if isAdmin()
+        && exists(/databases/$(database)/documents/releases/$(request.resource.data.release))
+        && request.resource.data.manifest is string
+        && stamped('at');
+    }
+
+    // ------------------------------------------------------------------ photobooth
+    function photobooth() {
+      return get(/databases/$(database)/documents/config/site).data.get('photobooth', {});
+    }
+
+    function validNewPhoto(id) {
+      let d = request.resource.data;
+      let pb = photobooth();
+      return pb.get('enabled', false) == true
+        && d.keys().hasOnly(['uid', 'path', 'url', 'name', 'exhibitId', 'exhibitName',
+                             'lang', 'width', 'height', 'consent', 'status', 'createdAt'])
+        && d.uid == request.auth.uid
+        && d.consent == true
+        && stamped('createdAt')
+        && d.path == 'photobooth/' + request.auth.uid + '/' + id + '.jpg'
+        && shortString(d.url, 1000)
+        && (!('name' in d) || shortString(d.name, 40))
+        && (!('exhibitId' in d) || shortString(d.exhibitId, 120))
+        && (!('exhibitName' in d) || shortString(d.exhibitName, 200))
+        && (!('lang' in d) || shortString(d.lang, 12))
+        && d.status == (pb.get('autoApprove', false) == true ? 'approved' : 'pending');
+    }
+
+    match /photos/{id} {
+      // The wall queries status == 'approved'; the visitor who took a photo can
+      // always see their own, to know whether it is up yet.
+      allow read: if resource.data.status == 'approved'
+                  || isModerator()
+                  || (signedIn() && resource.data.uid == request.auth.uid);
+      allow create: if signedIn() && validNewPhoto(id);
+      allow update: if isModerator()
+        && onlyChanges(['status', 'featured', 'moderatedBy', 'moderatedAt'])
+        && request.resource.data.status in ['pending', 'approved', 'hidden'];
+      // A visitor can take their own photo back down, at any time.
+      allow delete: if isModerator() || (signedIn() && resource.data.uid == request.auth.uid);
+    }
+
+    // ------------------------------------------------------------------ feedback
+    match /feedback/{id} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'rating', 'message', 'exhibitId',
+                                                 'exhibitName', 'lang', 'release', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1 && request.resource.data.rating <= 5
+        && shortString(request.resource.data.message, 2000)
+        && stamped('createdAt');
+      allow read, delete: if isModerator();
+      allow update: if isModerator() && onlyChanges(['done', 'doneBy']);
+    }
+
+    // Everything else is closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
