@@ -207,8 +207,10 @@ test('editors set the floor plan; visitors never read it directly', async () => 
 });
 
 // ------------------------------------------------------------------ photobooth
+const storageUrl = (uid, id) =>
+  `https://firebasestorage.googleapis.com/v0/b/demo-museum.appspot.com/o/photobooth%2F${uid}%2F${id}.jpg?alt=media&token=t`;
 const photo = (uid, id, extra = {}) => ({
-  uid, path: `photobooth/${uid}/${id}.jpg`, url: 'https://x/p.jpg', consent: true,
+  uid, path: `photobooth/${uid}/${id}.jpg`, url: storageUrl(uid, id), consent: true,
   status: 'pending', createdAt: serverTimestamp(), name: 'Asha', ...extra,
 });
 
@@ -226,6 +228,18 @@ test('a visitor shares a photo for moderation, with consent, as themselves', asy
   await assertFails(setDoc(doc(d, 'photos/abcdefgh4'), photo('v2', 'abcdefgh4')));
   await assertFails(setDoc(doc(d, 'photos/abcdefgh5'), { ...photo('v1', 'abcdefgh5'), path: 'photobooth/v1/other.jpg' }));
   await assertFails(setDoc(doc(d, 'photos/abcdefgh6'), photo('v1', 'abcdefgh6', { name: 'x'.repeat(41) })));
+});
+
+test('a shared photo must point at its own upload, not any picture on the web', async () => {
+  await seed('config/site', { photobooth: { enabled: true, autoApprove: true } });
+  const d = db(as.anon('v1'));
+  const ok = { status: 'approved' };
+  await assertFails(setDoc(doc(d, 'photos/abcdefgh1'), photo('v1', 'abcdefgh1', { ...ok, url: 'https://evil.example/x.jpg' })));
+  await assertFails(setDoc(doc(d, 'photos/abcdefgh2'), photo('v1', 'abcdefgh2', { ...ok, url: storageUrl('v2', 'abcdefgh2') })));
+  await assertFails(setDoc(doc(d, 'photos/abcdefgh3'), photo('v1', 'abcdefgh3', { ...ok, url: storageUrl('v1', 'other0000') })));
+  await assertFails(setDoc(doc(d, 'photos/abcdefgh4'), photo('v1', 'abcdefgh4',
+    { ...ok, url: 'https://evil.example/v0/b/x/o/photobooth%2Fv1%2Fabcdefgh4.jpg?alt=media' })));
+  await assertSucceeds(setDoc(doc(d, 'photos/abcdefgh5'), photo('v1', 'abcdefgh5', ok)));
 });
 
 test('with auto-approve on, a photo goes straight to the wall', async () => {

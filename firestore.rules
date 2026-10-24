@@ -199,6 +199,12 @@ service cloud.firestore {
         && stamped('createdAt')
         && d.path == 'photobooth/' + request.auth.uid + '/' + id + '.jpg'
         && shortString(d.url, 1000)
+        // The wall shows this URL, so it must be the photo this visitor just
+        // uploaded to this project's Storage - not any picture on the web.
+        // (The emulator's address is allowed too; from anywhere else it
+        // resolves to nothing.)
+        && d.url.matches('^(https://firebasestorage[.]googleapis[.]com|http://(127[.]0[.]0[.]1|localhost):9199)/v0/b/[^/]+/o/photobooth%2F'
+                         + request.auth.uid + '%2F' + id + '[.]jpg[?].*$')
         && (!('name' in d) || shortString(d.name, 40))
         && (!('exhibitId' in d) || shortString(d.exhibitId, 120))
         && (!('exhibitName' in d) || shortString(d.exhibitName, 200))

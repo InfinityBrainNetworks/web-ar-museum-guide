@@ -68,9 +68,27 @@
     try { localStorage.setItem(MINE_KEY, JSON.stringify(list.slice(-30))); } catch (e) { /* private window */ }
   }
 
+  /** Decode a picture - createImageBitmap where there is one, an <img> on older iPhones. */
+  function decode(blob) {
+    if (typeof createImageBitmap === 'function') {
+      return createImageBitmap(blob).catch(function () { return decodeWithImg(blob); });
+    }
+    return decodeWithImg(blob);
+  }
+
+  function decodeWithImg(blob) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(blob);
+      var img = new Image();
+      img.onload = function () { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('the photo could not be read')); };
+      img.src = url;
+    });
+  }
+
   /** A photo for the wall: at most 1600 px and under the 5 MB the rules allow. */
   function forWall(blob) {
-    return createImageBitmap(blob).then(function (bitmap) {
+    return decode(blob).then(function (bitmap) {
       var scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
       var canvas = document.createElement('canvas');
       canvas.width = Math.round(bitmap.width * scale);
