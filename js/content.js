@@ -785,6 +785,15 @@
     });
   }
 
+  /** Which release is live right now, or null: one small read, no SDK. */
+  function liveRelease() {
+    var c = cloud();
+    if (!c) return Promise.resolve(null);
+    return c.getDocument('public/live', c.liveTimeoutMs).then(function (live) {
+      return (live && live.release) || null;
+    });
+  }
+
   function fromDraft() {
     var urls = [];
     var keep = function (blob) {
@@ -984,6 +993,7 @@
     plainText: plainText,
     previewRequested: previewRequested,
     releaseRequested: releaseRequested,
+    liveRelease: liveRelease,
     fromData: fromData,
   };
 })();

@@ -16,6 +16,7 @@ import {
   FFMPEG_VIDEO, FFMPEG_AUDIO,
 } from '../media.js';
 import { slimReport } from '../importer.js';
+import { afterSave } from '../autopublish.js';
 
 const TABS = [
   ['target', 'Target photo', 'image'],
@@ -51,6 +52,14 @@ export async function render(ctx) {
       state.className = 'save-state saved';
       state.textContent = 'Saved';
       if (!quiet) refreshHeader();
+      // Straight on to visitors, quietly: the label beside the title says
+      // how it went, and only a failure gets a toast.
+      afterSave(ex.name, (message, kind) => {
+        if (pending) return;                 // a newer save is under way
+        if (kind === 'err') toast(message, 'err', 8000);
+        state.className = 'save-state ' + (kind === 'err' ? 'error' : 'saved');
+        state.textContent = kind === 'ok' ? 'Saved · live' : 'Saved · ' + message.replace(/^Not live yet: /, 'not live: ');
+      });
     } catch (err) {
       state.className = 'save-state error';
       state.textContent = 'Not saved — ' + explain(err);

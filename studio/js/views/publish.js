@@ -29,6 +29,12 @@ export async function render(ctx) {
   const build = h('div.card');
   const history = h('div.card');
   ctx.page.append(checks, build, history);
+  if (site.autoPublish !== false) {
+    ctx.page.prepend(h('div.banner.info', icon('check'), h('div',
+      h('strong', 'Saved edits go live by themselves. '),
+      'An admin’s placement, label or video change is published a few seconds after saving (Settings → Publishing). ' +
+      'This page is for new or changed photos, a new order, and rolling back.')));
+  }
 
   const state = () => {
     const signature = data.trackerSignature(exhibits);

@@ -368,7 +368,7 @@ input.num { font-variant-numeric: tabular-nums; padding: 7px 8px; }
 .dialog-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
 .dialog-body p { color: var(--muted); }
 .dialog-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--line); }
-.toasts { position: fixed; z-index: 200; right: 18px; bottom: calc(18px + var(--safe-b)); display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+.toasts { position: fixed; z-index: 200; pointer-events: none; right: 18px; bottom: calc(18px + var(--safe-b)); display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
 .toast { max-width: 420px; padding: 11px 15px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--raised-hi);
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5); font-weight: 600; animation: ibn-rise 0.25s var(--ease-museum) both; transition: opacity 0.3s, transform 0.3s; }
 .toast.ok { border-color: rgba(95, 168, 123, 0.6); }

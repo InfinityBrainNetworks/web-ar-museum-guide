@@ -15,6 +15,7 @@
  * visitor's view, Space play, Ctrl held flips snapping, Ctrl+Z / Ctrl+Shift+Z.
  */
 import { h, clear, icon, toast, explain, numberInput, segmented, toggle, round } from '../ui.js';
+import { afterSave } from '../autopublish.js';
 
 const FIELDS = ['heightMeters', 'scale', 'rotation', 'offset', 'anchor', 'anchorLocked', 'lighting',
   'shadowOpacity', 'shadows', 'shadowFollow', 'shadowScale', 'spin', 'playClip', 'loopClip'];
@@ -129,7 +130,8 @@ export async function render(ctx) {
       await ctx.data.saveExhibit(id, patch);
       saved = JSON.stringify(state);
       dirty();
-      toast('Placement saved. It reaches visitors with the next release.', 'ok');
+      toast('Placement saved.', 'ok');
+      afterSave(ex.name + ' placement', toast);
     } catch (err) {
       toast(explain(err), 'err');
       dirty();

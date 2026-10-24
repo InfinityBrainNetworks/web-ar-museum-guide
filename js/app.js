@@ -3452,14 +3452,37 @@
         el.adjustSave.disabled = false;
         assignInto(ex.model, patch.model);
         assignInto(ex.media, patch.media);
-        adjustNote('Saved to "' + ex.name + '" in the Studio. It reaches visitors with the next release.', 'ok');
+        adjustNote('Saved to "' + ex.name + '" in the Studio. Putting it live…', 'ok');
         log.ok('adjust: saved "' + ex.name + '" to the Studio draft as ' + community.staff.state().email +
                ' — ' + JSON.stringify(patch.model));
+        community.staff.publishSoon(ex.name + ' (Adjust on a phone)').then(function (r) {
+          if (r.release) {
+            adjustNote('Saved and live: visitors get it the next time they open the guide.', 'ok');
+            log.ok('adjust: live as ' + r.release);
+          } else {
+            adjustNote('Saved to "' + ex.name + '" in the Studio. ' + r.why, 'ok');
+            log.info('adjust: not put live — ' + r.why);
+          }
+        }, function (err) {
+          adjustNote('Saved, but it could not go live: ' + ((err && err.message) || err), 'bad');
+          log.warn('adjust: could not go live — ' + err);
+        });
       }, function (err) {
         el.adjustSave.disabled = false;
         adjustNote(String((err && err.message) || err), 'bad');
         log.warn('adjust: could not save to the Studio — ' + err);
       });
+      return;
+    }
+
+    // The gallery comes from the cloud but nobody is signed in as staff: the
+    // old portal draft below lives only in this browser and nothing reads it
+    // any more, so saving there would look like it worked and change nothing.
+    if (bundle && bundle.source === 'cloud') {
+      el.adjustSave.disabled = false;
+      adjustNote('Not saved: sign in as staff (Settings > Staff) to save this to the Studio, ' +
+                 'or use Copy to keep the numbers.', 'bad');
+      log.warn('adjust: not saved — the gallery is from the cloud and this phone is not signed in as staff');
       return;
     }
 
@@ -3972,6 +3995,30 @@
    */
   var readyHandlers = [];
 
+  /*
+   * A release put live while this page sat in a pocket or a background tab
+   * (the Studio publishes on save): pick it up when the visitor comes back -
+   * but only while they are browsing, never in the middle of the camera. The
+   * reload is quick, because every file the new release shares with this one
+   * is already on the phone.
+   */
+  var releaseCheckedAt = 0;
+  function watchForNewRelease() {
+    if (!bundle || bundle.source !== 'cloud' || bundle.previewRelease || !window.ARContent.liveRelease) return;
+    if (watchForNewRelease.on) return;
+    watchForNewRelease.on = true;
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState !== 'visible' || S.started) return;
+      if (Date.now() - releaseCheckedAt < 30000) return;
+      releaseCheckedAt = Date.now();
+      window.ARContent.liveRelease().then(function (id) {
+        if (!id || id === bundle.releaseId || S.started) return;
+        log.event('release ' + id + ' went live (this page has ' + bundle.releaseId + ') — reloading');
+        location.reload();
+      }, function () { /* offline: what this page has is the best there is */ });
+    });
+  }
+
   function announceReady() {
     var queue = readyHandlers;
     readyHandlers = [];
@@ -3984,6 +4031,7 @@
       try { window.AROffline.start(bundle); }
       catch (e) { log.warn('offline: could not start — ' + e); }
     }
+    watchForNewRelease();
   }
 
   window.ARViewer = {

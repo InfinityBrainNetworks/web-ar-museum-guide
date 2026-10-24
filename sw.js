@@ -22,7 +22,7 @@
  * Never touched: the Studio, the photobooth wall and the old portal (they
  * want live data, always), Firebase's own APIs, and anything but GET.
  */
-const SHELL_VERSION = 'shell-2026-10-24c';
+const SHELL_VERSION = 'shell-2026-10-24d';
 const SHELL_CACHE = 'ar-' + SHELL_VERSION;
 const ASSET_CACHE = 'ar-assets-v1';     // shared with js/offline.js - keep the name in step
 const SLOW_MS = 3500;

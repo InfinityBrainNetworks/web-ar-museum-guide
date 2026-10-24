@@ -26,6 +26,14 @@ async function resetEmulators() {
   await fetch(`http://127.0.0.1:9099/emulator/v1/projects/${PROJECT}/accounts`, { method: 'DELETE' });
 }
 
+/** How many exhibits have a map pin, read past the rules - what the server really holds. */
+async function pinnedOnServer() {
+  const r = await fetch(`http://127.0.0.1:8080/v1/projects/${PROJECT}/databases/(default)/documents/exhibits?pageSize=50`,
+    { headers: { Authorization: 'Bearer owner' } });
+  const body = await r.json();
+  return (body.documents || []).filter((d) => d.fields.mapPin && d.fields.mapPin.mapValue).length;
+}
+
 before(async () => {
   await resetEmulators();
   site = await serve(8150);
@@ -186,6 +194,33 @@ test('a release is built and put live, and the guide reads it from the cloud', a
   await guide.close();
 });
 
+test('an admin saves a small adjustment and it goes live by itself, no Publish needed', async () => {
+  const before = await viewer();
+  const was = await before.evaluate(() => window.ARViewer.bundle().releaseId);
+  await before.close();
+
+  const page = await studio('owner@gmail.com', '#/floor/' + QUEEN);
+  await until(page, () => !!(window.__stage && window.__stage.holder), { timeout: 60000, what: 'the queen in the floor editor' });
+  await page.evaluate(() => {
+    const row = Array.from(document.querySelectorAll('.xyz')).find((r) => r.firstChild.textContent === 'Shadow');
+    const input = row.querySelector('input');
+    input.value = '0.35';
+    input.dispatchEvent(new Event('change'));
+  });
+  await page.keyboard.down('Control'); await page.keyboard.press('s'); await page.keyboard.up('Control');
+  await until(page, () => /Live: visitors get it/.test(document.body.innerText), { timeout: 30000, what: 'the edit to go live' });
+  await page.close();
+
+  const guide = await viewer();
+  const now = await guide.evaluate(() => {
+    const b = window.ARViewer.bundle();
+    return { release: b.releaseId, shadow: b.exhibits.find((e) => e.id === 'sigiriya-ex08').model.shadowOpacity };
+  });
+  assert.notEqual(now.release, was, 'a new release is live');
+  assert.equal(now.shadow, 0.35);
+  await guide.close();
+});
+
 test('on the phone she stands where the Studio put her, then a photo goes to the wall', async () => {
   // Switch the photobooth on, as an admin would in Settings.
   const admin = await studio('owner@gmail.com', '#/photos');
@@ -261,6 +296,9 @@ test('the floor plan and its pins reach the guide’s Map tab, with found ones m
   const box = await page.evaluate(() => { const r = document.querySelector('.map-plan img').getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
   await page.mouse.click(box.x + box.w * 0.8, box.y + box.h * 0.7);
   await until(page, () => document.querySelectorAll('.map-plan .map-pin').length === 4, { what: 'the queen pinned' });
+  // A pin shows before the server has it; closing the page too soon loses it.
+  for (let i = 0; i < 100 && (await pinnedOnServer()) < 4; i++) await sleep(200);
+  assert.equal(await pinnedOnServer(), 4, 'all four pins saved');
   await shot(page, 'studio-map');
   await page.close();
 

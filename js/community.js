@@ -280,6 +280,25 @@
     });
   }
 
+  /**
+   * After an Adjust save by an admin: put the draft live, exactly as the
+   * Studio does on save (studio/js/autopublish.js, loaded only now and only
+   * on a staff phone). Resolves { release } or { skipped, why }.
+   */
+  function publishSoon(what) {
+    var st = staffState();
+    if (['owner', 'admin'].indexOf(st.role) === -1) {
+      return Promise.resolve({ skipped: 'role', why: 'An admin puts it live, from Publish in the Studio.' });
+    }
+    var base = CLOUD.appUrl + 'studio/js/';
+    return Promise.all([import(base + 'data.js'), import(base + 'autopublish.js')]).then(function (m) {
+      return m[0].init().then(function () {
+        m[0].setMe({ email: st.email.toLowerCase(), role: st.role });
+        return m[1].schedule(what);
+      });
+    });
+  }
+
   window.ARCommunity = {
     enabled: enabled,
     site: site,
@@ -296,6 +315,7 @@
       signOut: staffSignOut,
       onChange: function (fn) { staff.listeners.push(fn); fn(staffState()); },
       saveExhibit: saveExhibit,
+      publishSoon: publishSoon,
     },
   };
 

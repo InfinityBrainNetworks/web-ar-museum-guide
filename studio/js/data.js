@@ -32,6 +32,7 @@ export const api = () => ({ F, S, db, storage });
 let me = null;      // { email, role }
 export function setMe(member) { me = member; }
 export function myEmail() { return me ? me.email : null; }
+export function myRole() { return me ? me.role : null; }
 
 const stamp = () => ({ updatedAt: F.serverTimestamp(), updatedBy: myEmail() });
 
@@ -70,6 +71,12 @@ export function watchExhibits(callback, onError) {
   return F.onSnapshot(F.query(F.collection(db, 'exhibits'), F.orderBy('order')),
     (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
     onError);
+}
+
+/** Every exhibit, once, in target order. */
+export async function listExhibits() {
+  const snap = await F.getDocs(F.query(F.collection(db, 'exhibits'), F.orderBy('order')));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
 export async function getExhibit(id) {

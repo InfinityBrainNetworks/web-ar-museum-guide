@@ -39,7 +39,13 @@ export async function render(ctx) {
         h('div.stack',
           h('strong', 'What visitors get'),
           toggle(site.features.feedback !== false, (v) => save({ features: { ...site.features, feedback: v } }), 'Feedback — a rating and a few words, from the Feedback tab'),
-          toggle(!!site.photobooth.enabled, (v) => save({ photobooth: { ...site.photobooth, enabled: v } }), 'Photobooth — share an AR photo to the wall (moderated under Photobooth)'))));
+          toggle(!!site.photobooth.enabled, (v) => save({ photobooth: { ...site.photobooth, enabled: v } }), 'Photobooth — share an AR photo to the wall (moderated under Photobooth)')),
+        h('div.stack',
+          h('strong', 'Publishing'),
+          toggle(site.autoPublish !== false, (v) => save({ autoPublish: v },
+            v ? 'An admin’s saved edits now go live by themselves.' : 'Edits now wait for Publish.'),
+            'Put saved edits live straight away — a placement, a label or a video reaches visitors seconds after an admin saves it. ' +
+            'Off: nothing changes for visitors until someone builds a release on Publish.'))));
     general.querySelectorAll('input[type=checkbox]').forEach((i) => { i.disabled = !admin; });
   };
 

@@ -390,6 +390,15 @@ the lean fix below was checked with.
    guide from then on gets it. Any earlier release goes back the same way
    (**Roll back to this**). Only admins can do this step.
 
+**Publish on save** (Settings → Publishing, on by default) does all three by
+itself, a few seconds after an admin saves an edit — a placement in the floor
+editor, a label, a video, a map pin, or Adjust on a staff phone. Saves close
+together make one release, labelled `Auto: …`, and it can be rolled back like
+any other. It goes live only if Publish would allow it: changing a target
+photo or the order still needs **Compile now** here first. An editor's saves
+wait for an admin. A guide left open picks up the new release when the
+visitor comes back to it (not in the middle of the camera).
+
 ### Map
 
 Upload the gallery's floor plan (PNG for a line drawing, kept up to 2400 px),

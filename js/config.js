@@ -291,7 +291,7 @@ window.AR_CONFIG = {
     // so set it false when the gallery opens to the public - staff turn it
     // back on for their own phone in Settings > Debug log, or sign in as
     // staff, which shows Adjust by itself.
-    debugButtonByDefault: true,
+    debugButtonByDefault: false,
     // Step sizes for the debug nudge buttons, in target units / multiplier.
     nudgeStep: 0.02,
     scaleStep: 0.05,

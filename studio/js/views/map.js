@@ -11,6 +11,7 @@
  * next release.
  */
 import { h, clear, icon, toast, explain, pickFile, dropTarget, confirm, bytes } from '../ui.js';
+import { afterSave } from '../autopublish.js';
 
 const PLAN_EDGE = 2400;
 
@@ -104,13 +105,21 @@ export async function render(ctx) {
 
   async function place(ex, at) {
     const rounded = { x: Math.round(at.x * 10000) / 10000, y: Math.round(at.y * 10000) / 10000 };
+    // On to the next unplaced exhibit at once, not when the server answers:
+    // the pin itself shows up straight away, and a second click made in
+    // between used to move this pin again instead of placing the next one.
+    const was = ex.mapPin;
+    ex.mapPin = rounded;
+    selected = exhibits.find((x) => !x.mapPin && x.id !== ex.id) || null;
+    draw();
     try {
       await data.saveExhibit(ex.id, { mapPin: rounded });
-      ex.mapPin = rounded;
-      const next = exhibits.find((x) => !x.mapPin);
-      selected = next || null;
+      afterSave('map pins', toast);
+    } catch (err) {
+      ex.mapPin = was;
+      toast(explain(err), 'err');
       draw();
-    } catch (err) { toast(explain(err), 'err'); }
+    }
   }
 
   function drawList() {
@@ -128,7 +137,8 @@ export async function render(ctx) {
           onclick: async (e) => {
             e.stopPropagation();
             if (!(await confirm('Remove this pin?', `“${ex.name}” will not be on the map.`, { ok: 'Remove', danger: true }))) return;
-            await data.saveExhibit(ex.id, { mapPin: null }).catch((err) => toast(explain(err), 'err'));
+            await data.saveExhibit(ex.id, { mapPin: null })
+              .then(() => afterSave('map pins', toast), (err) => toast(explain(err), 'err'));
             ex.mapPin = null;
             draw();
           },
