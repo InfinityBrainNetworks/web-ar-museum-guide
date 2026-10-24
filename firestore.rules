@@ -140,6 +140,14 @@ service cloud.firestore {
       allow read, write: if isEditor();
     }
 
+    // The gallery's floor plan. Content, so editors set it; visitors get it
+    // inside a release, never from here.
+    match /config/map {
+      allow read: if isModerator();
+      allow write: if isEditor()
+        && request.resource.data.keys().hasOnly(['image', 'updatedAt', 'updatedBy']);
+    }
+
     // ------------------------------------------------------------------ content
     // Drafts. Visitors never read these; they read a release.
     match /exhibits/{id} {

@@ -57,6 +57,8 @@
      'viewSoon', 'soonIcon', 'soonTitle', 'soonText', 'soonNeeds',
      'viewFeedback', 'fbForm', 'fbThanks', 'fbStars', 'fbExhibit', 'fbMessage', 'fbSend', 'fbNote', 'fbAgain',
      'staffGroup', 'setStaff', 'setStaffTitle', 'setStaffValue',
+     'viewMap', 'mapEyebrow', 'mapFrame', 'mapStage', 'mapImage', 'mapPins', 'mapIn', 'mapOut',
+     'mapCard', 'mapCardImg', 'mapCardTitle', 'mapCardState', 'mapCardGo', 'exhibitOnMap',
      'navAr', 'logToggle'
     ].forEach(function (id) {
       el[id] = $(id);
@@ -92,12 +94,13 @@
     toggle2(el.viewSettings, next === 'settings');
     toggle2(el.viewSoon, next === 'soon');
     toggle2(el.viewFeedback, next === 'feedback');
+    toggle2(el.viewMap, next === 'map');
 
     // Back replaces nothing - it sits beside the title - so the title stays
     // the wordmark on Explore and becomes the screen's name elsewhere.
     toggle(el.shellBack, next !== 'explore');
     if (el.shellTitle) {
-      var titles = { exhibit: '', settings: t('nav.settings'), soon: t('nav.' + soonTab), feedback: t('nav.feedback') };
+      var titles = { exhibit: '', settings: t('nav.settings'), soon: t('nav.' + soonTab), feedback: t('nav.feedback'), map: t('nav.map') };
       var label = next === 'explore' ? t('app.name') : titles[next];
       el.shellTitle.textContent = label || t('app.name');
     }
@@ -113,6 +116,7 @@
     if (next === 'settings') renderSettings();
     if (next === 'soon') renderSoon();
     if (next === 'feedback') renderFeedback();
+    if (next === 'map') renderMap();
 
     // A new screen starts at the top, the way a new page would.
     if (el.shellBody) el.shellBody.scrollTop = 0;
@@ -147,9 +151,16 @@
     }
 
     if (el.exploreEyebrow) {
-      var name = (cfg().gallery || {}).name || '';
+      // The museum's name as the Studio has it, from the release; the
+      // config's is only for a gallery with no cloud behind it.
+      var b = viewer && viewer.bundle && viewer.bundle();
+      var name = (b && b.site && b.site.name) || (cfg().gallery || {}).name || '';
       var count = list.length === 1 ? t('explore.countOne')
                                     : t('explore.count', { count: list.length });
+      var found = list.filter(isFound).length;
+      if (found) {
+        count += ' · ' + (found === list.length ? t('explore.foundAll') : t('explore.found', { count: found }));
+      }
       el.exploreEyebrow.textContent = list.length
         ? (name ? name + ' · ' + count : count)
         : name;
@@ -168,20 +179,28 @@
     var picked = V().detailsOf(ex);
     var card = document.createElement('button');
     card.type = 'button';
-    card.className = 'exhibit-card';
+    card.className = 'exhibit-card' + (isFound(ex) ? ' found' : '');
 
     var thumb = document.createElement('div');
     thumb.className = 'exhibit-thumb';
     if (ex.image && ex.image.src) {
       var img = document.createElement('img');
       img.loading = 'lazy';
+      img.decoding = 'async';
       img.alt = '';
       img.addEventListener('error', function () {
+        // A missing thumbnail falls back to the full photo before giving up.
+        if (ex.image.thumb && img.src !== new URL(ex.image.src, location.href).href) {
+          img.src = ex.image.src;
+          return;
+        }
         thumb.textContent = '';
         thumb.appendChild(noImage());
         log().warn('target image missing for "' + ex.name + '"');
       });
-      img.src = ex.image.src;
+      // The Studio makes a 480 px thumbnail; a card never needs more, and
+      // nine of them at 1024 px cost a phone a megabyte for nothing.
+      img.src = ex.image.thumb || ex.image.src;
       thumb.appendChild(img);
     } else {
       thumb.appendChild(noImage());
@@ -193,6 +212,15 @@
     badge.appendChild(icon(hasModel(ex) ? 'i-ar'
       : (ex.media.kind === 'image' ? 'i-image' : 'i-video')));
     thumb.appendChild(badge);
+    // Already found with the camera: a small seal, the gallery's own
+    // passport stamp.
+    if (isFound(ex)) {
+      var seal = document.createElement('span');
+      seal.className = 'exhibit-found';
+      seal.appendChild(icon('i-check'));
+      seal.appendChild(document.createTextNode(t('explore.foundOne')));
+      thumb.appendChild(seal);
+    }
     card.appendChild(thumb);
 
     var title = document.createElement('h3');
@@ -222,6 +250,11 @@
   }
 
   function hasModel(ex) { return !!(ex && ex.model && ex.model.src); }
+
+  function isFound(ex) {
+    var found = (V() && V().found && V().found()) || [];
+    return !!ex && found.indexOf(ex.id) !== -1;
+  }
 
   /**
    * The first sentence of the label, for the card under the photograph.
@@ -265,7 +298,9 @@
     }
 
     // -- the names
-    el.exhibitKicker.textContent = (cfg().gallery || {}).name || '';
+    var b = V().bundle && V().bundle();
+    el.exhibitKicker.textContent = (b && b.site && b.site.name) || (cfg().gallery || {}).name || '';
+    toggle(el.exhibitOnMap, !!(plan() && ex.map));
     el.exhibitTitle.textContent = detail.title || ex.name;
     el.exhibitTitle.setAttribute('lang', picked.code);
 
@@ -516,6 +551,66 @@
     writePref(LOG_KEY, on ? 'on' : 'off');
   }
 
+  // ======================================================================= map
+  /*
+   * The gallery's floor plan, from the release, with a numbered pin where
+   * each artwork hangs - jade once found with the camera. Tap a pin for the
+   * artwork; "On the map" on a label page comes here with its pin lit.
+   */
+  var mapZoom = 1;
+  var mapFocus = null;
+
+  function plan() {
+    var b = V() && V().bundle && V().bundle();
+    return b && b.site && b.site.map && b.site.map.src ? b.site.map : null;
+  }
+
+  function renderMap() {
+    var p = plan();
+    if (!p || !el.mapStage) { soonTab = 'map'; go('soon'); return; }
+    var b = V().bundle();
+    el.mapEyebrow.textContent = (b.site && b.site.name) || (cfg().gallery || {}).name || '';
+    if (el.mapImage.getAttribute('src') !== p.src) el.mapImage.src = p.src;
+    el.mapStage.style.width = (mapZoom * 100) + '%';
+
+    el.mapPins.textContent = '';
+    (V().exhibits() || []).forEach(function (ex, i) {
+      if (!ex.map) return;
+      var pin = document.createElement('button');
+      pin.type = 'button';
+      pin.className = 'map-pin' + (isFound(ex) ? ' found' : '') + (mapFocus === ex.id ? ' on' : '');
+      pin.style.left = (ex.map.x * 100) + '%';
+      pin.style.top = (ex.map.y * 100) + '%';
+      pin.textContent = String(i + 1);
+      var picked = V().detailsOf(ex);
+      pin.setAttribute('aria-label', (i + 1) + ': ' + ((picked.detail && picked.detail.title) || ex.name));
+      pin.addEventListener('click', function () { mapFocus = ex.id; renderMap(); });
+      el.mapPins.appendChild(pin);
+    });
+
+    var focus = mapFocus && (V().exhibits() || []).filter(function (ex) { return ex.id === mapFocus; })[0];
+    toggle(el.mapCard, !!focus);
+    if (focus) {
+      var picked = V().detailsOf(focus);
+      el.mapCardImg.src = focus.image.thumb || focus.image.src || '';
+      el.mapCardTitle.textContent = (picked.detail && picked.detail.title) || focus.name;
+      el.mapCardTitle.setAttribute('lang', picked.code);
+      el.mapCardState.textContent = isFound(focus) ? t('map.found') : t('map.notFound');
+      el.mapCardGo.onclick = function () { go('exhibit', focus); };
+      // Bring the lit pin into view when zoomed in.
+      requestAnimationFrame(function () {
+        var f = el.mapFrame;
+        f.scrollLeft = focus.map.x * f.scrollWidth - f.clientWidth / 2;
+        f.scrollTop = focus.map.y * f.scrollHeight - f.clientHeight / 2;
+      });
+    }
+  }
+
+  function zoomMap(delta) {
+    mapZoom = Math.max(1, Math.min(4, mapZoom * delta));
+    renderMap();
+  }
+
   // ================================================================== feedback
   /*
    * A rating and a few words, into the Studio's inbox. The tab only becomes
@@ -648,6 +743,7 @@
       b.addEventListener('click', function () {
         var target = b.getAttribute('data-nav');
         if (target === 'feedback' && feedbackOn) go('feedback');
+        else if (target === 'map' && plan()) { mapFocus = null; go('map'); }
         else if (target === 'map' || target === 'feedback') { soonTab = target; go('soon'); }
         else go(target);
       });
@@ -678,6 +774,14 @@
       setSwitch(el.setLog, logShown());
     });
 
+    if (el.mapIn) el.mapIn.addEventListener('click', function () { zoomMap(1.5); });
+    if (el.mapOut) el.mapOut.addEventListener('click', function () { zoomMap(1 / 1.5); });
+    if (el.exhibitOnMap) el.exhibitOnMap.addEventListener('click', function () {
+      if (!current) return;
+      mapFocus = current.id;
+      if (mapZoom < 1.5) mapZoom = 1.5;
+      go('map');
+    });
     if (el.fbSend) el.fbSend.addEventListener('click', sendFeedback);
     if (el.fbAgain) el.fbAgain.addEventListener('click', function () { hide(el.fbThanks); show(el.fbForm); renderFeedback(); });
     if (el.setStaff) el.setStaff.addEventListener('click', staffTap);
@@ -720,6 +824,9 @@
     if (!el.shell) return;
     if (el.shellLangCode) el.shellLangCode.textContent = window.ARI18n.code().toUpperCase();
     renderExplore();
+    // The Map tab lights up once the release has a floor plan.
+    var mapTab = el.shellNav && el.shellNav.querySelector('[data-nav="map"]');
+    if (mapTab) mapTab.classList.toggle('dimmed', !plan());
     if (view === 'exhibit') renderExhibit();
     if (view === 'settings') renderSettings();
     if (view === 'soon') renderSoon();

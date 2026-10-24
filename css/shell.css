@@ -915,3 +915,75 @@ textarea.fb-input { resize: vertical; min-height: 110px; line-height: 1.5; }
 }
 .fb-thanks-mark svg { width: 30px; height: 30px; }
 #fbThanks { text-align: center; align-items: center; padding-top: 60px; }
+
+/* Found with the camera already: the visit's own passport stamp. */
+.exhibit-found {
+  position: absolute;
+  left: 7px;
+  bottom: 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #0f1a13;
+  background: var(--c-jade-lt);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+.exhibit-found svg { width: 12px; height: 12px; }
+
+/* ------------------------------------------------------------------ the map */
+.map-head { padding: 18px 18px 10px; display: flex; flex-direction: column; gap: 6px; }
+.map-head h1 { margin: 0; font-family: var(--font-serif); font-size: 26px; line-height: 1.2; }
+.map-hint { margin: 0; color: var(--c-text-3); font-size: 13px; }
+.map-frame {
+  margin: 4px 14px 0;
+  border-radius: 16px;
+  border: 1px solid var(--c-hairline-soft);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  max-height: calc(100vh - 290px - var(--safe-t) - var(--safe-b));
+  background: #f4efe8;
+}
+.map-stage { position: relative; width: 100%; transition: width 0.25s var(--ease-soft); }
+.map-stage img { display: block; width: 100%; height: auto; user-select: none; -webkit-user-select: none; }
+.map-pins { position: absolute; inset: 0; }
+.map-pin {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  min-width: 30px;
+  height: 30px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 2px solid #fff;
+  background: var(--c-terracotta);
+  color: #2a1409;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+.map-pin.found { background: var(--c-jade-lt); color: #0f1a13; }
+.map-pin.on { transform: translate(-50%, -50%) scale(1.25); box-shadow: 0 0 0 5px rgba(232, 163, 61, 0.55), 0 6px 18px rgba(0, 0, 0, 0.5); z-index: 2; }
+.map-zoom { display: flex; gap: 8px; justify-content: flex-end; padding: 10px 14px 0; }
+.map-zoom .icon-btn { font-size: 18px; width: 40px; }
+.map-card {
+  /* In the flow, under the plan - never over the pins it describes. */
+  margin: 12px 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid var(--c-hairline);
+  background: var(--c-elevated);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+  animation: ibn-rise var(--d-base) var(--ease-museum) both;
+}
+.map-card img { width: 58px; height: 58px; border-radius: 10px; object-fit: cover; flex: none; }
+.map-card-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.map-card-text strong { font-family: var(--font-serif); font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-card-text span { font-size: 12px; color: var(--c-text-3); }

@@ -145,19 +145,62 @@ export async function upload(folder, kind, file, onProgress) {
   const ext = EXT[type] || String(file.name || '').split('.').pop() || 'bin';
   const path = `${folder}/${kind}-${hash.slice(0, 16)}.${ext}`;
   const ref = S.ref(storage, path);
-  const task = S.uploadBytesResumable(ref, file, {
+  const metadata = {
     contentType: type,
     // Immutable by construction, so phones and the CDN may keep it forever.
     cacheControl: 'public, max-age=31536000, immutable',
     customMetadata: { fileName: String(file.name || kind).slice(0, 200), uploadedBy: myEmail() || '' },
-  });
-  await new Promise((resolve, reject) => {
-    task.on('state_changed',
-      (s) => onProgress && onProgress(s.bytesTransferred / (s.totalBytes || 1), s.bytesTransferred, s.totalBytes),
-      reject, resolve);
-  });
+  };
+
+  if (file.size < SINGLE_SHOT) {
+    // Small files in one request: simpler, and immune to the chunked upload
+    // that now and then never finishes (seen on flaky wifi and in the emulator).
+    if (onProgress) onProgress(0.05, 0, file.size);
+    await withTimeout(S.uploadBytes(ref, file, metadata), 120000, 'the upload took over two minutes');
+    if (onProgress) onProgress(1, file.size, file.size);
+  } else {
+    await resumable(ref, file, metadata, onProgress).catch((err) => {
+      if (err.code !== 'stalled') throw err;
+      return resumable(ref, file, metadata, onProgress);     // one more go from scratch
+    });
+  }
   const url = await S.getDownloadURL(ref);
   return { path, url, size: file.size, type, hash, fileName: file.name || null };
+}
+
+const SINGLE_SHOT = 8 * 1024 * 1024;
+const STALL_MS = 30000;
+
+/** A resumable upload that gives up - so it can be retried - when no byte has moved for 30 s. */
+function resumable(ref, file, metadata, onProgress) {
+  return new Promise((resolve, reject) => {
+    const task = S.uploadBytesResumable(ref, file, metadata);
+    let last = 0;
+    let timer = null;
+    const watch = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        task.cancel();
+        const err = new Error('the upload stalled');
+        err.code = 'stalled';
+        reject(err);
+      }, STALL_MS);
+    };
+    watch();
+    task.on('state_changed', (s) => {
+      if (s.bytesTransferred !== last) { last = s.bytesTransferred; watch(); }
+      if (onProgress) onProgress(s.bytesTransferred / (s.totalBytes || 1), s.bytesTransferred, s.totalBytes);
+    }, (err) => { clearTimeout(timer); if (err.code !== 'storage/canceled') reject(err); },
+    () => { clearTimeout(timer); resolve(); });
+  });
+}
+
+function withTimeout(promise, ms, message) {
+  let timer;
+  return Promise.race([
+    promise.finally(() => clearTimeout(timer)),
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms); }),
+  ]);
 }
 
 // ------------------------------------------------------------------ site
@@ -180,6 +223,17 @@ export async function getSite() {
 
 export async function saveSite(patch) {
   await F.setDoc(F.doc(db, 'config/site'), { ...patch, ...stamp() }, { merge: true });
+}
+
+// ------------------------------------------------------------------ the map
+/** The floor plan: { image: { url, path, width, height } }, or null. */
+export async function getMap() {
+  const snap = await F.getDoc(F.doc(db, 'config/map'));
+  return snap.exists() ? snap.data() : null;
+}
+
+export async function saveMap(map) {
+  await F.setDoc(F.doc(db, 'config/map'), { ...map, ...stamp() });
 }
 
 // ------------------------------------------------------------------ tracker

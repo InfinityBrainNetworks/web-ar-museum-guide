@@ -99,6 +99,8 @@
     // and no list of them.
     if (bundle.manifestSrc) add(bundle.manifestSrc, 0, 'file', 'manifest', true);
     add(bundle.mindSrc, bundle.mindSize, 'tracker', t('sync.item.tracker'), true);
+    var plan = bundle.site && bundle.site.map;
+    if (plan && plan.src) add(plan.src, plan.size, 'photo', t('nav.map'), true);
     bundle.exhibits.forEach(function (ex) {
       if (ex.image.thumb) add(ex.image.thumb, 0, 'photo', ex.name, true);
       add(ex.image.src, ex.image.size, 'photo', ex.name, true);
@@ -121,6 +123,7 @@
     if (!bundle || !bundle.exhibits) return keep;
     mark(bundle.manifestSrc);
     mark(bundle.mindSrc);
+    if (bundle.site && bundle.site.map) mark(bundle.site.map.src);
     bundle.exhibits.forEach(function (ex) {
       mark(ex.image.src); mark(ex.image.thumb); mark(ex.media.src);
       if (ex.model) mark(ex.model.src);

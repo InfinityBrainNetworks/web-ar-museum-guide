@@ -107,8 +107,18 @@ visitor's language) and a few words, sent anonymously into the Studio's
 admin can switch it off in the Studio's Settings. Without a project the tab
 keeps saying what it is waiting for.
 
-**Map** is still not built: it needs a floor plan of the gallery and a place on
-it for each exhibit, and the panel says so rather than pretending.
+**Map** is the gallery's floor plan from the Studio (**Map** screen: upload a
+plan, then click to drop a numbered pin where each exhibit hangs, drag to move
+it). In the guide every artwork is a pin, **jade once it has been found** with
+the camera; tapping one shows the artwork with **Open**, and a label page's
+**On the map** comes back here with its pin lit. The plan travels inside the
+release and is kept offline with the rest. With no plan published the tab
+says what it is waiting for.
+
+**Found** — every painting a phone has recognised is remembered on that phone
+(only there; nothing is sent). Explore stamps its card and counts them in the
+heading ("9 artworks · 3 found"), and the Map marks its pin: the visit's own
+passport.
 
 ### Settings
 
@@ -305,7 +315,7 @@ past the sign-in screen, and anyone else can **ask for access** from it.
 
 The screens only offer what a role may do; **`firestore.rules` and
 `storage.rules` are what actually enforce it**, and `tests/rules/` checks them
-25 ways against the emulators.
+26 ways against the emulators.
 
 ### Exhibits
 
@@ -326,7 +336,9 @@ Each exhibit saves as you type — no Save button to forget — in four tabs:
 
 Every file is uploaded under a name made from a **hash of its own bytes**, so a
 URL never changes what it points at: phones and the CDN can keep it forever,
-and an older release keeps working after a file is replaced.
+and an older release keeps working after a file is replaced. Files under 8 MB
+go up in one request; bigger ones resume, and an upload that stops moving for
+30 s is cancelled and tried once more rather than hanging the screen.
 
 ### The floor editor — standing a figure up
 
@@ -377,6 +389,14 @@ the lean fix below was checked with.
 3. **Go live** — one write to `public/live`, and every visitor who opens the
    guide from then on gets it. Any earlier release goes back the same way
    (**Roll back to this**). Only admins can do this step.
+
+### Map
+
+Upload the gallery's floor plan (PNG for a line drawing, kept up to 2400 px),
+then pick an exhibit and click where it hangs; the next unplaced one is picked
+for you. Pins are stored on the exhibits as fractions of the plan, so a new
+plan at another size keeps them. Editors can set it; it reaches visitors with
+the next release.
 
 ### Photobooth, feedback
 
@@ -610,7 +630,7 @@ SETUP-FIREBASE.md; add `?emu=1` to any page.
 Three suites, all run on this machine with nothing deployed:
 
 ```bash
-cd tests/rules && npm install && npm test        # 25 security-rule checks, emulators started for you
+cd tests/rules && npm install && npm test        # 26 security-rule checks, emulators started for you
 cd tests/e2e && npm install && npm test          # the guide: anchors, gestures, offline - headless Chrome
 cd tests/e2e && npm run test:cloud               # the Studio-to-wall workflow, against the emulators
 ```
@@ -630,7 +650,9 @@ the gyroscope is faked with `deviceorientation` events. What they check:
   adds a moderator, and cannot touch the owner; the floor editor moves the
   anchor without moving the figure and locks it; a release goes live and the
   phone places the queen on that anchor; a photo is shared with consent,
-  approved, and appears on the wall; feedback reaches the moderator's inbox
+  approved, and appears on the wall; a floor plan and its pins reach the
+  guide's Map with the found painting marked; feedback reaches the
+  moderator's inbox
 
 `tests/e2e/lib.mjs` expects Chrome at its usual Windows path (or `CHROME=`),
 `ffmpeg` on the PATH (or `FFMPEG=`), and, for the cloud suite and the rules,

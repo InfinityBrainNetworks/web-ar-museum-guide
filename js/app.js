@@ -2356,6 +2356,7 @@
       S.activeIndex = index;
       adoptExhibit(ex);
     }
+    markFound(ex);
 
     S.targetFound = true;
     setStatus(exhibits.length > 1 ? ex.name : ARI18n.t('status.tracking'), 'ok');
@@ -2363,6 +2364,30 @@
     playMedia();
     log.event('targetFound: "' + ex.name + '" (+' +
               ((performance.now() - S.tStart) / 1000).toFixed(2) + 's)');
+  }
+
+  /*
+   * Which paintings this phone has found with the camera - the visit's own
+   * passport. Explore stamps their cards and counts them, and the Map marks
+   * them. Kept on the phone only; nothing about it is sent anywhere.
+   */
+  var FOUND_KEY = 'ar-museum-found';
+
+  function foundList() {
+    try {
+      var list = JSON.parse(localStorage.getItem(FOUND_KEY) || '[]');
+      return Array.isArray(list) ? list : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function markFound(ex) {
+    var list = foundList();
+    if (list.indexOf(ex.id) !== -1) return;
+    list.push(ex.id);
+    try { localStorage.setItem(FOUND_KEY, JSON.stringify(list)); } catch (e) { /* private window */ }
+    log.event('discovered "' + ex.name + '" — ' + list.length + ' of ' + exhibits.length + ' found on this phone');
   }
 
   function onTargetLost(index) {
@@ -3974,6 +3999,8 @@
     /** One sentence saying why, when there is one worth showing. */
     blockNote: function () { return S.blockNote; },
     inAR: function () { return S.started; },
+    /** Ids of the exhibits this phone has found with the camera. */
+    found: foundList,
     /** Redraw the AR chrome - after a staff sign-in changes what it may show. */
     refreshUi: function () { if (el.actionBar) applyModeUI(); },
     startAR: startAR,

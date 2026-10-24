@@ -100,6 +100,25 @@ export function cameraOf(targetJpg) {
   return out;
 }
 
+/** A plain floor plan - two rooms and a corridor - for the Map. */
+export function floorPlan() {
+  const out = path.join(SCRATCH, 'plan.png');
+  if (fs.existsSync(out)) return out;
+  const wall = 'color=0x5a4636@1:t=8';
+  execFileSync(process.env.FFMPEG || 'ffmpeg', [
+    '-v', 'error', '-y',
+    '-f', 'lavfi', '-i', 'color=c=0xf4efe8:s=1600x1000:d=1',
+    '-vf', [
+      `drawbox=x=80:y=80:w=700:h=840:${wall}`,
+      `drawbox=x=820:y=80:w=700:h=840:${wall}`,
+      `drawbox=x=760:y=420:w=80:h=160:color=0xf4efe8@1:t=fill`,
+      'drawbox=x=700:y=900:w=160:h=40:color=0xe0673a@1:t=fill',
+    ].join(','),
+    '-frames:v', '1', out,
+  ]);
+  return out;
+}
+
 export async function launch({ camera = null, profile = null, headless = true } = {}) {
   const args = [
     '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',

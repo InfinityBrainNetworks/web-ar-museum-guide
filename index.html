@@ -611,6 +611,10 @@
         <div class="rich-text" id="exhibitText"></div>
       </div>
       <div class="exhibit-actions">
+        <button id="exhibitOnMap" class="btn btn-ghost hidden" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-map"></use></svg>
+          <span data-i18n="exhibit.onMap">On the map</span>
+        </button>
         <button id="exhibitListen" class="btn btn-ghost hidden" type="button">
           <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-audio"></use></svg>
           <span id="exhibitListenLabel" data-i18n="details.listen">Listen</span>
@@ -757,6 +761,35 @@
         <h1 data-i18n="feedback.thanks">Thank you</h1>
         <p class="intro-hint" data-i18n="feedback.thanksText">The museum's team reads every message.</p>
         <button id="fbAgain" class="btn btn-ghost" type="button" data-i18n="feedback.again">Write another</button>
+      </div>
+    </section>
+
+    <!-- Map: the gallery's floor plan from the Studio, a numbered pin per
+         artwork, the ones already found marked. Without a plan in the release
+         the tab says what it is waiting for, below. -->
+    <section id="viewMap" class="view">
+      <div class="map-head">
+        <p class="eyebrow" id="mapEyebrow"></p>
+        <h1 data-i18n="map.title">Find your way</h1>
+        <p class="map-hint" data-i18n="map.hint">Tap a number to see what hangs there.</p>
+      </div>
+      <div id="mapFrame" class="map-frame">
+        <div id="mapStage" class="map-stage">
+          <img id="mapImage" alt="" draggable="false">
+          <div id="mapPins" class="map-pins"></div>
+        </div>
+      </div>
+      <div class="map-zoom">
+        <button id="mapOut" class="icon-btn" type="button" aria-label="Zoom out">−</button>
+        <button id="mapIn" class="icon-btn" type="button" aria-label="Zoom in">+</button>
+      </div>
+      <div id="mapCard" class="map-card hidden">
+        <img id="mapCardImg" alt="">
+        <div class="map-card-text">
+          <strong id="mapCardTitle"></strong>
+          <span id="mapCardState"></span>
+        </div>
+        <button id="mapCardGo" class="btn btn-primary btn-sm" type="button" data-i18n="map.open">Open</button>
       </div>
     </section>
 

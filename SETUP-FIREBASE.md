@@ -84,7 +84,7 @@ npx firebase-tools deploy --only firestore,storage
 ```
 
 That uploads `firestore.rules`, `storage.rules` and `firestore.indexes.json` —
-who may read and write what, which `tests/rules/` checks 25 ways against the
+who may read and write what, which `tests/rules/` checks 26 ways against the
 emulators. **Claim the Studio straight after this step** (step 7).
 
 ## 6. Let phones download the files (CORS)

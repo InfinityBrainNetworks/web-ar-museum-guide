@@ -569,6 +569,9 @@
       }),
       details: normalizeDetails(ex.details, languages),
       model: null,
+      // Where it hangs on the floor plan, as fractions of the plan's width
+      // and height, or null when it is not on the map.
+      map: mapPin(ex.map),
     };
 
     // Per-exhibit overrides win over the config defaults.
@@ -602,6 +605,12 @@
 
     if (!out.model) out.model = assign(modelDefaults(), { src: null, file: null });
     return out;
+  }
+
+  function mapPin(value) {
+    if (!value || typeof value.x !== 'number' || typeof value.y !== 'number') return null;
+    if (!isFinite(value.x) || !isFinite(value.y)) return null;
+    return { x: Math.max(0, Math.min(1, value.x)), y: Math.max(0, Math.min(1, value.y)) };
   }
 
   /**

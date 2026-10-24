@@ -195,6 +195,17 @@ test('site settings are public to read and admin-only to write', async () => {
   await assertSucceeds(setDoc(doc(db(as.google('boss@gmail.com')), 'config/site'), { name: 'x' }));
 });
 
+test('editors set the floor plan; visitors never read it directly', async () => {
+  await seedMember('ed@gmail.com', 'editor');
+  await seedMember('mod@gmail.com', 'moderator');
+  const plan = { image: { url: 'https://x/plan.png', width: 2000, height: 1200 } };
+  await assertSucceeds(setDoc(doc(db(as.google('ed@gmail.com')), 'config/map'), plan));
+  await assertFails(setDoc(doc(db(as.google('mod@gmail.com')), 'config/map'), plan));
+  await assertFails(setDoc(doc(db(as.google('ed@gmail.com')), 'config/map'), { ...plan, sneaky: true }));
+  await assertSucceeds(getDoc(doc(db(as.google('mod@gmail.com')), 'config/map')));
+  await assertFails(getDoc(doc(db(as.anon()), 'config/map')));
+});
+
 // ------------------------------------------------------------------ photobooth
 const photo = (uid, id, extra = {}) => ({
   uid, path: `photobooth/${uid}/${id}.jpg`, url: 'https://x/p.jpg', consent: true,

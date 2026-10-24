@@ -19,6 +19,7 @@ const VIEWS = {
   exhibits: () => import('./views/exhibits.js'),
   exhibit: () => import('./views/editor.js'),
   floor: () => import('./views/floor.js'),
+  map: () => import('./views/map.js'),
   publish: () => import('./views/publish.js'),
   photos: () => import('./views/photos.js'),
   feedback: () => import('./views/feedback.js'),
@@ -29,6 +30,7 @@ const VIEWS = {
 // [route, label, icon, the least role that sees it]
 const NAV = [
   ['exhibits', 'Exhibits', 'grid', 'editor'],
+  ['map', 'Map', 'floorplan', 'editor'],
   ['publish', 'Publish', 'publish', 'editor'],
   ['photos', 'Photobooth', 'camera', 'moderator'],
   ['feedback', 'Feedback', 'chat', 'moderator'],
@@ -263,9 +265,19 @@ function shell() {
     watchers.push(data.watchRequests((list) => { counts.people = list.length; drawNav(); }, () => {}));
   }
 
-  window.onhashchange = route;
+  // Leaving a screen with unsaved changes asks first - the floor editor holds
+  // a whole placement in memory until Save.
+  window.onhashchange = () => {
+    if (window.__studioDirty && !window.confirm('This screen has unsaved changes. Leave without saving them?')) {
+      history.replaceState(null, '', lastHash);   // put the address back; no second hashchange
+      return;
+    }
+    route();
+  };
   route();
 }
+
+let lastHash = location.hash;
 
 function home() { return ctx.can('editor') ? 'exhibits' : 'photos'; }
 
@@ -277,6 +289,7 @@ async function route() {
   if (allowed && !ctx.can(allowed[3])) name = home();
   if ((name === 'exhibit' || name === 'floor') && !ctx.can('editor')) name = home();
 
+  lastHash = location.hash;
   if (cleanup) { try { cleanup(); } catch (e) { console.warn(e); } cleanup = null; }
   clear(ctx.page);
   ctx.setActions();

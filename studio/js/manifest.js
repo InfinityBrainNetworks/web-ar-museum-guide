@@ -61,7 +61,8 @@ function detailsOf(ex, languages) {
   return out;
 }
 
-export function buildManifest({ id, notes, exhibits, site, tracker }) {
+export function buildManifest({ id, notes, exhibits, site, tracker, map }) {
+  const plan = map && map.image && map.image.url ? map.image : null;
   const languages = languagesOf(site);
   return {
     version: 3,
@@ -71,6 +72,8 @@ export function buildManifest({ id, notes, exhibits, site, tracker }) {
       name: site.name || '',
       features: site.features || {},
       photobooth: { enabled: !!(site.photobooth && site.photobooth.enabled) },
+      // The floor plan for the guide's Map tab; each exhibit carries its pin.
+      map: plan ? { src: plan.url, width: plan.width, height: plan.height, size: plan.size || 0 } : null,
     },
     mindSrc: tracker.url,
     mindSize: tracker.size || 0,
@@ -100,6 +103,7 @@ export function buildManifest({ id, notes, exhibits, site, tracker }) {
       },
       details: detailsOf(ex, languages),
       model: modelOf(ex),
+      map: plan && ex.mapPin ? { x: ex.mapPin.x, y: ex.mapPin.y } : null,
     })),
   };
 }

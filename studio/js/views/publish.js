@@ -146,8 +146,9 @@ export async function render(ctx) {
     const job = busy('Building the release', 'Freezing the gallery…');
     try {
       site = await data.getSite();
+      const map = await data.getMap();
       const id = data.releaseId();
-      const manifest = buildManifest({ id, notes, exhibits, site, tracker });
+      const manifest = buildManifest({ id, notes, exhibits, site, tracker, map });
       const w = weigh(exhibits, tracker, languagesOf(site));
       job.set(0.5, 'Uploading the manifest…');
       const url = await data.createRelease(id, manifest, {

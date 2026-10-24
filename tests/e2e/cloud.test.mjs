@@ -15,7 +15,7 @@
  */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { ROOT, serve, launch, until, cameraOf, sleep } from './lib.mjs';
+import { ROOT, serve, launch, until, cameraOf, floorPlan, sleep } from './lib.mjs';
 
 const PROJECT = 'demo-museum';
 const QUEEN = 'sigiriya-ex08';
@@ -57,6 +57,11 @@ async function studio(email, hash = '') {
     document.getElementById('emuSignIn').click();
   }, email);
   return page;
+}
+
+/** SHOTS=<folder> saves a screenshot at the moments worth looking at. */
+async function shot(page, name) {
+  if (process.env.SHOTS) await page.screenshot({ path: process.env.SHOTS + '/' + name + '.png' });
 }
 
 /** Click the button saying exactly `text` (or, failing that, containing it) - in the newest dialog if several are open. */
@@ -233,6 +238,60 @@ test('on the phone she stands where the Studio put her, then a photo goes to the
   assert.match(cap, /^Asha · /);
   await wall.close();
   await admin.close();
+  await guide.close();
+});
+
+test('the floor plan and its pins reach the guide’s Map tab, with found ones marked', async () => {
+  const page = await studio('owner@gmail.com', '#/map');
+  await until(page, () => /Upload the gallery/.test(document.body.innerText), { what: 'the empty map' });
+  const [chooser] = await Promise.all([page.waitForFileChooser(), page.click('.map-edit .drop')]);
+  await chooser.accept([floorPlan()]);
+  await until(page, () => { const i = document.querySelector('.map-plan img'); return i && i.complete && i.naturalWidth > 0; },
+    { timeout: 30000, what: 'the plan uploaded' });
+
+  // Three pins: the first three exhibits, each auto-selected in turn.
+  for (const [fx, fy] of [[0.2, 0.3], [0.3, 0.6], [0.7, 0.4]]) {
+    const box = await page.evaluate(() => { const r = document.querySelector('.map-plan img').getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
+    const before = await page.evaluate(() => document.querySelectorAll('.map-plan .map-pin').length);
+    await page.mouse.click(box.x + box.w * fx, box.y + box.h * fy);
+    await until(page, (n) => document.querySelectorAll('.map-plan .map-pin').length === n + 1, { arg: before, what: 'a pin dropped' });
+  }
+  // The queen too - she has been found on this phone already.
+  await page.evaluate(() => Array.from(document.querySelectorAll('.map-row')).find((r) => /Queen of Kasyapa/.test(r.textContent)).click());
+  const box = await page.evaluate(() => { const r = document.querySelector('.map-plan img').getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
+  await page.mouse.click(box.x + box.w * 0.8, box.y + box.h * 0.7);
+  await until(page, () => document.querySelectorAll('.map-plan .map-pin').length === 4, { what: 'the queen pinned' });
+  await shot(page, 'studio-map');
+  await page.close();
+
+  // A new release carries it.
+  const pub = await studio('owner@gmail.com', '#/publish');
+  await until(pub, () => /tracker matches/.test(document.body.innerText), { timeout: 30000, what: 'the checks' });
+  await pub.evaluate(() => { document.querySelector('.card input[type=text]').value = 'The map'; });
+  await click(pub, 'Build a release');
+  await until(pub, () => document.querySelector('.qr img'), { timeout: 30000, what: 'the release' });
+  await click(pub, 'Go live now', '.dialog-foot button');
+  await until(pub, () => Array.from(document.querySelectorAll('.dialog-foot button')).some((b) => b.textContent === 'Go live'));
+  await click(pub, 'Go live', '.dialog-foot button');
+  await until(pub, () => /The map/.test((document.querySelector('.release.live') || {}).textContent || ''), { timeout: 20000, what: 'the map release live' });
+  await pub.close();
+
+  const guide = await viewer();
+  await until(guide, () => !document.querySelector('[data-nav=map]').classList.contains('dimmed'), { what: 'the Map tab' });
+  await guide.evaluate(() => document.querySelector('[data-nav=map]').click());
+  await until(guide, () => { const i = document.getElementById('mapImage'); return i.complete && i.naturalWidth > 0; }, { what: 'the plan in the guide' });
+  const pins = await guide.evaluate(() => Array.from(document.querySelectorAll('#mapPins .map-pin')).map((p) => ({ n: p.textContent, found: p.classList.contains('found') })));
+  assert.equal(pins.length, 4);
+  assert.deepEqual(pins.filter((p) => p.found).map((p) => p.n), ['5'], 'the queen (exhibit 5) is marked found');
+  await guide.evaluate(() => Array.from(document.querySelectorAll('#mapPins .map-pin')).find((p) => p.textContent === '5').click());
+  const card = await until(guide, () => !document.getElementById('mapCard').classList.contains('hidden') && document.getElementById('mapCardTitle').textContent);
+  assert.match(card, /Queen of Kasyapa/);
+  if (process.env.SHOTS) {
+    await until(guide, () => document.getElementById('syncScreen').classList.contains('hidden'), { timeout: 20000 }).catch(() => {});
+    await shot(guide, 'guide-map');
+  }
+  await guide.evaluate(() => document.getElementById('mapCardGo').click());
+  await until(guide, () => document.getElementById('viewExhibit').classList.contains('on'), { what: 'her label page' });
   await guide.close();
 });
 
