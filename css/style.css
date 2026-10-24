@@ -99,6 +99,10 @@ a-scene, .a-canvas { width: 100% !important; height: 100% !important; }
   inset: 0;
   z-index: 1;
 }
+/* Said in so many words: A-Frame's `.a-dom-overlay > * { pointer-events: auto }`
+   (see css/shell.css) would otherwise turn this full-bleed layer into a lid
+   over the whole app - which it was, on the live site, for a day. */
+#overlay > .gesture-layer { pointer-events: none; }
 #overlay > .gesture-layer.on { pointer-events: auto; touch-action: none; }
 
 .gesture-hint {

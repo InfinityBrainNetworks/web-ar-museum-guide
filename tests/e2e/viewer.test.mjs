@@ -53,7 +53,8 @@ async function viewer(modelPatch) {
       req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify(data) });
     });
   }
-  await page.goto(site.url, { waitUntil: 'domcontentloaded' });
+  // The repo's own bundle, never whatever release the real project has live.
+  await page.goto(site.url + '?source=bundle', { waitUntil: 'domcontentloaded' });
   await until(page, () => window.ARViewer && window.ARViewer.ready(), { what: 'the viewer to boot' });
   return page;
 }
@@ -90,6 +91,50 @@ test('Explore lists all nine paintings from the bundle', async () => {
   assert.equal(cards, 9);
   const source = await page.evaluate(() => window.ARViewer.bundle().source);
   assert.equal(source, 'bundle');
+  await page.close();
+});
+
+// A real tap, not el.click(): an invisible full-bleed layer once sat over the
+// whole app and every scripted click still went straight through it.
+test('a first-time visitor can tap through the language screen and scroll Explore', async () => {
+  const page = await browser.newPage();
+  await page.setBypassServiceWorker(true);
+  await page.evaluateOnNewDocument(() => {
+    localStorage.removeItem('ar-museum-language');
+    sessionStorage.setItem('ar-museum-splash', '1');
+  });
+  await page.goto(site.url + '?source=bundle', { waitUntil: 'domcontentloaded' });
+  await until(page, () => window.ARViewer && window.ARViewer.ready(), { what: 'the viewer to boot' });
+  await until(page, () => !document.getElementById('langScreen').classList.contains('hidden'),
+    { what: 'the language screen' });
+  const covered = await page.evaluate(() => {
+    const go = document.getElementById('langGo');
+    const r = go.getBoundingClientRect();
+    const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    return go.contains(top) ? null : (top.id || top.className || top.tagName);
+  });
+  assert.equal(covered, null, 'Continue is covered by ' + covered);
+  await page.tap('#langGo');
+  await until(page, () => document.getElementById('langScreen').classList.contains('hidden'),
+    { what: 'the tap to close the language screen' });
+  // A first visit offers the download next; "Not now" is a tap too.
+  await until(page, () => !document.getElementById('syncScreen').classList.contains('hidden'),
+    { what: 'the download screen' });
+  const way = await until(page, () => ['syncGo', 'syncSkip'].find((id) => {
+    const b = document.getElementById(id);
+    return b && b.offsetParent && !b.disabled && !b.classList.contains('hidden');
+  }), { what: 'a way past the download screen' });
+  await page.tap('#' + way);
+  await until(page, () => document.getElementById('syncScreen').classList.contains('hidden'),
+    { what: 'the tap to close the download screen' });
+  const grid = await until(page, () => {
+    const card = document.querySelector('#exhibitGrid > *');
+    if (!card) return null;
+    const r = card.getBoundingClientRect();
+    const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    return card.contains(top) ? 'ok' : 'covered by ' + (top.id || top.className || top.tagName);
+  }, { what: 'an exhibit card' });
+  assert.equal(grid, 'ok');
   await page.close();
 });
 
